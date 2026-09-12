@@ -78,6 +78,29 @@ describe('deployed operators share card', () => {
     expect(visibleMarkup).toContain(model.qrLabel)
   })
 
+  it('shows the secret code footer block unless it is turned off', () => {
+    const defaultMarkup = renderToStaticMarkup(
+      createElement(DeployedOperatorsShareCard, {
+        model,
+        qrDataUrl: 'data:image/png;base64,qr-code',
+      }),
+    )
+    const hiddenMarkup = renderToStaticMarkup(
+      createElement(DeployedOperatorsShareCard, {
+        model,
+        qrDataUrl: 'data:image/png;base64,qr-code',
+        showShortCode: false,
+      }),
+    )
+
+    expect(defaultMarkup).toContain('神秘代码')
+    expect(defaultMarkup).toContain(model.maayuanUrl)
+    expect(hiddenMarkup).not.toContain('神秘代码')
+    expect(hiddenMarkup).not.toContain('站内地址')
+    expect(hiddenMarkup).not.toContain(model.maayuanUrl)
+    expect(hiddenMarkup).toContain('MAAYUAN SHARE')
+  })
+
   it('orders required discs before forbidden and unmarked discs', () => {
     const unmarkedDisc = model.operators[0].discs[0]
     const forbiddenDisc = {

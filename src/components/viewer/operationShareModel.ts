@@ -1,3 +1,5 @@
+import { CopilotInfoStatusEnum } from 'maa-copilot-client'
+
 import type { Language } from '../../i18n/i18n'
 import { CopilotDocV1 } from '../../models/copilot.schema'
 import type { Operation } from '../../models/operation'
@@ -100,6 +102,10 @@ const LEGACY_OPERATION_SHARE_CELL_COLORS: Record<string, string> = {
 const OPERATION_SHARE_CARD_CONFIG_STORAGE_VERSION = 1
 const OPERATION_SHARE_CARD_CONFIG_STORAGE_PREFIX =
   'maa-copilot-operation-share-card-config'
+// 「分享神秘代码」是跨卡片（页脚属于 ShareCardFrame）的开关，不参与
+// OperationShareCardConfig 的归一化与 schema 版本，因此单独存一个 key。
+const OPERATION_SHARE_SHORT_CODE_STORAGE_PREFIX =
+  'maa-copilot-operation-share-short-code'
 const SHARE_CELL_KEY_PATTERN = /^\d+:slot-\d+$/
 const REQUIRED_DISC_KEY_PATTERN = /^\d+:[1-3]$/
 const OPERATION_SHARE_CELL_COLOR_SET = new Set<string>(
@@ -398,6 +404,61 @@ export function saveOperationShareCardConfig(
   } catch {
     return false
   }
+}
+
+function operationShareShortCodeStorageKey(operationId: number) {
+  return `${OPERATION_SHARE_SHORT_CODE_STORAGE_PREFIX}:${operationId}`
+}
+
+/**
+ * 读取用户对「分享神秘代码」的显式选择；从未设置过时返回 undefined，
+ * 交由 resolveOperationShareShortCode 按作业可见性推导默认值。
+ */
+export function readOperationShareShortCode(
+  operationId: number,
+  storage: Pick<Storage, 'getItem'> = window.localStorage,
+) {
+  try {
+    const raw = storage.getItem(operationShareShortCodeStorageKey(operationId))
+    if (raw === 'true') return true
+    if (raw === 'false') return false
+    return undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * 只在用户显式切换后才落盘，避免把「按可见性推导的默认值」固化下来：
+ * 作业从「仅个人可见」改为公开后，默认值应当随状态自动恢复为分享。
+ */
+export function saveOperationShareShortCode(
+  operationId: number,
+  shareShortCode: boolean,
+  storage: Pick<Storage, 'setItem'> = window.localStorage,
+) {
+  try {
+    storage.setItem(
+      operationShareShortCodeStorageKey(operationId),
+      shareShortCode ? 'true' : 'false',
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 分享图页脚的「神秘代码」与「站内地址」指向同一个作业 id，原创作业的二维码
+ * 也编码同一地址，因此它是一个整体开关：关闭即整块隐藏。
+ * 「仅个人可见」的作业默认不分享，用户显式选择优先。
+ */
+export function resolveOperationShareShortCode(
+  operation: { status?: Operation['status'] | undefined },
+  stored: boolean | undefined,
+) {
+  if (typeof stored === 'boolean') return stored
+  return operation.status !== CopilotInfoStatusEnum.Private
 }
 
 export function buildOperationShareCellKey(

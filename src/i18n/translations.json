@@ -3366,6 +3366,26 @@
           "cn": "下载 PNG",
           "zh_tw": "下載 PNG"
         },
+        "share_image_share_short_code": {
+          "cn": "分享神秘代码",
+          "zh_tw": "分享神秘代碼"
+        },
+        "share_image_share_qr_code": {
+          "cn": "分享二维码",
+          "zh_tw": "分享二維碼"
+        },
+        "share_image_short_code_private_hint": {
+          "cn": "该作业仅自己可见，分享图默认不含神秘代码与站内地址。",
+          "zh_tw": "該作業僅自己可見，分享圖預設不含神秘代碼與站內地址。"
+        },
+        "share_image_short_code_hidden_hint": {
+          "cn": "分享图不再包含神秘代码与站内地址。",
+          "zh_tw": "分享圖不再包含神秘代碼與站內地址。"
+        },
+        "share_image_qr_follows_short_code": {
+          "cn": "二维码指向站内地址，已随神秘代码一并隐藏。",
+          "zh_tw": "二維碼指向站內地址，已隨神秘代碼一併隱藏。"
+        },
         "copy_secret_code": {
           "cn": "复制神秘代码",
           "zh_tw": "複製神秘代碼"

@@ -1,3 +1,4 @@
+import { CopilotInfoStatusEnum } from 'maa-copilot-client'
 import { act, createElement } from 'react'
 import { type Root, createRoot } from 'react-dom/client'
 import {
@@ -50,6 +51,14 @@ function createOperation() {
       actions: [],
     },
   } as unknown as Operation
+}
+
+const authorActionConfig = {
+  cardKey: 'actions',
+  schemaVersion: 1,
+  revision: 1,
+  payload: {},
+  updatedAt: new Date('2026-07-30T00:00:00Z'),
 }
 
 describe('author operation share images', () => {
@@ -136,5 +145,52 @@ describe('author operation share images', () => {
     expect(mockedRenderCard).not.toHaveBeenCalled()
     expect(container.querySelector('a img')).toBeNull()
     expect(container.textContent).toContain('原有作业详情')
+  })
+
+  it('drops the in-site secret code from private operations', async () => {
+    mockedGetConfigs.mockResolvedValue([authorActionConfig])
+
+    await act(async () => {
+      root.render(
+        createElement(
+          AuthorOperationShareImages,
+          {
+            operation: {
+              ...createOperation(),
+              status: CopilotInfoStatusEnum.Private,
+            } as Operation,
+          },
+          createElement('span', null, '原有作业详情'),
+        ),
+      )
+      await new Promise((resolve) => window.setTimeout(resolve, 20))
+    })
+
+    expect(mockedRenderCard).toHaveBeenCalledTimes(1)
+    expect(container.textContent).not.toContain('神秘代码')
+    expect(container.textContent).not.toContain('站内地址')
+  })
+
+  it('keeps the in-site secret code for public operations', async () => {
+    mockedGetConfigs.mockResolvedValue([authorActionConfig])
+
+    await act(async () => {
+      root.render(
+        createElement(
+          AuthorOperationShareImages,
+          {
+            operation: {
+              ...createOperation(),
+              status: CopilotInfoStatusEnum.Public,
+            } as Operation,
+          },
+          createElement('span', null, '原有作业详情'),
+        ),
+      )
+      await new Promise((resolve) => window.setTimeout(resolve, 20))
+    })
+
+    expect(container.textContent).toContain('神秘代码')
+    expect(container.textContent).toContain('站内地址')
   })
 })

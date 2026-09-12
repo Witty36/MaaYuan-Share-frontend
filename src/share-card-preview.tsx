@@ -16,6 +16,8 @@ const operators = [
 async function render() {
   const maayuanUrl = 'https://share.maayuan.top/?op=29533'
   const originalUrl = 'https://www.bilibili.com/read/cv29533'
+  // 改这里可以预览关闭「分享神秘代码」后的页脚布局
+  const showShortCode = true
   const qrDataUrl = await QRCode.toDataURL(originalUrl)
   const model: OperationShareModel = {
     title: '22 期地宫 40 层张郃稳定通关作业',
@@ -58,7 +60,11 @@ async function render() {
   }
   document.body.style.cssText = 'padding:40px;background:#dfe4e2'
   ReactDOM.createRoot(document.getElementById('root')!).render(
-    <OperationShareCard model={model} qrDataUrl={qrDataUrl} />,
+    <OperationShareCard
+      model={model}
+      qrDataUrl={qrDataUrl}
+      showShortCode={showShortCode}
+    />,
   )
 }
 

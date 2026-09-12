@@ -8,6 +8,7 @@ import {
 } from '@blueprintjs/core'
 
 import { useAtomValue } from 'jotai'
+import { CopilotInfoStatusEnum } from 'maa-copilot-client'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
@@ -46,9 +47,12 @@ import {
   getOperationShareRemoteConfigByKind,
   mergeOperationShareRemoteConfigs,
   readOperationShareCardConfig,
+  readOperationShareShortCode,
   replaceOperationShareCardConfigKind,
   resolveOperationShareCardConfig,
+  resolveOperationShareShortCode,
   saveOperationShareCardConfig,
+  saveOperationShareShortCode,
   updateOperationShareCellSelection,
 } from './operationShareModel'
 
@@ -81,6 +85,16 @@ export default function OperationShareDialog({
     () => buildOperationShareModel(operation, language, maayuanUrl),
     [operation, language, maayuanUrl],
   )
+  // 「神秘代码」默认值：仅在用户显式切换前生效，私密作业默认不分享。
+  // 独立用例，使下面的重置 effect 无需依赖 operation 对象本身。
+  const defaultShowShortCode = useMemo(
+    () =>
+      resolveOperationShareShortCode(
+        operation,
+        readOperationShareShortCode(operation.id),
+      ),
+    [operation],
+  )
   const [cardNode, setCardNode] = useState<HTMLDivElement | null>(null)
   const localConfigRef = useRef(readOperationShareCardConfig(operation.id))
   const [cardConfig, setCardConfig] = useState(
@@ -106,6 +120,8 @@ export default function OperationShareDialog({
   const generatingRef = useRef(false)
   const [cardKind, setCardKind] = useState<OperationShareCardKind>('actions')
   const [hideQrCode, setHideQrCode] = useState(true)
+  const shouldPersistShortCodeRef = useRef(false)
+  const [showShortCode, setShowShortCode] = useState(defaultShowShortCode)
   const [status, setStatus] = useState<GenerationStatus>('idle')
   const [previewUrl, setPreviewUrl] = useState<string>()
   const [blob, setBlob] = useState<Blob>()
@@ -134,11 +150,19 @@ export default function OperationShareDialog({
   }, [cardConfig, operation.id])
 
   useEffect(() => {
+    if (!shouldPersistShortCodeRef.current) return
+    shouldPersistShortCodeRef.current = false
+    saveOperationShareShortCode(operation.id, showShortCode)
+  }, [operation.id, showShortCode])
+
+  useEffect(() => {
     let active = true
     const localConfig = readOperationShareCardConfig(operation.id)
     localConfigRef.current = localConfig
     shouldPersistCardConfigRef.current = false
+    shouldPersistShortCodeRef.current = false
     setCardConfig(localConfig ?? createOperationShareCardConfig())
+    setShowShortCode(defaultShowShortCode)
     setAuthorConfigStatus('loading')
     setAuthorConfigError(undefined)
 
@@ -162,7 +186,20 @@ export default function OperationShareDialog({
     return () => {
       active = false
     }
-  }, [operation.id])
+  }, [defaultShowShortCode, operation.id])
+
+  const isPrivateOperation = operation.status === CopilotInfoStatusEnum.Private
+  // 原创作业（无外站原贴）的二维码编码的就是站内地址，关闭神秘代码时必须一并隐藏
+  const qrFollowsShortCode =
+    !showShortCode && model.qrTargetUrl === model.maayuanUrl
+  const effectiveHideQrCode = hideQrCode || qrFollowsShortCode
+  const shortCodeHint = showShortCode
+    ? undefined
+    : isPrivateOperation
+      ? t.components.viewer.OperationViewer.share_image_short_code_private_hint
+      : qrFollowsShortCode
+        ? t.components.viewer.OperationViewer.share_image_qr_follows_short_code
+        : t.components.viewer.OperationViewer.share_image_short_code_hidden_hint
 
   const editableColumns = useMemo<
     Array<{ key: OperationShareCellColumn; label: string }>
@@ -223,6 +260,12 @@ export default function OperationShareDialog({
   const updateQrCodeVisibility = (hidden: boolean) => {
     invalidatePreview()
     setHideQrCode(hidden)
+  }
+
+  const updateShortCodeVisibility = (shareShortCode: boolean) => {
+    invalidatePreview()
+    shouldPersistShortCodeRef.current = true
+    setShowShortCode(shareShortCode)
   }
 
   const updateRoundNote = (round: number, note: string) => {
@@ -460,16 +503,34 @@ export default function OperationShareDialog({
           </Callout>
         ) : null}
 
-        <div className="mb-3 flex justify-end">
-          <Switch
-            checked={hideQrCode}
-            className="m-0"
-            disabled={status === 'generating'}
-            label="隐藏二维码"
-            onChange={(event) =>
-              updateQrCodeVisibility(event.currentTarget.checked)
-            }
-          />
+        <div className="mb-3 flex flex-col items-end gap-1">
+          <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-2">
+            <Switch
+              checked={showShortCode}
+              className="m-0"
+              disabled={status === 'generating'}
+              label={
+                t.components.viewer.OperationViewer.share_image_share_short_code
+              }
+              onChange={(event) =>
+                updateShortCodeVisibility(event.currentTarget.checked)
+              }
+            />
+            <Switch
+              checked={!effectiveHideQrCode}
+              className="m-0"
+              disabled={status === 'generating' || qrFollowsShortCode}
+              label={
+                t.components.viewer.OperationViewer.share_image_share_qr_code
+              }
+              onChange={(event) =>
+                updateQrCodeVisibility(!event.currentTarget.checked)
+              }
+            />
+          </div>
+          {shortCodeHint ? (
+            <p className="m-0 text-xs text-slate-500">{shortCodeHint}</p>
+          ) : null}
         </div>
 
         {cardKind === 'actions' ? (
@@ -890,17 +951,19 @@ export default function OperationShareDialog({
             <OperationShareCard
               cardRef={setCardNode}
               config={cardConfig}
-              hideQrCode={hideQrCode}
+              hideQrCode={effectiveHideQrCode}
               model={model}
               qrDataUrl={qrDataUrl}
+              showShortCode={showShortCode}
             />
           ) : (
             <DeployedOperatorsShareCard
               cardRef={setCardNode}
               config={cardConfig}
-              hideQrCode={hideQrCode}
+              hideQrCode={effectiveHideQrCode}
               model={model}
               qrDataUrl={qrDataUrl}
+              showShortCode={showShortCode}
             />
           )
         ) : null}

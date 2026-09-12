@@ -11,9 +11,9 @@ import {
   getOperationShareRoundDisplay,
 } from './OperationShareCard'
 import {
-  createOperationShareCardConfig,
   OPERATION_SHARE_CELL_COLORS,
   type OperationShareModel,
+  createOperationShareCardConfig,
 } from './operationShareModel'
 
 const model: OperationShareModel = {
@@ -49,6 +49,30 @@ describe('operation share card styles', () => {
 
     expect(defaultMarkup).not.toContain(model.qrLabel)
     expect(visibleMarkup).toContain(model.qrLabel)
+  })
+
+  it('shows the secret code footer block unless it is turned off', () => {
+    const defaultMarkup = renderToStaticMarkup(
+      createElement(OperationShareCard, {
+        model,
+        qrDataUrl: 'data:image/png;base64,qr-code',
+      }),
+    )
+    const hiddenMarkup = renderToStaticMarkup(
+      createElement(OperationShareCard, {
+        model,
+        qrDataUrl: 'data:image/png;base64,qr-code',
+        showShortCode: false,
+      }),
+    )
+
+    // 「神秘代码」与「站内地址」携带同一个作业 id，必须一起隐藏
+    expect(defaultMarkup).toContain('神秘代码')
+    expect(defaultMarkup).toContain(model.maayuanUrl)
+    expect(hiddenMarkup).not.toContain('神秘代码')
+    expect(hiddenMarkup).not.toContain('站内地址')
+    expect(hiddenMarkup).not.toContain(model.maayuanUrl)
+    expect(hiddenMarkup).toContain('MAAYUAN SHARE')
   })
 
   it('renders full-cell avatars above a separate column-label row', () => {

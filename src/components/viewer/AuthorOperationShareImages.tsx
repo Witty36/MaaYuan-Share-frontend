@@ -1,4 +1,5 @@
 import { useAtomValue } from 'jotai'
+import { CopilotInfoStatusEnum } from 'maa-copilot-client'
 import {
   type ReactNode,
   createContext,
@@ -86,6 +87,9 @@ export function AuthorOperationShareImages({
       : undefined
   const imageUrls =
     imageState?.operationId === operation.id ? imageState.urls : {}
+  // 访客不应继承作者的本地偏好，因此站内分享图只按作业可见性推导：
+  // 「仅个人可见」的作业默认不展示神秘代码与站内地址。
+  const showShortCode = operation.status !== CopilotInfoStatusEnum.Private
 
   useEffect(() => {
     let active = true
@@ -161,6 +165,7 @@ export function AuthorOperationShareImages({
     operation.id,
     operatorCardNode,
     qrDataUrl,
+    showShortCode,
   ])
 
   useEffect(() => {
@@ -185,6 +190,7 @@ export function AuthorOperationShareImages({
               config={configs.actions}
               model={model}
               qrDataUrl={qrDataUrl}
+              showShortCode={showShortCode}
             />
           ) : null}
           {qrDataUrl && configs.operators ? (
@@ -193,6 +199,7 @@ export function AuthorOperationShareImages({
               config={configs.operators}
               model={model}
               qrDataUrl={qrDataUrl}
+              showShortCode={showShortCode}
             />
           ) : null}
         </div>

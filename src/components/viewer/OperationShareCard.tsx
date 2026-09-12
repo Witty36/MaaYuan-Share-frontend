@@ -277,12 +277,14 @@ export function OperationShareCard({
   cardRef,
   qrDataUrl,
   hideQrCode = true,
+  showShortCode = true,
   config = defaultCardConfig,
 }: {
   model: OperationShareModel
   cardRef?: Ref<HTMLDivElement>
   qrDataUrl: string
   hideQrCode?: boolean
+  showShortCode?: boolean
   config?: OperationShareCardConfig
 }) {
   return (
@@ -292,6 +294,7 @@ export function OperationShareCard({
       hideQrCode={hideQrCode}
       model={model}
       qrDataUrl={qrDataUrl}
+      showShortCode={showShortCode}
     >
       <section className="mt-10">
         <ShareSectionTitle>作战编排</ShareSectionTitle>
@@ -345,7 +348,10 @@ export function OperationShareCard({
                 />
               ) : null}
             </tr>
-            <tr aria-label="列标题" style={{ background: tableHeaderBackground }}>
+            <tr
+              aria-label="列标题"
+              style={{ background: tableHeaderBackground }}
+            >
               <th
                 className="border-2 px-3 py-3 text-[21px] font-bold"
                 scope="col"

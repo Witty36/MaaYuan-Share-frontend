@@ -1,3 +1,4 @@
+import { CopilotInfoStatusEnum } from 'maa-copilot-client'
 import { describe, expect, it, vi } from 'vitest'
 
 import { CopilotDocV1 } from '../../models/copilot.schema'
@@ -21,8 +22,11 @@ import {
   getRenderableOperationShareConfigs,
   loadOperationShareCardConfig,
   mergeOperationShareRemoteConfigs,
+  readOperationShareShortCode,
   resolveOperationShareCardConfig,
+  resolveOperationShareShortCode,
   saveOperationShareCardConfig,
+  saveOperationShareShortCode,
   updateOperationShareCellSelection,
 } from './operationShareModel'
 
@@ -480,6 +484,58 @@ describe('share image utilities', () => {
         '1:slot-2',
       ]),
     ).toEqual({ checked: false, indeterminate: true })
+  })
+
+  it('persists an explicit short code choice per operation', () => {
+    const storage = createMemoryStorage()
+
+    expect(readOperationShareShortCode(100, storage)).toBeUndefined()
+    expect(saveOperationShareShortCode(100, false, storage)).toBe(true)
+    expect(readOperationShareShortCode(100, storage)).toBe(false)
+    expect(readOperationShareShortCode(101, storage)).toBeUndefined()
+
+    expect(saveOperationShareShortCode(100, true, storage)).toBe(true)
+    expect(readOperationShareShortCode(100, storage)).toBe(true)
+  })
+
+  it('ignores stored short code values that are not booleans', () => {
+    const storage = createMemoryStorage()
+    storage.setItem('maa-copilot-operation-share-short-code:100', 'yes')
+
+    expect(readOperationShareShortCode(100, storage)).toBeUndefined()
+  })
+
+  it('defaults the short code to hidden only for private operations', () => {
+    expect(
+      resolveOperationShareShortCode(
+        { status: CopilotInfoStatusEnum.Private },
+        undefined,
+      ),
+    ).toBe(false)
+    expect(
+      resolveOperationShareShortCode(
+        { status: CopilotInfoStatusEnum.Public },
+        undefined,
+      ),
+    ).toBe(true)
+    expect(
+      resolveOperationShareShortCode({ status: undefined }, undefined),
+    ).toBe(true)
+  })
+
+  it('lets an explicit short code choice override the visibility default', () => {
+    expect(
+      resolveOperationShareShortCode(
+        { status: CopilotInfoStatusEnum.Private },
+        true,
+      ),
+    ).toBe(true)
+    expect(
+      resolveOperationShareShortCode(
+        { status: CopilotInfoStatusEnum.Public },
+        false,
+      ),
+    ).toBe(false)
   })
 
   it('persists editable card settings per operation', () => {
