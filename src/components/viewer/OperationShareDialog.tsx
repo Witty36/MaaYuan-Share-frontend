@@ -31,10 +31,11 @@ import {
 import {
   OPERATION_SHARE_CARD_CONFIG_SCHEMA_VERSION,
   OPERATION_SHARE_CARD_KEYS,
-  OPERATION_SHARE_CELL_COLORS,
+  OPERATION_SHARE_CELL_COLOR_KEYS,
   ObjectUrlStore,
   type OperationShareCardConfig,
   type OperationShareCardKind,
+  type OperationShareCellColorKey,
   type OperationShareCellColumn,
   buildOperationShareCardConfigPayload,
   buildOperationShareCellKey,
@@ -57,14 +58,6 @@ import {
 } from './operationShareModel'
 
 type GenerationStatus = 'idle' | 'generating' | 'ready' | 'error'
-
-const CELL_COLOR_OPTIONS = [
-  { color: OPERATION_SHARE_CELL_COLORS[0], label: '黄色纯色' },
-  { color: OPERATION_SHARE_CELL_COLORS[1], label: '粉色竖纹' },
-  { color: OPERATION_SHARE_CELL_COLORS[2], label: '蓝色横纹' },
-  { color: OPERATION_SHARE_CELL_COLORS[3], label: '绿色斜纹' },
-  { color: OPERATION_SHARE_CELL_COLORS[4], label: '冰灰圆点' },
-] as const
 
 export default function OperationShareDialog({
   operation,
@@ -201,6 +194,14 @@ export default function OperationShareDialog({
         ? t.components.viewer.OperationViewer.share_image_qr_follows_short_code
         : t.components.viewer.OperationViewer.share_image_short_code_hidden_hint
 
+  const cellColorNames: Record<OperationShareCellColorKey, string> = {
+    yellow: t.components.viewer.OperationViewer.share_cell_color_yellow,
+    pink: t.components.viewer.OperationViewer.share_cell_color_pink,
+    blue: t.components.viewer.OperationViewer.share_cell_color_blue,
+    green: t.components.viewer.OperationViewer.share_cell_color_green,
+    ice: t.components.viewer.OperationViewer.share_cell_color_ice,
+  }
+
   const editableColumns = useMemo<
     Array<{ key: OperationShareCellColumn; label: string }>
   >(
@@ -243,7 +244,11 @@ export default function OperationShareDialog({
   }, [])
 
   const updateOption = (
-    option: 'showTargetSwitches' | 'showOtherActions' | 'showNotes',
+    option:
+      | 'showTargetSwitches'
+      | 'showOtherActions'
+      | 'showNotes'
+      | 'showCellPattern',
     checked: boolean,
   ) => {
     invalidatePreview()
@@ -294,13 +299,13 @@ export default function OperationShareDialog({
     )
   }
 
-  const applyCellColor = (color: string) => {
+  const applyCellColor = (style: string) => {
     if (selectedCellKeys.size === 0) return
     invalidatePreview()
     updateCardConfig((current) => {
       const cellColors = { ...current.cellColors }
       selectedCellKeys.forEach((key) => {
-        cellColors[key] = color
+        cellColors[key] = style
       })
       return { ...current, cellColors }
     })
@@ -634,31 +639,61 @@ export default function OperationShareDialog({
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h4 className="text-sm font-semibold text-slate-700">
-                      动作单元格配色
+                      {
+                        t.components.viewer.OperationViewer
+                          .share_cell_color_section_title
+                      }
                     </h4>
                     <p className="mt-1 text-xs text-slate-500">
-                      勾选单元格，或通过行号、列名一次选择整行/整列，再点击颜色
-                      应用。
+                      {
+                        t.components.viewer.OperationViewer
+                          .share_cell_color_section_hint
+                      }
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    <Switch
+                      checked={cardConfig.showCellPattern}
+                      className="m-0 mr-1"
+                      label={
+                        t.components.viewer.OperationViewer.share_cell_pattern
+                      }
+                      onChange={(event) =>
+                        updateOption(
+                          'showCellPattern',
+                          event.currentTarget.checked,
+                        )
+                      }
+                    />
                     <div
-                      aria-label="单元格背景色"
+                      aria-label={
+                        t.components.viewer.OperationViewer
+                          .share_cell_color_group
+                      }
                       className="flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 p-1"
                       role="group"
                     >
-                      {CELL_COLOR_OPTIONS.map((option) => (
-                        <button
-                          key={option.color}
-                          aria-label={`应用${option.label}`}
-                          className="h-8 w-8 rounded border border-slate-300 transition-transform enabled:hover:scale-105 enabled:focus:outline-none enabled:focus:ring-2 enabled:focus:ring-sky-500 enabled:focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40"
-                          disabled={selectedCellKeys.size === 0}
-                          onClick={() => applyCellColor(option.color)}
-                          style={getOperationShareCellVisualStyle(option.color)}
-                          title={`应用${option.label}`}
-                          type="button"
-                        />
-                      ))}
+                      {OPERATION_SHARE_CELL_COLOR_KEYS.map((colorKey) => {
+                        const label =
+                          t.components.viewer.OperationViewer.share_cell_color_apply(
+                            { label: cellColorNames[colorKey] },
+                          )
+                        return (
+                          <button
+                            key={colorKey}
+                            aria-label={label}
+                            className="h-8 w-8 rounded border border-slate-300 transition-transform enabled:hover:scale-105 enabled:focus:outline-none enabled:focus:ring-2 enabled:focus:ring-sky-500 enabled:focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40"
+                            disabled={selectedCellKeys.size === 0}
+                            onClick={() => applyCellColor(colorKey)}
+                            style={getOperationShareCellVisualStyle(
+                              colorKey,
+                              cardConfig.showCellPattern,
+                            )}
+                            title={label}
+                            type="button"
+                          />
+                        )
+                      })}
                     </div>
                     <Button
                       disabled={selectedCellKeys.size === 0}
@@ -666,7 +701,10 @@ export default function OperationShareDialog({
                       onClick={clearCellColor}
                       small
                     >
-                      清除颜色
+                      {
+                        t.components.viewer.OperationViewer
+                          .share_cell_color_clear
+                      }
                     </Button>
                     <Button
                       disabled={selectedCellKeys.size === 0}
@@ -674,7 +712,9 @@ export default function OperationShareDialog({
                       onClick={() => setSelectedCellKeys(new Set())}
                       small
                     >
-                      取消选择（{selectedCellKeys.size}）
+                      {t.components.viewer.OperationViewer.share_cell_color_clear_selection(
+                        { count: selectedCellKeys.size },
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -745,6 +785,7 @@ export default function OperationShareDialog({
                                   className="border-b border-r border-slate-200 px-2 py-2 last:border-r-0"
                                   style={getOperationShareCellVisualStyle(
                                     cardConfig.cellColors[key],
+                                    cardConfig.showCellPattern,
                                   )}
                                 >
                                   <Checkbox

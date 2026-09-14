@@ -16,13 +16,17 @@ import {
 import { getOperationShareImageConfigs } from '../../apis/operation-share-image-config'
 import cnTranslations from '../../i18n/generated/cn'
 import { rawTranslationsAtom } from '../../i18n/i18n'
+import { CopilotDocV1 } from '../../models/copilot.schema'
 import type { Operation } from '../../models/operation'
 import OperationShareDialog from './OperationShareDialog'
 import {
   createOperationShareQrDataUrl,
   renderOperationShareCardBlob,
 } from './operationShareImage'
-import { readOperationShareShortCode } from './operationShareModel'
+import {
+  readOperationShareCardConfig,
+  readOperationShareShortCode,
+} from './operationShareModel'
 
 vi.mock('../../apis/operation-share-image-config', () => ({
   getOperationShareImageConfigs: vi.fn(),
@@ -44,6 +48,7 @@ const reactTestEnvironment = globalThis as typeof globalThis & {
 function createOperation(
   status: CopilotInfoStatusEnum,
   metadata?: Operation['metadata'],
+  actions: Array<Record<string, unknown>> = [],
 ) {
   return {
     id: 100,
@@ -57,10 +62,18 @@ function createOperation(
       stageName: '1-1',
       opers: [],
       groups: [],
-      actions: [],
+      actions,
     },
   } as unknown as Operation
 }
+
+const singleRoundActions = [
+  {
+    type: CopilotDocV1.Type.Skill,
+    name: '测试密探',
+    doc: '第1回合·动作1：测试密探 A [1普]',
+  },
+]
 
 /** Blueprint 把 label 文本和 input 放在同一个 <label> 里，按文案定位开关。 */
 function findSwitch(labelText: string) {
@@ -71,6 +84,20 @@ function findSwitch(labelText: string) {
     if (input) return input as HTMLInputElement
   }
   return undefined
+}
+
+/** 调色板色块通过 aria-label 定位，例如「应用黄色（有底纹）」。 */
+function findSwatch(labelText: string) {
+  return Array.from(document.querySelectorAll('button')).find(
+    (button) => button.getAttribute('aria-label') === labelText,
+  ) as HTMLButtonElement | undefined
+}
+
+/** 配色网格里的单元格勾选框：Blueprint Checkbox 只有 aria-label，没有可见文案。 */
+function findCheckbox(ariaLabel: string) {
+  return Array.from(document.querySelectorAll('input[type="checkbox"]')).find(
+    (input) => input.getAttribute('aria-label') === ariaLabel,
+  ) as HTMLInputElement | undefined
 }
 
 describe('operation share dialog short code switch', () => {
@@ -164,5 +191,66 @@ describe('operation share dialog short code switch', () => {
 
     expect(findSwitch('分享神秘代码')?.checked).toBe(false)
     expect(findSwitch('分享二维码')?.disabled).toBe(false)
+  })
+
+  it('offers one swatch per color plus an 增加底纹 switch', async () => {
+    await renderDialog(
+      createOperation(
+        CopilotInfoStatusEnum.Public,
+        undefined,
+        singleRoundActions,
+      ),
+    )
+
+    expect(findSwatch('应用黄色')).toBeDefined()
+    expect(findSwatch('应用粉色')).toBeDefined()
+    expect(findSwatch('应用蓝色')).toBeDefined()
+    expect(findSwatch('应用绿色')).toBeDefined()
+    expect(findSwatch('应用冰灰')).toBeDefined()
+    expect(findSwatch('应用黄色（有底纹）')).toBeUndefined()
+
+    // 底纹是全局开关，默认打开
+    expect(findSwitch('增加底纹')?.checked).toBe(true)
+  })
+
+  it('applies the chosen color to the selected cell', async () => {
+    await renderDialog(
+      createOperation(
+        CopilotInfoStatusEnum.Public,
+        undefined,
+        singleRoundActions,
+      ),
+    )
+
+    await act(async () => {
+      findCheckbox('1 回合 1 号位')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+    await act(async () => {
+      findSwatch('应用黄色')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(readOperationShareCardConfig(100)?.cellColors).toEqual({
+      '1:slot-1': 'yellow',
+    })
+  })
+
+  it('toggles the cell pattern switch and persists it', async () => {
+    await renderDialog(
+      createOperation(
+        CopilotInfoStatusEnum.Public,
+        undefined,
+        singleRoundActions,
+      ),
+    )
+
+    await act(async () => {
+      findSwitch('增加底纹')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(findSwitch('增加底纹')?.checked).toBe(false)
+    expect(readOperationShareCardConfig(100)?.showCellPattern).toBe(false)
   })
 })

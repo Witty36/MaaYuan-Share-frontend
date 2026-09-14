@@ -3386,6 +3386,54 @@
           "cn": "二维码指向站内地址，已随神秘代码一并隐藏。",
           "zh_tw": "二維碼指向站內地址，已隨神秘代碼一併隱藏。"
         },
+        "share_cell_color_section_title": {
+          "cn": "动作单元格配色",
+          "zh_tw": "動作儲存格配色"
+        },
+        "share_cell_color_section_hint": {
+          "cn": "勾选单元格，或通过行号、列名一次选择整行/整列，再点击颜色应用；「增加底纹」可为所有已上色单元格添加纹样。",
+          "zh_tw": "勾選儲存格，或透過回合、欄名一次選擇整列/整欄，再點擊顏色套用；「增加底紋」可為所有已上色儲存格加上紋樣。"
+        },
+        "share_cell_color_group": {
+          "cn": "单元格背景色",
+          "zh_tw": "儲存格背景色"
+        },
+        "share_cell_pattern": {
+          "cn": "增加底纹",
+          "zh_tw": "增加底紋"
+        },
+        "share_cell_color_yellow": {
+          "cn": "黄色",
+          "zh_tw": "黃色"
+        },
+        "share_cell_color_pink": {
+          "cn": "粉色",
+          "zh_tw": "粉色"
+        },
+        "share_cell_color_blue": {
+          "cn": "蓝色",
+          "zh_tw": "藍色"
+        },
+        "share_cell_color_green": {
+          "cn": "绿色",
+          "zh_tw": "綠色"
+        },
+        "share_cell_color_ice": {
+          "cn": "冰灰",
+          "zh_tw": "冰灰"
+        },
+        "share_cell_color_apply": {
+          "cn": "应用{{label}}",
+          "zh_tw": "套用{{label}}"
+        },
+        "share_cell_color_clear": {
+          "cn": "清除颜色",
+          "zh_tw": "清除顏色"
+        },
+        "share_cell_color_clear_selection": {
+          "cn": "取消选择（{{count}}）",
+          "zh_tw": "取消選取（{{count}}）"
+        },
         "copy_secret_code": {
           "cn": "复制神秘代码",
           "zh_tw": "複製神秘代碼"

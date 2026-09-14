@@ -7,7 +7,7 @@ import { OPERATORS } from '../../models/operator'
 import {
   OPERATION_SHARE_CARD_CONFIG_SCHEMA_VERSION,
   OPERATION_SHARE_CARD_KEYS,
-  OPERATION_SHARE_CELL_COLORS,
+  OPERATION_SHARE_CELL_COLOR_KEYS,
   ObjectUrlStore,
   buildOperationShareCardConfigPayload,
   buildOperationShareCellKey,
@@ -545,7 +545,7 @@ describe('share image utilities', () => {
     config.showOtherActions = false
     config.showNotes = true
     config.notes[2] = '第二回合先等待'
-    config.cellColors['2:slot-3'] = OPERATION_SHARE_CELL_COLORS[2]
+    config.cellColors['2:slot-3'] = 'blue'
     config.requiredDiscs['2:1'] = true
 
     expect(saveOperationShareCardConfig(100, config, storage)).toBe(true)
@@ -559,15 +559,16 @@ describe('share image utilities', () => {
     const config = createOperationShareCardConfig()
     config.showNotes = true
     config.notes[2] = '等待技能结束'
-    config.cellColors['2:slot-1'] = OPERATION_SHARE_CELL_COLORS[1]
+    config.cellColors['2:slot-1'] = 'pink'
     config.requiredDiscs['1:3'] = true
 
     expect(buildOperationShareCardConfigPayload('actions', config)).toEqual({
       showTargetSwitches: true,
       showOtherActions: true,
       showNotes: true,
+      showCellPattern: true,
       notes: { 2: '等待技能结束' },
-      cellColors: { '2:slot-1': OPERATION_SHARE_CELL_COLORS[1] },
+      cellColors: { '2:slot-1': 'pink' },
     })
     expect(buildOperationShareCardConfigPayload('operators', config)).toEqual({
       requiredDiscs: { '1:3': true },
@@ -594,6 +595,7 @@ describe('share image utilities', () => {
       showTargetSwitches: true,
       showOtherActions: true,
       showNotes: true,
+      showCellPattern: true,
       notes: { 1: '作者备注' },
       cellColors: {},
       requiredDiscs: { '2:1': true },
@@ -622,6 +624,7 @@ describe('share image utilities', () => {
       showTargetSwitches: true,
       showOtherActions: false,
       showNotes: false,
+      showCellPattern: true,
       notes: {},
       cellColors: {},
       requiredDiscs: { '1:1': true },
@@ -651,6 +654,8 @@ describe('share image utilities', () => {
             '3:slot-1': '#D8E9E4',
             '4:slot-2': '#AECBD4',
             '5:slot-3': '#abcdef',
+            '6:slot-1': 'YELLOW',
+            '7:slot-2': 'green',
           },
           requiredDiscs: {
             '1:1': true,
@@ -665,13 +670,90 @@ describe('share image utilities', () => {
       showTargetSwitches: false,
       showOtherActions: false,
       showNotes: true,
+      showCellPattern: true,
       notes: { 1: 'x'.repeat(160) },
       cellColors: {
-        '3:slot-1': OPERATION_SHARE_CELL_COLORS[3],
-        '4:slot-2': OPERATION_SHARE_CELL_COLORS[2],
+        '3:slot-1': 'green',
+        '4:slot-2': 'blue',
+        '6:slot-1': 'yellow',
+        '7:slot-2': 'green',
       },
       requiredDiscs: { '1:1': true },
     })
+  })
+
+  it('migrates the legacy hex palette to color names', () => {
+    const storage = createMemoryStorage()
+    storage.getItem.mockReturnValueOnce(
+      JSON.stringify({
+        version: 1,
+        config: {
+          cellColors: {
+            '1:slot-1': '#fff3c9',
+            '1:slot-2': '#ffe3ed',
+            '1:slot-3': '#c3e8ff',
+            '1:slot-4': '#e1edc1',
+            '1:slot-5': '#edf8ff',
+            '2:slot-1': '#e69f00',
+            '2:slot-2': '#009e73',
+          },
+        },
+      }),
+    )
+
+    // 旧版本把颜色存成 hex，统一按色系归一为颜色名；
+    // 是否带底纹改由 showCellPattern 控制。
+    expect(loadOperationShareCardConfig(100, storage).cellColors).toEqual({
+      '1:slot-1': 'yellow',
+      '1:slot-2': 'pink',
+      '1:slot-3': 'blue',
+      '1:slot-4': 'green',
+      '1:slot-5': 'ice',
+      '2:slot-1': 'yellow',
+      '2:slot-2': 'green',
+    })
+  })
+
+  it('accepts every color name and drops unknown values', () => {
+    const storage = createMemoryStorage()
+    const cellColors: Record<string, string> = {}
+    OPERATION_SHARE_CELL_COLOR_KEYS.forEach((colorKey, index) => {
+      cellColors[`1:slot-${index + 1}`] = colorKey
+    })
+    cellColors['2:slot-1'] = 'YELLOW'
+    cellColors['2:slot-2'] = 'yellow-plain'
+    storage.getItem.mockReturnValueOnce(
+      JSON.stringify({ version: 1, config: { cellColors } }),
+    )
+
+    const normalized = loadOperationShareCardConfig(100, storage).cellColors
+
+    expect(Object.keys(normalized)).toHaveLength(
+      OPERATION_SHARE_CELL_COLOR_KEYS.length + 1,
+    )
+    // 颜色名大小写不敏感
+    expect(normalized['2:slot-1']).toBe('yellow')
+    // 未知值（例如已废弃的词形）必须丢弃，避免写进作者配置
+    expect(normalized['2:slot-2']).toBeUndefined()
+  })
+
+  it('defaults the cell pattern switch to on and keeps an explicit choice', () => {
+    const storage = createMemoryStorage()
+    storage.getItem.mockReturnValueOnce(
+      JSON.stringify({ version: 1, config: { cellColors: {} } }),
+    )
+
+    expect(loadOperationShareCardConfig(100, storage).showCellPattern).toBe(
+      true,
+    )
+
+    storage.getItem.mockReturnValueOnce(
+      JSON.stringify({ version: 1, config: { showCellPattern: false } }),
+    )
+
+    expect(loadOperationShareCardConfig(100, storage).showCellPattern).toBe(
+      false,
+    )
   })
 
   it('shows the other actions column for caches created before the option existed', () => {

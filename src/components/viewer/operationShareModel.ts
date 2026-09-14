@@ -59,44 +59,89 @@ export interface OperationShareCardConfig {
   showTargetSwitches: boolean
   showOtherActions: boolean
   showNotes: boolean
+  /** 为已上色的单元格添加底纹；关闭时全部渲染为纯色块。 */
+  showCellPattern: boolean
   notes: Record<number, string>
   cellColors: Record<string, string>
   requiredDiscs: Record<string, boolean>
 }
 
-export const OPERATION_SHARE_CELL_COLORS = [
-  '#fff3c9',
-  '#ffe3ed',
-  '#c3e8ff',
-  '#e1edc1',
-  '#edf8ff',
+/**
+ * 单元格底纹类型。'solid' 即不上底纹，其余为各颜色在「增加底纹」打开时
+ * 使用的纹样。这里只描述数据，具体 CSS 由 OperationShareCard 负责。
+ */
+export type OperationShareCellPattern =
+  'solid' | 'vertical' | 'horizontal' | 'diagonal' | 'cross' | 'dots'
+
+/** 单元格可用的颜色；是否带底纹由 showCellPattern 统一控制。 */
+export const OPERATION_SHARE_CELL_COLOR_KEYS = [
+  'yellow',
+  'pink',
+  'blue',
+  'green',
+  'ice',
 ] as const
 
-const LEGACY_OPERATION_SHARE_CELL_COLORS: Record<string, string> = {
-  '#f4ecdf': OPERATION_SHARE_CELL_COLORS[4],
-  '#f2dfb9': OPERATION_SHARE_CELL_COLORS[0],
-  '#d8e9e4': OPERATION_SHARE_CELL_COLORS[3],
-  '#dbe7ea': OPERATION_SHARE_CELL_COLORS[2],
-  '#f4d9d1': OPERATION_SHARE_CELL_COLORS[1],
-  '#dfe4e2': OPERATION_SHARE_CELL_COLORS[4],
-  '#e7cfaa': OPERATION_SHARE_CELL_COLORS[0],
-  '#e8bd68': OPERATION_SHARE_CELL_COLORS[0],
-  '#afd0c4': OPERATION_SHARE_CELL_COLORS[3],
-  '#aecbd4': OPERATION_SHARE_CELL_COLORS[2],
-  '#e5afa1': OPERATION_SHARE_CELL_COLORS[1],
-  '#becbc7': OPERATION_SHARE_CELL_COLORS[4],
-  '#e89b91': OPERATION_SHARE_CELL_COLORS[1],
-  '#e8bd5f': OPERATION_SHARE_CELL_COLORS[0],
-  '#a1c77f': OPERATION_SHARE_CELL_COLORS[3],
-  '#79c3b6': OPERATION_SHARE_CELL_COLORS[2],
-  '#82add5': OPERATION_SHARE_CELL_COLORS[2],
-  '#bd9bcc': OPERATION_SHARE_CELL_COLORS[1],
-  '#e69f00': OPERATION_SHARE_CELL_COLORS[0],
-  '#56b4e9': OPERATION_SHARE_CELL_COLORS[2],
-  '#009e73': OPERATION_SHARE_CELL_COLORS[3],
-  '#f0e442': OPERATION_SHARE_CELL_COLORS[0],
-  '#0072b2': OPERATION_SHARE_CELL_COLORS[2],
-  '#cc79a7': OPERATION_SHARE_CELL_COLORS[1],
+export type OperationShareCellColorKey =
+  (typeof OPERATION_SHARE_CELL_COLOR_KEYS)[number]
+
+/** 各颜色的基础色，以及「增加底纹」时使用的纹样。 */
+export const OPERATION_SHARE_CELL_PALETTE: Record<
+  OperationShareCellColorKey,
+  { hex: string; pattern: OperationShareCellPattern }
+> = {
+  yellow: { hex: '#fff3c9', pattern: 'cross' },
+  pink: { hex: '#ffe3ed', pattern: 'vertical' },
+  blue: { hex: '#c3e8ff', pattern: 'horizontal' },
+  green: { hex: '#e1edc1', pattern: 'diagonal' },
+  ice: { hex: '#edf8ff', pattern: 'dots' },
+}
+
+/** cellColors 的取值：颜色名，例如 'yellow'。 */
+export type OperationShareCellStyle = OperationShareCellColorKey
+
+const OPERATION_SHARE_CELL_COLOR_SET: ReadonlySet<string> = new Set(
+  OPERATION_SHARE_CELL_COLOR_KEYS,
+)
+
+/**
+ * 历史兼容表：旧版本把「颜色」和「纹样」绑死、并把颜色存成 hex，
+ * 这里统一按色系归到对应的颜色名（是否带底纹改由 showCellPattern 控制）。
+ */
+const LEGACY_OPERATION_SHARE_CELL_STYLES: Record<
+  string,
+  OperationShareCellStyle
+> = {
+  '#fff3c9': 'yellow',
+  '#ffe3ed': 'pink',
+  '#c3e8ff': 'blue',
+  '#e1edc1': 'green',
+  '#edf8ff': 'ice',
+  // 更早的 24 色板（含 Okabe-Ito 色盲友好色）统一按色系归类
+  '#f4ecdf': 'ice',
+  '#f2dfb9': 'yellow',
+  '#d8e9e4': 'green',
+  '#dbe7ea': 'blue',
+  '#f4d9d1': 'pink',
+  '#dfe4e2': 'ice',
+  '#e7cfaa': 'yellow',
+  '#e8bd68': 'yellow',
+  '#afd0c4': 'green',
+  '#aecbd4': 'blue',
+  '#e5afa1': 'pink',
+  '#becbc7': 'ice',
+  '#e89b91': 'pink',
+  '#e8bd5f': 'yellow',
+  '#a1c77f': 'green',
+  '#79c3b6': 'blue',
+  '#82add5': 'blue',
+  '#bd9bcc': 'pink',
+  '#e69f00': 'yellow',
+  '#56b4e9': 'blue',
+  '#009e73': 'green',
+  '#f0e442': 'yellow',
+  '#0072b2': 'blue',
+  '#cc79a7': 'pink',
 }
 
 const OPERATION_SHARE_CARD_CONFIG_STORAGE_VERSION = 1
@@ -108,9 +153,6 @@ const OPERATION_SHARE_SHORT_CODE_STORAGE_PREFIX =
   'maa-copilot-operation-share-short-code'
 const SHARE_CELL_KEY_PATTERN = /^\d+:slot-\d+$/
 const REQUIRED_DISC_KEY_PATTERN = /^\d+:[1-3]$/
-const OPERATION_SHARE_CELL_COLOR_SET = new Set<string>(
-  OPERATION_SHARE_CELL_COLORS,
-)
 
 export interface OperationShareRound {
   round: number
@@ -163,6 +205,7 @@ export function createOperationShareCardConfig(): OperationShareCardConfig {
     showTargetSwitches: true,
     showOtherActions: true,
     showNotes: false,
+    showCellPattern: true,
     notes: {},
     cellColors: {},
     requiredDiscs: {},
@@ -190,16 +233,16 @@ export function normalizeOperationShareCardConfig(
 
   const cellColors: Record<string, string> = {}
   if (isRecord(value.cellColors)) {
-    Object.entries(value.cellColors).forEach(([key, color]) => {
-      if (SHARE_CELL_KEY_PATTERN.test(key) && typeof color === 'string') {
-        const normalizedColor = color.toLowerCase()
-        const supportedColor = OPERATION_SHARE_CELL_COLOR_SET.has(
-          normalizedColor,
+    Object.entries(value.cellColors).forEach(([key, style]) => {
+      if (SHARE_CELL_KEY_PATTERN.test(key) && typeof style === 'string') {
+        const normalizedStyle = style.trim().toLowerCase()
+        const supportedStyle = OPERATION_SHARE_CELL_COLOR_SET.has(
+          normalizedStyle,
         )
-          ? normalizedColor
-          : LEGACY_OPERATION_SHARE_CELL_COLORS[normalizedColor]
+          ? (normalizedStyle as OperationShareCellStyle)
+          : LEGACY_OPERATION_SHARE_CELL_STYLES[normalizedStyle]
 
-        if (supportedColor) cellColors[key] = supportedColor
+        if (supportedStyle) cellColors[key] = supportedStyle
       }
     })
   }
@@ -226,6 +269,10 @@ export function normalizeOperationShareCardConfig(
       typeof value.showNotes === 'boolean'
         ? value.showNotes
         : defaults.showNotes,
+    showCellPattern:
+      typeof value.showCellPattern === 'boolean'
+        ? value.showCellPattern
+        : defaults.showCellPattern,
     notes,
     cellColors,
     requiredDiscs,
@@ -245,6 +292,7 @@ export function buildOperationShareCardConfigPayload(
     showTargetSwitches: normalized.showTargetSwitches,
     showOtherActions: normalized.showOtherActions,
     showNotes: normalized.showNotes,
+    showCellPattern: normalized.showCellPattern,
     notes: normalized.notes,
     cellColors: normalized.cellColors,
   }
@@ -322,6 +370,7 @@ export function resolveOperationShareCardConfig(
     local.showTargetSwitches !== defaults.showTargetSwitches ||
     local.showOtherActions !== defaults.showOtherActions ||
     local.showNotes !== defaults.showNotes ||
+    local.showCellPattern !== defaults.showCellPattern ||
     Object.keys(local.notes).length > 0 ||
     Object.keys(local.cellColors).length > 0
   const hasLocalOperatorOverrides = Object.keys(local.requiredDiscs).length > 0
@@ -348,6 +397,7 @@ export function replaceOperationShareCardConfigKind(
     showTargetSwitches: replacement.showTargetSwitches,
     showOtherActions: replacement.showOtherActions,
     showNotes: replacement.showNotes,
+    showCellPattern: replacement.showCellPattern,
     notes: replacement.notes,
     cellColors: replacement.cellColors,
   }
