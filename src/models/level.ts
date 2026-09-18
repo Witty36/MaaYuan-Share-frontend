@@ -74,6 +74,50 @@ export function findLevelByStageName(levels: Level[], stageName: string) {
   return levels.find((level) => matchLevelByStageName(level, stageName));
 }
 
+function parseLevelTime(value: unknown): number | null | undefined {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value !== "string") return null;
+
+  const normalized = value.trim();
+  if (!normalized) {
+    return undefined;
+  }
+
+  const timestamp = Date.parse(normalized);
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+export function isLevelWithinTimeRange(
+  level: Pick<Level, "endTime">,
+  now = Date.now(),
+) {
+  const endTime = parseLevelTime(level.endTime);
+
+  // 无法解析的配置按不限制处理，避免误隐藏作业。
+  if (endTime === null) {
+    return true;
+  }
+
+  return endTime === undefined || now <= endTime;
+}
+
+export function getNextLevelEndTime(
+  levels: Pick<Level, "endTime">[],
+  now = Date.now(),
+): number | undefined {
+  let nextEndTime: number | undefined;
+
+  for (const level of levels) {
+    const endTime = parseLevelTime(level.endTime);
+    if (endTime === null || endTime === undefined || endTime < now) continue;
+    if (nextEndTime === undefined || endTime < nextEndTime) {
+      nextEndTime = endTime;
+    }
+  }
+
+  return nextEndTime;
+}
+
 export function hasHardMode(levels: Level[], stageName: string) {
   if (isHardMode(stageName)) {
     return true;

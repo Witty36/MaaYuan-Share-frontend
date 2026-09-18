@@ -275,12 +275,14 @@ export function DeployedOperatorsShareCard({
   cardRef,
   qrDataUrl,
   hideQrCode = true,
+  showShortCode = true,
   config = defaultCardConfig,
 }: {
   model: OperationShareModel
   cardRef?: Ref<HTMLDivElement>
   qrDataUrl: string
   hideQrCode?: boolean
+  showShortCode?: boolean
   config?: OperationShareCardConfig
 }) {
   return (
@@ -290,6 +292,7 @@ export function DeployedOperatorsShareCard({
       hideQrCode={hideQrCode}
       model={model}
       qrDataUrl={qrDataUrl}
+      showShortCode={showShortCode}
     >
       <section className="mt-10">
         <ShareSectionTitle>上阵密探属性一览</ShareSectionTitle>
@@ -357,7 +360,7 @@ export function DeployedOperatorsShareCard({
                 minHeight={68}
                 operators={model.operators}
               >
-                {(operator) => operator.level}
+                {(operator) => operator.level ?? '—'}
               </AttributeRow>
               <AttributeRow
                 background={rowBackground}
@@ -365,7 +368,7 @@ export function DeployedOperatorsShareCard({
                 minHeight={68}
                 operators={model.operators}
               >
-                {(operator) => operator.elite}
+                {(operator) => operator.elite ?? '—'}
               </AttributeRow>
               <AttributeRow
                 background={rowBackground}

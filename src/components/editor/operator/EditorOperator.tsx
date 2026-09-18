@@ -23,10 +23,11 @@ const createArbitraryOperator = (name: string): OperatorInfo => ({
   name,
   alias: "",
   alt_name: "",
-  subProf: "",
+  subProf: [],
   name_en: "",
-  prof: "",
+  prof: [],
   rarity: 0,
+  games: [],
   discs: [],
 });
 

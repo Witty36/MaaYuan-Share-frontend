@@ -2,7 +2,11 @@ import QRCode from 'qrcode'
 import ReactDOM from 'react-dom/client'
 
 import { OperationShareCard } from './components/viewer/OperationShareCard'
-import type { OperationShareModel } from './components/viewer/operationShareModel'
+import {
+  OPERATION_SHARE_CELL_COLOR_KEYS,
+  type OperationShareModel,
+  createOperationShareCardConfig,
+} from './components/viewer/operationShareModel'
 import './styles/blueprint.less'
 
 const operators = [
@@ -13,9 +17,23 @@ const operators = [
   ['鲁肃', 'char_005_lusu'],
 ] as const
 
+// 第 1 回合给 5 个颜色各上一个单元格，
+// 下面会分别渲染「增加底纹」开 / 关两张图，方便目测对比。
+const shareCellColorDemo = (() => {
+  const config = createOperationShareCardConfig()
+
+  OPERATION_SHARE_CELL_COLOR_KEYS.forEach((colorKey, colorIndex) => {
+    config.cellColors[`1:slot-${colorIndex + 1}`] = colorKey
+  })
+
+  return config
+})()
+
 async function render() {
   const maayuanUrl = 'https://share.maayuan.top/?op=29533'
   const originalUrl = 'https://www.bilibili.com/read/cv29533'
+  // 改这里可以预览关闭「分享神秘代码」后的页脚布局
+  const showShortCode = true
   const qrDataUrl = await QRCode.toDataURL(originalUrl)
   const model: OperationShareModel = {
     title: '22 期地宫 40 层张郃稳定通关作业',
@@ -48,17 +66,33 @@ async function render() {
     })),
     groups: [],
     actionSlots: [1, 2, 3, 4, 5],
-    rounds: [
-      {
-        round: 1,
-        slots: { 1: [{ raw: '1普', order: 1, label: 'A' }] },
-        others: [],
-      },
-    ],
+    rounds: [1, 2].map((round) => ({
+      round,
+      slots: Object.fromEntries(
+        [1, 2, 3, 4, 5].map((slot) => [
+          slot,
+          [{ raw: '1普', order: slot, label: String(slot) }],
+        ]),
+      ),
+      others: [],
+    })),
   }
   document.body.style.cssText = 'padding:40px;background:#dfe4e2'
   ReactDOM.createRoot(document.getElementById('root')!).render(
-    <OperationShareCard model={model} qrDataUrl={qrDataUrl} />,
+    <>
+      <OperationShareCard
+        config={{ ...shareCellColorDemo, showCellPattern: true }}
+        model={model}
+        qrDataUrl={qrDataUrl}
+        showShortCode={showShortCode}
+      />
+      <OperationShareCard
+        config={{ ...shareCellColorDemo, showCellPattern: false }}
+        model={model}
+        qrDataUrl={qrDataUrl}
+        showShortCode={showShortCode}
+      />
+    </>,
   )
 }
 

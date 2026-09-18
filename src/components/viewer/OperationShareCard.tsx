@@ -2,15 +2,15 @@ import { Icon } from '@blueprintjs/core'
 
 import type { CSSProperties, Ref } from 'react'
 
-import type {
-  OperationShareAction,
-  OperationShareCardConfig,
-  OperationShareModel,
-  OperationShareOperator,
-  OperationShareRound,
-} from './operationShareModel'
 import {
-  OPERATION_SHARE_CELL_COLORS,
+  OPERATION_SHARE_CELL_COLOR_KEYS,
+  OPERATION_SHARE_CELL_PALETTE,
+  type OperationShareAction,
+  type OperationShareCardConfig,
+  type OperationShareCellPattern,
+  type OperationShareModel,
+  type OperationShareOperator,
+  type OperationShareRound,
   buildOperationShareCellKey,
   createOperationShareCardConfig,
   filterOperationShareActions,
@@ -30,7 +30,53 @@ const operationShareTextColor = '#624015'
 const operationShareMutedTextColor = '#9a856d'
 const accessibleDarkTextColor = '#231f20'
 
-const operationShareCellVisualStyles: Record<string, CSSProperties> = {
+const shareCellPatternStyles: Record<OperationShareCellPattern, CSSProperties> =
+  {
+    solid: {},
+    vertical: {
+      backgroundImage:
+        'repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.2) 0 3px, transparent 3px 11px)',
+    },
+    horizontal: {
+      backgroundImage:
+        'repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.2) 0 3px, transparent 3px 11px)',
+    },
+    diagonal: {
+      backgroundImage:
+        'repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.18) 0 3px, transparent 3px 11px)',
+    },
+    cross: {
+      backgroundImage:
+        'repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.16) 0 3px, transparent 3px 11px), repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.16) 0 3px, transparent 3px 11px)',
+    },
+    dots: {
+      backgroundImage:
+        'radial-gradient(circle at 3px 3px, rgba(0, 0, 0, 0.16) 0 2px, transparent 2.25px)',
+      backgroundSize: '10px 10px',
+    },
+  }
+
+// 每种颜色在「增加底纹」打开时使用专属纹样，保证同一张图里不同颜色
+// 在黑白打印/色盲场景下也能靠纹样分辨；关闭时全部退化为纯色块。
+const shareCellColorVisualStyles: Record<
+  string,
+  { plain: CSSProperties; patterned: CSSProperties }
+> = Object.fromEntries(
+  OPERATION_SHARE_CELL_COLOR_KEYS.map((colorKey) => {
+    const { hex, pattern } = OPERATION_SHARE_CELL_PALETTE[colorKey]
+    const plain: CSSProperties = {
+      backgroundColor: hex,
+      color: accessibleDarkTextColor,
+    }
+    return [
+      colorKey,
+      { plain, patterned: { ...plain, ...shareCellPatternStyles[pattern] } },
+    ]
+  }),
+)
+
+// 未上色的单元格按回合隔行取底色，始终不带纹样。
+const shareCellRowVisualStyles: Record<string, CSSProperties> = {
   [tableBodyBackgrounds[0]]: {
     backgroundColor: tableBodyBackgrounds[0],
     color: operationShareTextColor,
@@ -39,49 +85,23 @@ const operationShareCellVisualStyles: Record<string, CSSProperties> = {
     backgroundColor: tableBodyBackgrounds[1],
     color: operationShareTextColor,
   },
-  [OPERATION_SHARE_CELL_COLORS[0]]: {
-    backgroundColor: OPERATION_SHARE_CELL_COLORS[0],
-    color: accessibleDarkTextColor,
-  },
-  [OPERATION_SHARE_CELL_COLORS[1]]: {
-    backgroundColor: OPERATION_SHARE_CELL_COLORS[1],
-    backgroundImage:
-      'repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.2) 0 3px, transparent 3px 11px)',
-    color: accessibleDarkTextColor,
-  },
-  [OPERATION_SHARE_CELL_COLORS[2]]: {
-    backgroundColor: OPERATION_SHARE_CELL_COLORS[2],
-    backgroundImage:
-      'repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.2) 0 3px, transparent 3px 11px)',
-    color: accessibleDarkTextColor,
-  },
-  [OPERATION_SHARE_CELL_COLORS[3]]: {
-    backgroundColor: OPERATION_SHARE_CELL_COLORS[3],
-    backgroundImage:
-      'repeating-linear-gradient(45deg, rgba(0, 0, 0, 0.18) 0 3px, transparent 3px 11px)',
-    color: accessibleDarkTextColor,
-  },
-  [OPERATION_SHARE_CELL_COLORS[4]]: {
-    backgroundColor: OPERATION_SHARE_CELL_COLORS[4],
-    backgroundImage:
-      'radial-gradient(circle at 3px 3px, rgba(0, 0, 0, 0.16) 0 2px, transparent 2.25px)',
-    backgroundSize: '10px 10px',
-    color: accessibleDarkTextColor,
-  },
 }
 
 const emptyOperationShareCellVisualStyle: CSSProperties = {}
 
 export function getOperationShareCellVisualStyle(
-  backgroundColor?: string,
+  cellColor?: string,
+  showPattern = false,
 ): CSSProperties {
-  if (!backgroundColor) return emptyOperationShareCellVisualStyle
-  return (
-    operationShareCellVisualStyles[backgroundColor] ?? {
-      backgroundColor,
-      color: operationShareTextColor,
-    }
-  )
+  if (!cellColor) return emptyOperationShareCellVisualStyle
+
+  const rowStyle = shareCellRowVisualStyles[cellColor]
+  if (rowStyle) return rowStyle
+
+  const colorStyle = shareCellColorVisualStyles[cellColor]
+  if (!colorStyle) return emptyOperationShareCellVisualStyle
+
+  return showPattern ? colorStyle.patterned : colorStyle.plain
 }
 
 function getOperationShareRoundBackground(round: number) {
@@ -277,12 +297,14 @@ export function OperationShareCard({
   cardRef,
   qrDataUrl,
   hideQrCode = true,
+  showShortCode = true,
   config = defaultCardConfig,
 }: {
   model: OperationShareModel
   cardRef?: Ref<HTMLDivElement>
   qrDataUrl: string
   hideQrCode?: boolean
+  showShortCode?: boolean
   config?: OperationShareCardConfig
 }) {
   return (
@@ -292,6 +314,7 @@ export function OperationShareCard({
       hideQrCode={hideQrCode}
       model={model}
       qrDataUrl={qrDataUrl}
+      showShortCode={showShortCode}
     >
       <section className="mt-10">
         <ShareSectionTitle>作战编排</ShareSectionTitle>
@@ -345,7 +368,10 @@ export function OperationShareCard({
                 />
               ) : null}
             </tr>
-            <tr aria-label="列标题" style={{ background: tableHeaderBackground }}>
+            <tr
+              aria-label="列标题"
+              style={{ background: tableHeaderBackground }}
+            >
               <th
                 className="border-2 px-3 py-3 text-[21px] font-bold"
                 scope="col"
@@ -417,6 +443,7 @@ export function OperationShareCard({
                               round.round,
                               slot,
                             ),
+                            config.showCellPattern,
                           ),
                         }}
                       >

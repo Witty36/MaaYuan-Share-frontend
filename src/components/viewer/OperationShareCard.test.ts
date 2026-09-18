@@ -11,9 +11,10 @@ import {
   getOperationShareRoundDisplay,
 } from './OperationShareCard'
 import {
-  createOperationShareCardConfig,
-  OPERATION_SHARE_CELL_COLORS,
+  OPERATION_SHARE_CELL_COLOR_KEYS,
+  OPERATION_SHARE_CELL_PALETTE,
   type OperationShareModel,
+  createOperationShareCardConfig,
 } from './operationShareModel'
 
 const model: OperationShareModel = {
@@ -49,6 +50,30 @@ describe('operation share card styles', () => {
 
     expect(defaultMarkup).not.toContain(model.qrLabel)
     expect(visibleMarkup).toContain(model.qrLabel)
+  })
+
+  it('shows the secret code footer block unless it is turned off', () => {
+    const defaultMarkup = renderToStaticMarkup(
+      createElement(OperationShareCard, {
+        model,
+        qrDataUrl: 'data:image/png;base64,qr-code',
+      }),
+    )
+    const hiddenMarkup = renderToStaticMarkup(
+      createElement(OperationShareCard, {
+        model,
+        qrDataUrl: 'data:image/png;base64,qr-code',
+        showShortCode: false,
+      }),
+    )
+
+    // 「神秘代码」与「站内地址」携带同一个作业 id，必须一起隐藏
+    expect(defaultMarkup).toContain('神秘代码')
+    expect(defaultMarkup).toContain(model.maayuanUrl)
+    expect(hiddenMarkup).not.toContain('神秘代码')
+    expect(hiddenMarkup).not.toContain('站内地址')
+    expect(hiddenMarkup).not.toContain(model.maayuanUrl)
+    expect(hiddenMarkup).toContain('MAAYUAN SHARE')
   })
 
   it('renders full-cell avatars above a separate column-label row', () => {
@@ -93,54 +118,71 @@ describe('operation share card styles', () => {
     expect(getOperationShareActionCellBackground({}, 3, 1)).toBe('#f3e3c9')
   })
 
-  it('uses the configured semantic color instead of the neutral background', () => {
-    const color = OPERATION_SHARE_CELL_COLORS[2]
-
+  it('uses the configured cell color instead of the neutral background', () => {
     expect(
-      getOperationShareActionCellBackground({ '2:slot-1': color }, 2, 1),
-    ).toBe(color)
+      getOperationShareActionCellBackground({ '2:slot-1': 'blue' }, 2, 1),
+    ).toBe('blue')
   })
 
-  it('uses distinct colors, patterns, and accessible text contrast', () => {
-    const styles = OPERATION_SHARE_CELL_COLORS.map((color) =>
-      getOperationShareCellVisualStyle(color),
+  it('adds a distinct pattern to every color only when the switch is on', () => {
+    const plain = OPERATION_SHARE_CELL_COLOR_KEYS.map((colorKey) =>
+      getOperationShareCellVisualStyle(colorKey, false),
+    )
+    const patterned = OPERATION_SHARE_CELL_COLOR_KEYS.map((colorKey) =>
+      getOperationShareCellVisualStyle(colorKey, true),
     )
 
-    expect(styles.map((style) => style.backgroundColor)).toEqual([
-      ...OPERATION_SHARE_CELL_COLORS,
-    ])
+    // 关闭「增加底纹」时全部退化为纯色块
+    expect(plain.every((style) => !style.backgroundImage)).toBe(true)
+    expect(plain.map((style) => style.backgroundColor)).toEqual(
+      OPERATION_SHARE_CELL_COLOR_KEYS.map(
+        (colorKey) => OPERATION_SHARE_CELL_PALETTE[colorKey].hex,
+      ),
+    )
+
+    // 打开后每个颜色都有纹样，且底色与关闭时一致、文字对比度一致
+    expect(patterned.every((style) => Boolean(style.backgroundImage))).toBe(
+      true,
+    )
+    expect(patterned.map((style) => style.backgroundColor)).toEqual(
+      plain.map((style) => style.backgroundColor),
+    )
     expect(
-      new Set(styles.map((style) => style.backgroundImage ?? 'solid')).size,
-    ).toBe(OPERATION_SHARE_CELL_COLORS.length)
-    expect(styles.map((style) => style.color)).toEqual([
-      '#231f20',
-      '#231f20',
-      '#231f20',
-      '#231f20',
-      '#231f20',
-    ])
+      [...plain, ...patterned].every((style) => style.color === '#231f20'),
+    ).toBe(true)
+
+    // 纹样互不相同，保证黑白打印/色盲下靠纹样即可区分颜色
+    expect(new Set(patterned.map((style) => style.backgroundImage)).size).toBe(
+      OPERATION_SHARE_CELL_COLOR_KEYS.length,
+    )
   })
 
-  it('renders the accessible pattern in the generated card', () => {
-    const config = createOperationShareCardConfig()
-    config.cellColors['1:slot-1'] = OPERATION_SHARE_CELL_COLORS[4]
+  it('applies the pattern to colored cells only when the switch is on', () => {
     const cardModel: OperationShareModel = {
       ...model,
       actionSlots: [1],
       rounds: [{ round: 1, slots: { 1: [] }, others: [] }],
     }
+    const config = createOperationShareCardConfig()
+    config.cellColors['1:slot-1'] = 'ice'
 
-    const markup = renderToStaticMarkup(
-      createElement(OperationShareCard, {
-        config,
-        model: cardModel,
-        qrDataUrl: 'data:image/png;base64,qr-code',
-      }),
-    )
+    const renderCard = (showCellPattern: boolean) =>
+      renderToStaticMarkup(
+        createElement(OperationShareCard, {
+          config: { ...config, showCellPattern },
+          model: cardModel,
+          qrDataUrl: 'data:image/png;base64,qr-code',
+        }),
+      )
 
-    expect(markup).toContain('background-color:#edf8ff')
-    expect(markup).toContain('background-image:radial-gradient')
-    expect(markup).toContain('color:#231f20')
+    const patternedMarkup = renderCard(true)
+    expect(patternedMarkup).toContain('background-color:#edf8ff')
+    expect(patternedMarkup).toContain('background-image:radial-gradient')
+    expect(patternedMarkup).toContain('color:#231f20')
+
+    const plainMarkup = renderCard(false)
+    expect(plainMarkup).toContain('background-color:#edf8ff')
+    expect(plainMarkup).not.toContain('background-image:')
   })
 
   it('uses the operator star level for the avatar badge', () => {

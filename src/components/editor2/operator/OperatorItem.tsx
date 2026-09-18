@@ -43,6 +43,7 @@ import {
   OPERATOR_ELITE_MIN,
   OPERATOR_LEVEL_MAX,
   OPERATOR_LEVEL_MIN,
+  applyAnyRequirements,
   getMaxEliteForLevel,
 } from './operatorRequirementModel'
 
@@ -94,6 +95,7 @@ function setStats(
   const nextStats = { ...prevStats, ...updates }
   const next: EditorOperator = {
     ...operator,
+    unrestricted: false,
     // 同步原方案根级字段，便于回退与导出
     ...(updates.starLevel !== undefined
       ? { starLevel: updates.starLevel }
@@ -181,7 +183,7 @@ export const OperatorItem: FC<OperatorItemProps> = memo(
           isDragging && 'invisible',
         )}
       >
-        <div className="relative self-center">
+        <div className="relative self-center flex flex-col items-center">
           <Popover2
             // 维持全屏灰幕时，确保弹层通过 Portal 且层级高于遮罩
             usePortal={true}
@@ -213,7 +215,7 @@ export const OperatorItem: FC<OperatorItemProps> = memo(
           >
             <Card
               interactive
-              className="card-shadow-subtle relative w-20 p-0 !py-0 flex flex-col items-center overflow-hidden select-none pointer-events-auto ml-1.5"
+              className="card-shadow-subtle relative w-20 p-0 !py-0 flex flex-col items-center overflow-hidden select-none pointer-events-auto"
               {...attributes}
               {...listeners}
             >
@@ -231,11 +233,11 @@ export const OperatorItem: FC<OperatorItemProps> = memo(
               >
                 {displayName}
               </h4>
-              {info && info.prof !== 'TOKEN' && (
+              {info && !info.prof.includes('TOKEN') && (
                 <img
                   className="absolute top-0 right-0 w-5 h-5 p-px bg-gray-600 pointer-events-none"
-                  src={getProfIconPath(info.prof)}
-                  alt={info.prof}
+                  src={getProfIconPath(info.prof[0])}
+                  alt={info.prof[0]}
                 />
               )}
             </Card>
@@ -280,6 +282,25 @@ export const OperatorItem: FC<OperatorItemProps> = memo(
                 </button>
               )
             })}
+          </div>
+          <div className="mt-1 flex items-center justify-center">
+            <Button
+              small
+              minimal
+              onClick={() =>
+                edit(() => {
+                  const next = applyAnyRequirements(operator)
+                  onChange?.(next)
+                  return {
+                    action: 'apply-operator-any-requirements',
+                    desc: '设置密探任意练度/命盘/星石',
+                    squashBy: operator.id,
+                  }
+                })
+              }
+            >
+              {t.components.editor2.OperatorItem.any_requirements}
+            </Button>
           </div>
         </div>
 
@@ -407,6 +428,7 @@ export const OperatorItem: FC<OperatorItemProps> = memo(
                           )
                           const next: EditorOperator = {
                             ...operator,
+                            unrestricted: false,
                             requirements: {
                               ...operator.requirements,
                               level,
@@ -460,6 +482,7 @@ export const OperatorItem: FC<OperatorItemProps> = memo(
                           )
                           const next: EditorOperator = {
                             ...operator,
+                            unrestricted: false,
                             requirements: {
                               ...operator.requirements,
                               elite,

@@ -1,5 +1,6 @@
 import { Icon } from '@blueprintjs/core'
 
+import clsx from 'clsx'
 import type { CSSProperties, ReactNode, Ref } from 'react'
 
 import type {
@@ -106,6 +107,7 @@ export function ShareCardFrame({
   hideQrCode,
   model,
   qrDataUrl,
+  showShortCode,
 }: {
   cardRef?: Ref<HTMLDivElement>
   children: ReactNode
@@ -113,6 +115,7 @@ export function ShareCardFrame({
   hideQrCode: boolean
   model: OperationShareModel
   qrDataUrl: string
+  showShortCode: boolean
 }) {
   const sourceTag =
     model.source.type === 'repost'
@@ -207,18 +210,26 @@ export function ShareCardFrame({
         className="mt-9 flex items-end justify-between gap-8 border-t pt-5 text-sm"
         style={{ borderColor: '#b9c4c0', color: shareCardPalette.muted }}
       >
-        <div className="min-w-0">
-          <div>
-            MaaYuan 神秘代码 ·{' '}
-            <span className="font-bold" style={{ color: shareCardPalette.ink }}>
-              {model.shortCode}
-            </span>
+        {/* 「神秘代码」与「站内地址」携带同一个作业 id，必须作为一个整体开关处理 */}
+        {showShortCode ? (
+          <div className="min-w-0">
+            <div>
+              MaaYuan 神秘代码 ·{' '}
+              <span
+                className="font-bold"
+                style={{ color: shareCardPalette.ink }}
+              >
+                {model.shortCode}
+              </span>
+            </div>
+            <div className="mt-1 max-w-[760px] break-all text-xs">
+              站内地址 · {model.maayuanUrl}
+            </div>
           </div>
-          <div className="mt-1 max-w-[760px] break-all text-xs">
-            站内地址 · {model.maayuanUrl}
-          </div>
-        </div>
-        <div className="shrink-0 text-right">
+        ) : null}
+        <div
+          className={clsx('shrink-0 text-right', !showShortCode && 'ml-auto')}
+        >
           <div className="font-semibold">MAAYUAN SHARE</div>
           <div className="mt-1 text-xs">让每一步都清晰可见</div>
         </div>

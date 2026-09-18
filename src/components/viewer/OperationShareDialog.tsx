@@ -8,6 +8,7 @@ import {
 } from '@blueprintjs/core'
 
 import { useAtomValue } from 'jotai'
+import { CopilotInfoStatusEnum } from 'maa-copilot-client'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import {
@@ -30,10 +31,11 @@ import {
 import {
   OPERATION_SHARE_CARD_CONFIG_SCHEMA_VERSION,
   OPERATION_SHARE_CARD_KEYS,
-  OPERATION_SHARE_CELL_COLORS,
+  OPERATION_SHARE_CELL_COLOR_KEYS,
   ObjectUrlStore,
   type OperationShareCardConfig,
   type OperationShareCardKind,
+  type OperationShareCellColorKey,
   type OperationShareCellColumn,
   buildOperationShareCardConfigPayload,
   buildOperationShareCellKey,
@@ -46,21 +48,16 @@ import {
   getOperationShareRemoteConfigByKind,
   mergeOperationShareRemoteConfigs,
   readOperationShareCardConfig,
+  readOperationShareShortCode,
   replaceOperationShareCardConfigKind,
   resolveOperationShareCardConfig,
+  resolveOperationShareShortCode,
   saveOperationShareCardConfig,
+  saveOperationShareShortCode,
   updateOperationShareCellSelection,
 } from './operationShareModel'
 
 type GenerationStatus = 'idle' | 'generating' | 'ready' | 'error'
-
-const CELL_COLOR_OPTIONS = [
-  { color: OPERATION_SHARE_CELL_COLORS[0], label: '黄色纯色' },
-  { color: OPERATION_SHARE_CELL_COLORS[1], label: '粉色竖纹' },
-  { color: OPERATION_SHARE_CELL_COLORS[2], label: '蓝色横纹' },
-  { color: OPERATION_SHARE_CELL_COLORS[3], label: '绿色斜纹' },
-  { color: OPERATION_SHARE_CELL_COLORS[4], label: '冰灰圆点' },
-] as const
 
 export default function OperationShareDialog({
   operation,
@@ -80,6 +77,16 @@ export default function OperationShareDialog({
   const model = useMemo(
     () => buildOperationShareModel(operation, language, maayuanUrl),
     [operation, language, maayuanUrl],
+  )
+  // 「神秘代码」默认值：仅在用户显式切换前生效，私密作业默认不分享。
+  // 独立用例，使下面的重置 effect 无需依赖 operation 对象本身。
+  const defaultShowShortCode = useMemo(
+    () =>
+      resolveOperationShareShortCode(
+        operation,
+        readOperationShareShortCode(operation.id),
+      ),
+    [operation],
   )
   const [cardNode, setCardNode] = useState<HTMLDivElement | null>(null)
   const localConfigRef = useRef(readOperationShareCardConfig(operation.id))
@@ -106,6 +113,8 @@ export default function OperationShareDialog({
   const generatingRef = useRef(false)
   const [cardKind, setCardKind] = useState<OperationShareCardKind>('actions')
   const [hideQrCode, setHideQrCode] = useState(true)
+  const shouldPersistShortCodeRef = useRef(false)
+  const [showShortCode, setShowShortCode] = useState(defaultShowShortCode)
   const [status, setStatus] = useState<GenerationStatus>('idle')
   const [previewUrl, setPreviewUrl] = useState<string>()
   const [blob, setBlob] = useState<Blob>()
@@ -134,11 +143,19 @@ export default function OperationShareDialog({
   }, [cardConfig, operation.id])
 
   useEffect(() => {
+    if (!shouldPersistShortCodeRef.current) return
+    shouldPersistShortCodeRef.current = false
+    saveOperationShareShortCode(operation.id, showShortCode)
+  }, [operation.id, showShortCode])
+
+  useEffect(() => {
     let active = true
     const localConfig = readOperationShareCardConfig(operation.id)
     localConfigRef.current = localConfig
     shouldPersistCardConfigRef.current = false
+    shouldPersistShortCodeRef.current = false
     setCardConfig(localConfig ?? createOperationShareCardConfig())
+    setShowShortCode(defaultShowShortCode)
     setAuthorConfigStatus('loading')
     setAuthorConfigError(undefined)
 
@@ -162,7 +179,28 @@ export default function OperationShareDialog({
     return () => {
       active = false
     }
-  }, [operation.id])
+  }, [defaultShowShortCode, operation.id])
+
+  const isPrivateOperation = operation.status === CopilotInfoStatusEnum.Private
+  // 原创作业（无外站原贴）的二维码编码的就是站内地址，关闭神秘代码时必须一并隐藏
+  const qrFollowsShortCode =
+    !showShortCode && model.qrTargetUrl === model.maayuanUrl
+  const effectiveHideQrCode = hideQrCode || qrFollowsShortCode
+  const shortCodeHint = showShortCode
+    ? undefined
+    : isPrivateOperation
+      ? t.components.viewer.OperationViewer.share_image_short_code_private_hint
+      : qrFollowsShortCode
+        ? t.components.viewer.OperationViewer.share_image_qr_follows_short_code
+        : t.components.viewer.OperationViewer.share_image_short_code_hidden_hint
+
+  const cellColorNames: Record<OperationShareCellColorKey, string> = {
+    yellow: t.components.viewer.OperationViewer.share_cell_color_yellow,
+    pink: t.components.viewer.OperationViewer.share_cell_color_pink,
+    blue: t.components.viewer.OperationViewer.share_cell_color_blue,
+    green: t.components.viewer.OperationViewer.share_cell_color_green,
+    ice: t.components.viewer.OperationViewer.share_cell_color_ice,
+  }
 
   const editableColumns = useMemo<
     Array<{ key: OperationShareCellColumn; label: string }>
@@ -206,7 +244,11 @@ export default function OperationShareDialog({
   }, [])
 
   const updateOption = (
-    option: 'showTargetSwitches' | 'showOtherActions' | 'showNotes',
+    option:
+      | 'showTargetSwitches'
+      | 'showOtherActions'
+      | 'showNotes'
+      | 'showCellPattern',
     checked: boolean,
   ) => {
     invalidatePreview()
@@ -223,6 +265,12 @@ export default function OperationShareDialog({
   const updateQrCodeVisibility = (hidden: boolean) => {
     invalidatePreview()
     setHideQrCode(hidden)
+  }
+
+  const updateShortCodeVisibility = (shareShortCode: boolean) => {
+    invalidatePreview()
+    shouldPersistShortCodeRef.current = true
+    setShowShortCode(shareShortCode)
   }
 
   const updateRoundNote = (round: number, note: string) => {
@@ -251,13 +299,13 @@ export default function OperationShareDialog({
     )
   }
 
-  const applyCellColor = (color: string) => {
+  const applyCellColor = (style: string) => {
     if (selectedCellKeys.size === 0) return
     invalidatePreview()
     updateCardConfig((current) => {
       const cellColors = { ...current.cellColors }
       selectedCellKeys.forEach((key) => {
-        cellColors[key] = color
+        cellColors[key] = style
       })
       return { ...current, cellColors }
     })
@@ -460,16 +508,34 @@ export default function OperationShareDialog({
           </Callout>
         ) : null}
 
-        <div className="mb-3 flex justify-end">
-          <Switch
-            checked={hideQrCode}
-            className="m-0"
-            disabled={status === 'generating'}
-            label="隐藏二维码"
-            onChange={(event) =>
-              updateQrCodeVisibility(event.currentTarget.checked)
-            }
-          />
+        <div className="mb-3 flex flex-col items-end gap-1">
+          <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-2">
+            <Switch
+              checked={showShortCode}
+              className="m-0"
+              disabled={status === 'generating'}
+              label={
+                t.components.viewer.OperationViewer.share_image_share_short_code
+              }
+              onChange={(event) =>
+                updateShortCodeVisibility(event.currentTarget.checked)
+              }
+            />
+            <Switch
+              checked={!effectiveHideQrCode}
+              className="m-0"
+              disabled={status === 'generating' || qrFollowsShortCode}
+              label={
+                t.components.viewer.OperationViewer.share_image_share_qr_code
+              }
+              onChange={(event) =>
+                updateQrCodeVisibility(!event.currentTarget.checked)
+              }
+            />
+          </div>
+          {shortCodeHint ? (
+            <p className="m-0 text-xs text-slate-500">{shortCodeHint}</p>
+          ) : null}
         </div>
 
         {cardKind === 'actions' ? (
@@ -573,31 +639,61 @@ export default function OperationShareDialog({
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <h4 className="text-sm font-semibold text-slate-700">
-                      动作单元格配色
+                      {
+                        t.components.viewer.OperationViewer
+                          .share_cell_color_section_title
+                      }
                     </h4>
                     <p className="mt-1 text-xs text-slate-500">
-                      勾选单元格，或通过行号、列名一次选择整行/整列，再点击颜色
-                      应用。
+                      {
+                        t.components.viewer.OperationViewer
+                          .share_cell_color_section_hint
+                      }
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    <Switch
+                      checked={cardConfig.showCellPattern}
+                      className="m-0 mr-1"
+                      label={
+                        t.components.viewer.OperationViewer.share_cell_pattern
+                      }
+                      onChange={(event) =>
+                        updateOption(
+                          'showCellPattern',
+                          event.currentTarget.checked,
+                        )
+                      }
+                    />
                     <div
-                      aria-label="单元格背景色"
+                      aria-label={
+                        t.components.viewer.OperationViewer
+                          .share_cell_color_group
+                      }
                       className="flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 p-1"
                       role="group"
                     >
-                      {CELL_COLOR_OPTIONS.map((option) => (
-                        <button
-                          key={option.color}
-                          aria-label={`应用${option.label}`}
-                          className="h-8 w-8 rounded border border-slate-300 transition-transform enabled:hover:scale-105 enabled:focus:outline-none enabled:focus:ring-2 enabled:focus:ring-sky-500 enabled:focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40"
-                          disabled={selectedCellKeys.size === 0}
-                          onClick={() => applyCellColor(option.color)}
-                          style={getOperationShareCellVisualStyle(option.color)}
-                          title={`应用${option.label}`}
-                          type="button"
-                        />
-                      ))}
+                      {OPERATION_SHARE_CELL_COLOR_KEYS.map((colorKey) => {
+                        const label =
+                          t.components.viewer.OperationViewer.share_cell_color_apply(
+                            { label: cellColorNames[colorKey] },
+                          )
+                        return (
+                          <button
+                            key={colorKey}
+                            aria-label={label}
+                            className="h-8 w-8 rounded border border-slate-300 transition-transform enabled:hover:scale-105 enabled:focus:outline-none enabled:focus:ring-2 enabled:focus:ring-sky-500 enabled:focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40"
+                            disabled={selectedCellKeys.size === 0}
+                            onClick={() => applyCellColor(colorKey)}
+                            style={getOperationShareCellVisualStyle(
+                              colorKey,
+                              cardConfig.showCellPattern,
+                            )}
+                            title={label}
+                            type="button"
+                          />
+                        )
+                      })}
                     </div>
                     <Button
                       disabled={selectedCellKeys.size === 0}
@@ -605,7 +701,10 @@ export default function OperationShareDialog({
                       onClick={clearCellColor}
                       small
                     >
-                      清除颜色
+                      {
+                        t.components.viewer.OperationViewer
+                          .share_cell_color_clear
+                      }
                     </Button>
                     <Button
                       disabled={selectedCellKeys.size === 0}
@@ -613,7 +712,9 @@ export default function OperationShareDialog({
                       onClick={() => setSelectedCellKeys(new Set())}
                       small
                     >
-                      取消选择（{selectedCellKeys.size}）
+                      {t.components.viewer.OperationViewer.share_cell_color_clear_selection(
+                        { count: selectedCellKeys.size },
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -684,6 +785,7 @@ export default function OperationShareDialog({
                                   className="border-b border-r border-slate-200 px-2 py-2 last:border-r-0"
                                   style={getOperationShareCellVisualStyle(
                                     cardConfig.cellColors[key],
+                                    cardConfig.showCellPattern,
                                   )}
                                 >
                                   <Checkbox
@@ -890,17 +992,19 @@ export default function OperationShareDialog({
             <OperationShareCard
               cardRef={setCardNode}
               config={cardConfig}
-              hideQrCode={hideQrCode}
+              hideQrCode={effectiveHideQrCode}
               model={model}
               qrDataUrl={qrDataUrl}
+              showShortCode={showShortCode}
             />
           ) : (
             <DeployedOperatorsShareCard
               cardRef={setCardNode}
               config={cardConfig}
-              hideQrCode={hideQrCode}
+              hideQrCode={effectiveHideQrCode}
               model={model}
               qrDataUrl={qrDataUrl}
+              showShortCode={showShortCode}
             />
           )
         ) : null}
