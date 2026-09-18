@@ -623,12 +623,12 @@ export function FloatingActionRecorder({
               ))}
             </div>
 
-            <div className="mt-1 flex min-h-[190px] flex-1 flex-col overflow-hidden rounded-md border border-slate-200 dark:border-slate-700">
-              <div className="flex flex-none items-center justify-between border-b border-slate-200 px-3 py-2 dark:border-slate-700">
-                <span className="text-xs font-medium text-slate-600 dark:text-slate-300">
+            <div className="mt-1 flex min-h-[190px] flex-1 flex-col overflow-hidden rounded-md border border-[var(--maayuan-accent,#ddd6fe)] dark:border-slate-700">
+              <div className="flex flex-none items-center justify-between border-b border-[var(--maayuan-accent,#ddd6fe)] px-3 py-2 dark:border-slate-700">
+                <span className="text-xs font-medium text-[var(--maayuan-text-strong,#5b21b6)] dark:text-slate-300">
                   当前录制
                 </span>
-                <span className="text-xs text-slate-500 dark:text-slate-400">
+                <span className="text-xs text-[var(--maayuan-text,#7c3aed)] dark:text-slate-400">
                   回合 {currentRound}/{maxRound}
                 </span>
               </div>
@@ -638,9 +638,9 @@ export function FloatingActionRecorder({
                 className="min-h-0 flex-1 overflow-auto"
               >
                 <table className="w-full table-fixed border-collapse text-xs">
-                  <thead className="text-stone-600 dark:text-slate-300">
+                  <thead className="text-[var(--maayuan-text-strong,#4c1d95)] dark:text-violet-100">
                     <tr>
-                      <th className="sticky top-0 z-10 w-8 whitespace-nowrap border border-stone-300 bg-stone-100 px-0.5 py-2 text-[11px] font-medium dark:border-slate-600 dark:bg-slate-900/50">
+                      <th className="sticky top-0 z-10 w-8 whitespace-nowrap border border-[var(--maayuan-accent,#8b5cf6)] bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_55%,var(--maayuan-surface,#fff))] px-0.5 py-2 text-[11px] font-medium dark:border-violet-700 dark:bg-violet-900/50">
                         回合
                       </th>
                       {RECORDER_SLOT_KEYS.map((slot) => {
@@ -650,7 +650,7 @@ export function FloatingActionRecorder({
                         return (
                           <th
                             key={slot}
-                            className="sticky top-0 z-10 border border-stone-300 bg-stone-100 px-0.5 py-2 text-center font-medium dark:border-slate-600 dark:bg-slate-900/50"
+                            className="sticky top-0 z-10 border border-[var(--maayuan-accent,#8b5cf6)] bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_55%,var(--maayuan-surface,#fff))] px-0.5 py-2 text-center font-medium dark:border-violet-700 dark:bg-violet-900/50"
                             title={label}
                           >
                             <span className="block truncate">{label}</span>
@@ -665,13 +665,13 @@ export function FloatingActionRecorder({
                         data-recorder-round={round}
                         className={clsx(
                           round % 2 === 1
-                            ? 'bg-amber-50/70 dark:bg-slate-900/30'
-                            : 'bg-amber-100/70 dark:bg-slate-800/50',
+                            ? 'bg-[var(--maayuan-surface,#faf5ff)] dark:bg-slate-900/30'
+                            : 'bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_12%,var(--maayuan-surface,#faf5ff))] dark:bg-slate-800/50',
                         )}
                       >
                         <th
                           rowSpan={groups.extras.length > 0 ? 2 : undefined}
-                          className="w-7 border border-stone-400/70 bg-amber-200/60 px-0.5 py-2 text-center align-middle text-amber-900/90 dark:border-slate-600 dark:bg-amber-950/20 dark:text-amber-100/90"
+                          className="w-7 border border-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_45%,var(--maayuan-surface,#faf5ff))] px-0.5 py-2 text-center align-middle text-[var(--maayuan-text-strong,#5b21b6)] dark:border-slate-600 dark:text-slate-100"
                         >
                           <Popover2
                             minimal
@@ -701,9 +701,9 @@ export function FloatingActionRecorder({
                             <button
                               type="button"
                               className={clsx(
-                                'inline-flex h-6 min-w-6 items-center justify-center rounded-sm px-1 text-base font-bold transition hover:bg-black/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400 dark:hover:bg-white/10',
+                                'inline-flex h-6 min-w-6 items-center justify-center rounded-sm px-1 text-base font-bold transition hover:bg-black/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--maayuan-accent,#8b5cf6)] dark:hover:bg-white/10',
                                 currentRound === round &&
-                                  'bg-white/70 shadow-sm dark:bg-slate-700/80',
+                                  'bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_55%,var(--maayuan-surface,#fff))] text-[var(--maayuan-text-strong,#4c1d95)] shadow-sm hover:bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_55%,var(--maayuan-surface,#fff))] dark:bg-violet-900/50 dark:text-violet-100 dark:hover:bg-violet-900/50',
                               )}
                               title={`第 ${round} 回合操作`}
                               aria-label={`第 ${round} 回合操作`}
@@ -715,7 +715,7 @@ export function FloatingActionRecorder({
                         {RECORDER_SLOT_KEYS.map((slot) => (
                           <td
                             key={slot}
-                            className="h-12 border border-stone-400/70 p-0.5 text-center align-middle dark:border-slate-600"
+                            className="h-12 border border-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_45%,var(--maayuan-surface,#faf5ff))] p-0.5 text-center align-middle dark:border-slate-600"
                           >
                             <div className="flex min-h-8 flex-wrap items-center justify-center gap-x-0 gap-y-0">
                               {(groups.slots[Number(slot)] ?? []).map((item) =>
@@ -729,7 +729,7 @@ export function FloatingActionRecorder({
                         <tr className="bg-transparent">
                           <td
                             colSpan={RECORDER_SLOT_KEYS.length}
-                            className="border-x border-b border-stone-400/70 px-1 py-0.5 text-left text-[10px] leading-3 text-stone-400 dark:border-slate-600 dark:text-stone-500"
+                            className="border-x border-b border-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_45%,var(--maayuan-surface,#faf5ff))] px-1 py-0.5 text-left text-[10px] leading-3 text-[var(--maayuan-accent-strong,#8b5cf6)] dark:border-slate-600 dark:text-stone-500"
                           >
                             额外动作：
                             <span className="ml-1 inline-flex flex-wrap items-center gap-x-0 gap-y-0.5 align-middle">
@@ -757,7 +757,7 @@ export function FloatingActionRecorder({
               保存到动作序列
             </Button>
             <Button
-              className="w-full !border-[var(--maayuan-accent,#c4b5fd)] !bg-[var(--maayuan-surface-strong,#ede9fe)] !text-[var(--maayuan-text-strong,#4c1d95)] enabled:hover:!brightness-95 dark:!border-violet-700 dark:!bg-violet-900/50 dark:!text-violet-100 dark:enabled:hover:!bg-violet-800"
+              className="w-full !border-[var(--maayuan-accent,#8b5cf6)] !bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_18%,var(--maayuan-surface,#faf5ff))] !text-[var(--maayuan-text-strong,#4c1d95)] enabled:hover:!brightness-95 dark:!border-violet-700 dark:!bg-violet-900/50 dark:!text-violet-100 dark:enabled:hover:!bg-violet-800"
               small
               onClick={() => handleSave(true)}
             >
