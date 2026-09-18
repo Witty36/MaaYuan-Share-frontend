@@ -53,7 +53,6 @@ export const actionMap: Record<string, string> = {
   普: "普",
   o: "O",
   O: "O",
-  M: "O",
   圈: "O",
 };
 
