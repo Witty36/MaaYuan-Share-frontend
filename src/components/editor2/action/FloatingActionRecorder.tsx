@@ -467,7 +467,7 @@ export function FloatingActionRecorder({
                 Classes.POPOVER_DISMISS,
                 '!h-6 !min-h-6 !w-6 !min-w-6 !p-0 !text-sm !font-semibold',
               )}
-              title="删除操作"
+              title="删除动作"
               onClick={() => handleRemoveToken(round, item.index)}
             >
               删
@@ -485,7 +485,7 @@ export function FloatingActionRecorder({
           )}
           title={`第 ${round} 回合第 ${item.order} 个动作：${formatRecorderRoundItem(
             item,
-          )}${slotName ? `（${slotName}）` : ''}（点击编辑、删除操作）`}
+          )}${slotName ? `（${slotName}）` : ''}（点击编辑、删除动作）`}
         >
           {formatRecorderRoundItem(item)}
         </button>
@@ -627,6 +627,9 @@ export function FloatingActionRecorder({
               <div className="flex flex-none items-center justify-between border-b border-[var(--maayuan-accent,#ddd6fe)] px-3 py-2 dark:border-slate-700">
                 <span className="text-xs font-medium text-[var(--maayuan-text-strong,#5b21b6)] dark:text-slate-300">
                   当前录制
+                  <span className="ml-1.5 text-[9px] font-normal text-[var(--maayuan-text,#7c3aed)] opacity-50 dark:text-slate-400">
+                    点击回合数与动作可进行编辑/删除
+                  </span>
                 </span>
                 <span className="text-xs text-[var(--maayuan-text,#7c3aed)] dark:text-slate-400">
                   回合 {currentRound}/{maxRound}
