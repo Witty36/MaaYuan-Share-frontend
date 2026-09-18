@@ -504,12 +504,12 @@ export function FloatingActionRecorder({
         disableDragging={!canDrag}
         enableResizing={{
           bottom: true,
-          bottomLeft: false,
+          bottomLeft: true,
           bottomRight: true,
-          left: false,
+          left: true,
           right: true,
           top: true,
-          topLeft: false,
+          topLeft: true,
           topRight: false,
         }}
         size={size}
