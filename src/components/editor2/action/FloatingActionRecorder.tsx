@@ -485,7 +485,7 @@ export function FloatingActionRecorder({
           )}
           title={`第 ${round} 回合第 ${item.order} 个动作：${formatRecorderRoundItem(
             item,
-          )}${slotName ? `（${slotName}）` : ''}（点击编辑）`}
+          )}${slotName ? `（${slotName}）` : ''}（点击编辑、删除操作）`}
         >
           {formatRecorderRoundItem(item)}
         </button>
@@ -705,8 +705,8 @@ export function FloatingActionRecorder({
                                 currentRound === round &&
                                   'bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_55%,var(--maayuan-surface,#fff))] text-[var(--maayuan-text-strong,#4c1d95)] shadow-sm hover:bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_55%,var(--maayuan-surface,#fff))] dark:bg-violet-900/50 dark:text-violet-100 dark:hover:bg-violet-900/50',
                               )}
-                              title={`第 ${round} 回合操作`}
-                              aria-label={`第 ${round} 回合操作`}
+                              title={`第 ${round} 回合：点击可跳转、复制、删除回合`}
+                              aria-label={`第 ${round} 回合：点击可跳转、复制、删除回合`}
                             >
                               {round}
                             </button>
