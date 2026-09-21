@@ -92,9 +92,9 @@ const defaultRequirementsByRarity: Record<number, Required<CopilotDocV1.Requirem
     0: { elite: 0, level: 1, skillLevel: 1 },
     1: { elite: 0, level: 30, skillLevel: 1 },
     2: { elite: 0, level: 30, skillLevel: 1 },
-    3: { elite: 1, level: 55, skillLevel: 7 },
-    4: { elite: 1, level: 60, skillLevel: 7 },
-    5: { elite: 2, level: 40, skillLevel: 7 },
+    3: { elite: 1, level: 1, skillLevel: 7 },
+    4: { elite: 6, level: 50, skillLevel: 7 },
+    5: { elite: 17, level: 100, skillLevel: 7 },
     6: { elite: 2, level: 60, skillLevel: 10 },
   },
   (baseRequirements) => ({
