@@ -5,16 +5,17 @@ export const OPERATOR_LEVEL_MAX = 100
 export const OPERATOR_ELITE_MIN = 0
 export const OPERATOR_ELITE_MAX = 17
 
-/** 每 5 级增加 1 点修为上限，100 级时上限为 17。 */
+/** 低等级按区间提升修为上限，40 级后每 5 级增加 1 点，100 级时上限为 17。 */
 export function getMaxEliteForLevel(level: number): number {
   const normalizedLevel = Math.min(
     OPERATOR_LEVEL_MAX,
     Math.max(OPERATOR_LEVEL_MIN, Math.trunc(level)),
   )
-  return Math.min(
-    OPERATOR_ELITE_MAX,
-    Math.max(OPERATOR_ELITE_MIN, Math.floor(normalizedLevel / 5) - 3),
-  )
+  if (normalizedLevel <= 9) return 1
+  if (normalizedLevel <= 14) return 2
+  if (normalizedLevel <= 29) return 3
+  if (normalizedLevel <= 39) return 4
+  return Math.min(OPERATOR_ELITE_MAX, Math.floor(normalizedLevel / 5) - 3)
 }
 
 const ANY_REQUIREMENT_DISC_SLOTS = [0, 1, 2].map((index) => ({
