@@ -597,6 +597,21 @@ export function FloatingActionRecorder({
             </div>
 
             <div className="flex-none space-y-1">
+              <div className="grid grid-cols-5 gap-1">
+                {RECORDER_SLOT_KEYS.map((slot) => {
+                  const name = slotAssignments?.[Number(slot)]?.name?.trim()
+                  const label = name ?? `${slot}号位`
+                  return (
+                    <div
+                      key={slot}
+                      className="flex h-6 items-center justify-center rounded-md border border-[var(--maayuan-accent,#ddd6fe)] bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_18%,var(--maayuan-surface,#fff))] px-0.5 text-[11px] font-semibold text-[var(--maayuan-text-strong,#4c1d95)] dark:border-slate-600 dark:bg-slate-800/60 dark:text-slate-200"
+                      title={label}
+                    >
+                      <span className="truncate">{label}</span>
+                    </div>
+                  )
+                })}
+              </div>
               {RECORDER_BUTTON_ROWS.map((row, rowIndex) => (
                 <div
                   key={rowIndex}
@@ -615,7 +630,6 @@ export function FloatingActionRecorder({
                       )}
                       onClick={() => handleAppendToken(action.token)}
                     >
-                      {action.slot ? <span>{action.slot}</span> : null}
                       <span>{action.label}</span>
                     </button>
                   ))}
