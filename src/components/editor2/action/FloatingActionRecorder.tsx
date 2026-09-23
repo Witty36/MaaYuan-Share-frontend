@@ -51,11 +51,11 @@ const DEFAULT_HEIGHT = 680
 
 const TONE_CHIP_CLASS: Record<RecorderButtonTone, string> = {
   ultimate:
-    'border-amber-300 bg-amber-50/70 text-amber-700 hover:bg-amber-100/80 dark:border-amber-600/70 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20',
+    'border-red-300 bg-red-50/70 text-red-700 hover:bg-red-100/80 dark:border-red-600/70 dark:bg-red-500/10 dark:text-red-200 dark:hover:bg-red-500/20',
   normal:
-    'border-blue-300 bg-blue-50/70 text-blue-700 hover:bg-blue-100/80 dark:border-blue-600/70 dark:bg-blue-500/10 dark:text-blue-200 dark:hover:bg-blue-500/20',
+    'border-amber-300 bg-amber-50/70 text-amber-700 hover:bg-amber-100/80 dark:border-amber-600/70 dark:bg-amber-500/10 dark:text-amber-200 dark:hover:bg-amber-500/20',
   defense:
-    'border-sky-300 bg-sky-50/70 text-sky-700 hover:bg-sky-100/80 dark:border-sky-600/70 dark:bg-sky-500/10 dark:text-sky-200 dark:hover:bg-sky-500/20',
+    'border-blue-300 bg-blue-50/70 text-blue-700 hover:bg-blue-100/80 dark:border-blue-600/70 dark:bg-blue-500/10 dark:text-blue-200 dark:hover:bg-blue-500/20',
   sp: 'border-lime-300 bg-lime-50/70 text-lime-700 hover:bg-lime-100/80 dark:border-lime-600/70 dark:bg-lime-500/10 dark:text-lime-200 dark:hover:bg-lime-500/20',
   extra:
     'border-violet-300 bg-violet-50/70 text-violet-700 hover:bg-violet-100/80 dark:border-violet-600/70 dark:bg-violet-500/10 dark:text-violet-200 dark:hover:bg-violet-500/20',
