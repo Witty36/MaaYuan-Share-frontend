@@ -427,9 +427,6 @@ export function OperationShareCard({
                       <span className="block text-[28px] font-bold">
                         {round.round}
                       </span>
-                      <span className="mt-1 block text-sm font-semibold">
-                        回合
-                      </span>
                     </th>
                     {model.actionSlots.map((slot) => (
                       <td

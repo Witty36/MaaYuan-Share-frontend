@@ -604,7 +604,7 @@ export function FloatingActionRecorder({
                   return (
                     <div
                       key={slot}
-                      className="flex h-6 items-center justify-center rounded-md border border-[var(--maayuan-accent,#ddd6fe)] bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_18%,var(--maayuan-surface,#fff))] px-0.5 text-[11px] font-semibold text-[var(--maayuan-text-strong,#4c1d95)] dark:border-slate-600 dark:bg-slate-800/60 dark:text-slate-200"
+                      className="flex h-6 items-center justify-center px-0.5 text-[11px] font-semibold text-[var(--maayuan-text-strong,#4c1d95)] dark:text-slate-200"
                       title={label}
                     >
                       <span className="truncate">{label}</span>
