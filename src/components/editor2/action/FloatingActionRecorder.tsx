@@ -48,6 +48,10 @@ const MIN_WIDTH = 320
 const MIN_HEIGHT = 420
 const DEFAULT_WIDTH = 480
 const DEFAULT_HEIGHT = 680
+const RECORDER_ROUND_OPTIONS = Array.from(
+  { length: 49 },
+  (_, index) => index + 1,
+)
 
 const TONE_CHIP_CLASS: Record<RecorderButtonTone, string> = {
   ultimate:
@@ -178,6 +182,7 @@ export function FloatingActionRecorder({
     getNextRecorderRound(roundActions),
   )
   const [copySourceRoundInput, setCopySourceRoundInput] = useState('1')
+  const [openRoundMenu, setOpenRoundMenu] = useState<number | null>(null)
   const { width: windowWidth, height: windowHeight } = useWindowSize()
   const breakpoint = useBreakpoint()
   const canDrag = breakpoint !== 'tablet'
@@ -278,6 +283,7 @@ export function FloatingActionRecorder({
   const handleJumpToRound = useCallback((round: number) => {
     pendingScrollRoundRef.current = round
     setCurrentRound(round)
+    setOpenRoundMenu(null)
   }, [])
 
   const handleCopyRound = useCallback(
@@ -287,6 +293,7 @@ export function FloatingActionRecorder({
       setCurrentRound(nextRound)
       setDirty(true)
       pendingScrollRoundRef.current = nextRound
+      setOpenRoundMenu(null)
       AppToaster.show({
         message: `已将第 ${round} 回合复制到第 ${nextRound} 回合`,
         intent: 'success',
@@ -296,8 +303,8 @@ export function FloatingActionRecorder({
   )
 
   const handleCopySpecificRound = useCallback(
-    (targetRound: number) => {
-      const sourceRound = Number(copySourceRoundInput)
+    (targetRound: number, sourceRoundValue = copySourceRoundInput) => {
+      const sourceRound = Number(sourceRoundValue)
       if (
         !Number.isInteger(sourceRound) ||
         sourceRound < 1 ||
@@ -324,6 +331,7 @@ export function FloatingActionRecorder({
       setCurrentRound(nextRound)
       setDirty(true)
       pendingScrollRoundRef.current = nextRound
+      setOpenRoundMenu(null)
       AppToaster.show({
         message: `已将第 ${sourceRound} 回合复制到第 ${nextRound} 回合`,
         intent: 'success',
@@ -341,6 +349,7 @@ export function FloatingActionRecorder({
         Math.max(1, Math.min(currentRound, remainingMax, round)),
       )
       setDirty(true)
+      setOpenRoundMenu(null)
       AppToaster.show({
         message: `已删除第 ${round} 回合`,
         intent: 'success',
@@ -727,6 +736,10 @@ export function FloatingActionRecorder({
                         >
                           <Popover2
                             minimal
+                            isOpen={openRoundMenu === round}
+                            onInteraction={(nextOpen) =>
+                              setOpenRoundMenu(nextOpen ? round : null)
+                            }
                             placement="right-start"
                             popoverClassName="overflow-hidden [&>.bp4-popover2-content]:!p-0 [&_.bp4-menu]:!min-w-[150px]"
                             content={
@@ -743,43 +756,71 @@ export function FloatingActionRecorder({
                                 />
                                 <MenuItem
                                   icon="duplicate"
-                                  onClick={() => handleCopySpecificRound(round)}
                                   title="复制指定回合并插入到当前回合之后"
+                                  textClassName="flex items-center gap-0.5"
                                   text={
                                     <>
-                                      复制第
-                                      <input
-                                        type="text"
-                                        inputMode="numeric"
-                                        maxLength={2}
-                                        value={copySourceRoundInput}
-                                        onChange={(event) =>
-                                          setCopySourceRoundInput(
-                                            event.target.value,
+                                      <button
+                                        type="button"
+                                        title="确认复制"
+                                        onClick={(event) => {
+                                          event.stopPropagation()
+                                          handleCopySpecificRound(
+                                            round,
+                                            Number(copySourceRoundInput),
                                           )
-                                        }
-                                        onClick={(event) =>
-                                          event.stopPropagation()
-                                        }
-                                        onMouseDown={(event) =>
-                                          event.stopPropagation()
-                                        }
-                                        onKeyDown={(event) => {
-                                          if (event.key === 'Enter') {
-                                            event.preventDefault()
+                                        }}
+                                        className="inline-flex h-5 cursor-pointer items-center border-0 bg-transparent p-0 text-inherit leading-none"
+                                      >
+                                        复制
+                                      </button>
+                                      <span className="relative inline-flex h-5 items-center justify-center gap-0.5 rounded-sm bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_8%,transparent)] px-1.5 text-inherit leading-none">
+                                        <span className="pointer-events-none whitespace-nowrap text-center">
+                                          第 {copySourceRoundInput} 回合
+                                        </span>
+                                        <Icon
+                                          icon="caret-down"
+                                          size={11}
+                                          className="pointer-events-none opacity-60"
+                                        />
+                                        <select
+                                          value={copySourceRoundInput}
+                                          onChange={(event) => {
+                                            setCopySourceRoundInput(
+                                              event.target.value,
+                                            )
+                                          }}
+                                          onClick={(event) =>
                                             event.stopPropagation()
-                                            handleCopySpecificRound(round)
                                           }
-                                        }}
-                                        className="mx-0.5 inline-block w-7 appearance-none rounded-sm border-0 bg-transparent p-0 text-center underline decoration-dotted underline-offset-2 outline-none focus:bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_12%,transparent)]"
-                                        style={{
-                                          color: 'inherit',
-                                          font: 'inherit',
-                                          lineHeight: 'inherit',
-                                        }}
-                                        aria-label="要复制的源回合数"
-                                      />
-                                      回合
+                                          onMouseDown={(event) =>
+                                            event.stopPropagation()
+                                          }
+                                          onTouchStart={(event) =>
+                                            event.stopPropagation()
+                                          }
+                                          onKeyDown={(event) => {
+                                            event.stopPropagation()
+                                          }}
+                                          className="absolute inset-0 z-10 h-full w-full cursor-pointer appearance-none border-0 bg-transparent p-0 opacity-0 outline-none"
+                                          style={{
+                                            fontFamily: 'inherit',
+                                            fontSize: 'inherit',
+                                          }}
+                                          aria-label="要复制的源回合数"
+                                        >
+                                          {RECORDER_ROUND_OPTIONS.map(
+                                            (roundNumber) => (
+                                              <option
+                                                key={roundNumber}
+                                                value={roundNumber}
+                                              >
+                                                第 {roundNumber} 回合
+                                              </option>
+                                            ),
+                                          )}
+                                        </select>
+                                      </span>
                                     </>
                                   }
                                 />
