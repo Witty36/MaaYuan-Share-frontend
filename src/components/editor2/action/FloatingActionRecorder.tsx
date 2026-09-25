@@ -132,22 +132,19 @@ const cloneEntries = (entries: string[][]) =>
 
 const copyRoundInRecorder = (
   input: RoundActionsInput,
-  round: number,
+  sourceRound: number,
+  targetRound = sourceRound,
 ): RoundActionsInput => {
   const result = cloneRoundActions(input)
-  const source = cloneEntries(result[String(round)] ?? [])
+  const source = cloneEntries(result[String(sourceRound)] ?? [])
   const numbers = getRecorderRoundNumbers(result)
   const lastRound = numbers.length > 0 ? Math.max(...numbers) : 0
+  const insertRound = targetRound + 1
 
-  if (round > lastRound) {
-    result[String(round + 1)] = []
-    return result
-  }
-
-  for (let current = lastRound; current >= round; current -= 1) {
+  for (let current = lastRound; current >= insertRound; current -= 1) {
     result[String(current + 1)] = cloneEntries(result[String(current)] ?? [])
   }
-  result[String(round + 1)] = source
+  result[String(insertRound)] = source
   return result
 }
 
@@ -180,6 +177,7 @@ export function FloatingActionRecorder({
   const [currentRound, setCurrentRound] = useState(() =>
     getNextRecorderRound(roundActions),
   )
+  const [copySourceRoundInput, setCopySourceRoundInput] = useState('1')
   const { width: windowWidth, height: windowHeight } = useWindowSize()
   const breakpoint = useBreakpoint()
   const canDrag = breakpoint !== 'tablet'
@@ -295,6 +293,43 @@ export function FloatingActionRecorder({
       })
     },
     [],
+  )
+
+  const handleCopySpecificRound = useCallback(
+    (targetRound: number) => {
+      const sourceRound = Number(copySourceRoundInput)
+      if (
+        !Number.isInteger(sourceRound) ||
+        sourceRound < 1 ||
+        sourceRound > 49
+      ) {
+        AppToaster.show({
+          message: '请输入 1-49 之间的回合数',
+          intent: 'warning',
+        })
+        return
+      }
+      if (!Object.prototype.hasOwnProperty.call(draft, String(sourceRound))) {
+        AppToaster.show({
+          message: `第 ${sourceRound} 回合暂无动作`,
+          intent: 'warning',
+        })
+        return
+      }
+
+      const nextRound = targetRound + 1
+      setDraft((current) =>
+        copyRoundInRecorder(current, sourceRound, targetRound),
+      )
+      setCurrentRound(nextRound)
+      setDirty(true)
+      pendingScrollRoundRef.current = nextRound
+      AppToaster.show({
+        message: `已将第 ${sourceRound} 回合复制到第 ${nextRound} 回合`,
+        intent: 'success',
+      })
+    },
+    [copySourceRoundInput, draft],
   )
 
   const handleDeleteRound = useCallback(
@@ -693,7 +728,7 @@ export function FloatingActionRecorder({
                           <Popover2
                             minimal
                             placement="right-start"
-                            popoverClassName="[&>.bp4-popover2-content]:!p-0 overflow-hidden"
+                            popoverClassName="overflow-hidden [&>.bp4-popover2-content]:!p-0 [&_.bp4-menu]:!min-w-[150px]"
                             content={
                               <Menu>
                                 <MenuItem
@@ -705,6 +740,48 @@ export function FloatingActionRecorder({
                                   icon="duplicate"
                                   text="复制回合"
                                   onClick={() => handleCopyRound(round)}
+                                />
+                                <MenuItem
+                                  icon="duplicate"
+                                  onClick={() => handleCopySpecificRound(round)}
+                                  title="复制指定回合并插入到当前回合之后"
+                                  text={
+                                    <>
+                                      复制第
+                                      <input
+                                        type="text"
+                                        inputMode="numeric"
+                                        maxLength={2}
+                                        value={copySourceRoundInput}
+                                        onChange={(event) =>
+                                          setCopySourceRoundInput(
+                                            event.target.value,
+                                          )
+                                        }
+                                        onClick={(event) =>
+                                          event.stopPropagation()
+                                        }
+                                        onMouseDown={(event) =>
+                                          event.stopPropagation()
+                                        }
+                                        onKeyDown={(event) => {
+                                          if (event.key === 'Enter') {
+                                            event.preventDefault()
+                                            event.stopPropagation()
+                                            handleCopySpecificRound(round)
+                                          }
+                                        }}
+                                        className="mx-0.5 inline-block w-7 appearance-none rounded-sm border-0 bg-transparent p-0 text-center underline decoration-dotted underline-offset-2 outline-none focus:bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_12%,transparent)]"
+                                        style={{
+                                          color: 'inherit',
+                                          font: 'inherit',
+                                          lineHeight: 'inherit',
+                                        }}
+                                        aria-label="要复制的源回合数"
+                                      />
+                                      回合
+                                    </>
+                                  }
                                 />
                                 <MenuItem
                                   icon="trash"
@@ -722,8 +799,8 @@ export function FloatingActionRecorder({
                                 currentRound === round &&
                                   'bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_55%,var(--maayuan-surface,#fff))] text-[var(--maayuan-text-strong,#4c1d95)] shadow-sm hover:bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_55%,var(--maayuan-surface,#fff))] dark:bg-violet-900/50 dark:text-violet-100 dark:hover:bg-violet-900/50',
                               )}
-                              title={`第 ${round} 回合：点击可跳转、复制、删除回合`}
-                              aria-label={`第 ${round} 回合：点击可跳转、复制、删除回合`}
+                              title={`第 ${round} 回合：点击可跳转、复制、复制指定回合或删除回合`}
+                              aria-label={`第 ${round} 回合：点击可跳转、复制、复制指定回合或删除回合`}
                             >
                               {round}
                             </button>
