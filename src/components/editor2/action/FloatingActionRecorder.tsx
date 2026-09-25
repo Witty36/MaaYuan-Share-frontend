@@ -13,7 +13,6 @@ import {
   RECORDER_SLOT_KEYS,
   appendRecorderToken,
   cloneRoundActions,
-  ensureRecorderRound,
   formatRecorderRoundItem,
   getNextRecorderRound,
   getRecorderRoundNumbers,
@@ -40,7 +39,7 @@ interface RecorderActionButton {
 interface FloatingActionRecorderProps {
   roundActions: RoundActionsInput
   slotAssignments?: MappingOptions['slotAssignments']
-  onSave: (next: RoundActionsInput) => void
+  onChange: (next: RoundActionsInput) => void
 }
 
 const HEADER_CLASS = 'action-recorder-header'
@@ -171,13 +170,11 @@ const removeRoundInRecorder = (
 export function FloatingActionRecorder({
   roundActions,
   slotAssignments,
-  onSave,
+  onChange,
 }: FloatingActionRecorderProps) {
   const [size, setSize] = useState(getInitialSize)
   const [position, setPosition] = useState(() => getInitialPosition(size))
   const [visible, setVisible] = useState(false)
-  const [dirty, setDirty] = useState(false)
-  const [draft, setDraft] = useState(() => cloneRoundActions(roundActions))
   const [currentRound, setCurrentRound] = useState(() =>
     getNextRecorderRound(roundActions),
   )
@@ -188,13 +185,6 @@ export function FloatingActionRecorder({
   const canDrag = breakpoint !== 'tablet'
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const pendingScrollRoundRef = useRef<number | null>(null)
-
-  useEffect(() => {
-    if (dirty) {
-      return
-    }
-    setDraft(cloneRoundActions(roundActions))
-  }, [dirty, roundActions])
 
   useEffect(() => {
     setSize((current) => ({
@@ -247,7 +237,10 @@ export function FloatingActionRecorder({
     return () => cancelAnimationFrame(frame)
   }, [currentRound, visible])
 
-  const roundNumbers = useMemo(() => getRecorderRoundNumbers(draft), [draft])
+  const roundNumbers = useMemo(
+    () => getRecorderRoundNumbers(roundActions),
+    [roundActions],
+  )
   const maxRound = Math.max(currentRound, ...roundNumbers, 1)
   const roundRows = useMemo(
     () =>
@@ -255,18 +248,17 @@ export function FloatingActionRecorder({
         const round = index + 1
         return {
           round,
-          groups: groupRecorderRoundActions(draft, round),
+          groups: groupRecorderRoundActions(roundActions, round),
         }
       }),
-    [draft, maxRound],
+    [roundActions, maxRound],
   )
 
   const handleAppendToken = useCallback(
     (token: string) => {
-      setDraft((current) => appendRecorderToken(current, currentRound, token))
-      setDirty(true)
+      onChange(appendRecorderToken(roundActions, currentRound, token))
     },
-    [currentRound],
+    [currentRound, onChange, roundActions],
   )
 
   const handlePreviousRound = useCallback(() => {
@@ -276,7 +268,6 @@ export function FloatingActionRecorder({
   const handleNextRound = useCallback(() => {
     const next = currentRound + 1
     pendingScrollRoundRef.current = next
-    setDraft((draftValue) => ensureRecorderRound(draftValue, next))
     setCurrentRound(next)
   }, [currentRound])
 
@@ -289,9 +280,8 @@ export function FloatingActionRecorder({
   const handleCopyRound = useCallback(
     (round: number) => {
       const nextRound = round + 1
-      setDraft((current) => copyRoundInRecorder(current, round))
+      onChange(copyRoundInRecorder(roundActions, round))
       setCurrentRound(nextRound)
-      setDirty(true)
       pendingScrollRoundRef.current = nextRound
       setOpenRoundMenu(null)
       AppToaster.show({
@@ -299,7 +289,7 @@ export function FloatingActionRecorder({
         intent: 'success',
       })
     },
-    [],
+    [onChange, roundActions],
   )
 
   const handleCopySpecificRound = useCallback(
@@ -316,7 +306,9 @@ export function FloatingActionRecorder({
         })
         return
       }
-      if (!Object.prototype.hasOwnProperty.call(draft, String(sourceRound))) {
+      if (
+        !Object.prototype.hasOwnProperty.call(roundActions, String(sourceRound))
+      ) {
         AppToaster.show({
           message: `第 ${sourceRound} 回合暂无动作`,
           intent: 'warning',
@@ -325,11 +317,8 @@ export function FloatingActionRecorder({
       }
 
       const nextRound = targetRound + 1
-      setDraft((current) =>
-        copyRoundInRecorder(current, sourceRound, targetRound),
-      )
+      onChange(copyRoundInRecorder(roundActions, sourceRound, targetRound))
       setCurrentRound(nextRound)
-      setDirty(true)
       pendingScrollRoundRef.current = nextRound
       setOpenRoundMenu(null)
       AppToaster.show({
@@ -337,31 +326,32 @@ export function FloatingActionRecorder({
         intent: 'success',
       })
     },
-    [copySourceRoundInput, draft],
+    [copySourceRoundInput, onChange, roundActions],
   )
 
   const handleDeleteRound = useCallback(
     (round: number) => {
-      const next = removeRoundInRecorder(draft, round)
+      const next = removeRoundInRecorder(roundActions, round)
       const remainingMax = Math.max(1, ...getRecorderRoundNumbers(next))
-      setDraft(next)
+      onChange(next)
       setCurrentRound((currentRound) =>
         Math.max(1, Math.min(currentRound, remainingMax, round)),
       )
-      setDirty(true)
       setOpenRoundMenu(null)
       AppToaster.show({
         message: `已删除第 ${round} 回合`,
         intent: 'success',
       })
     },
-    [draft],
+    [onChange, roundActions],
   )
 
-  const handleRemoveToken = useCallback((round: number, index: number) => {
-    setDraft((current) => removeRecorderToken(current, round, index))
-    setDirty(true)
-  }, [])
+  const handleRemoveToken = useCallback(
+    (round: number, index: number) => {
+      onChange(removeRecorderToken(roundActions, round, index))
+    },
+    [onChange, roundActions],
+  )
 
   const handleConvertToken = useCallback(
     (
@@ -370,63 +360,37 @@ export function FloatingActionRecorder({
       slot: number,
       kind: RecorderConvertibleTone,
     ) => {
-      setDraft((current) => {
-        const next = cloneRoundActions(current)
-        const key = String(round)
-        const entry = next[key]?.[index]
-        if (!entry) {
-          return current
-        }
-        const token = `${slot}${RECORDER_ACTION_SYMBOL[kind]}`
-        if (entry[0] === token) {
-          return current
-        }
-        next[key][index] = [token, ...entry.slice(1)]
-        return next
-      })
-      setDirty(true)
-    },
-    [],
-  )
-
-  const handleSave = useCallback(
-    (closeAfterSave: boolean) => {
-      onSave(draft)
-      setDirty(false)
-      setCurrentRound(getNextRecorderRound(draft))
-      AppToaster.show({
-        message: closeAfterSave
-          ? '已保存到动作序列并收起快速编辑窗口'
-          : '已保存到动作序列',
-        intent: 'success',
-      })
-      if (closeAfterSave) {
-        setVisible(false)
+      const key = String(round)
+      const entry = roundActions[key]?.[index]
+      if (!entry) {
+        return
       }
+
+      const token = `${slot}${RECORDER_ACTION_SYMBOL[kind]}`
+      if (entry[0] === token) {
+        return
+      }
+
+      const next = cloneRoundActions(roundActions)
+      next[key][index] = [token, ...entry.slice(1)]
+      onChange(next)
     },
-    [draft, onSave],
+    [onChange, roundActions],
   )
 
   const handleHide = useCallback(() => {
     setVisible(false)
-    if (dirty) {
-      AppToaster.show({
-        message: '快速编辑窗口已收起，未保存内容仍保留在窗口中',
-        intent: 'warning',
-      })
-    }
-  }, [dirty])
+  }, [])
 
   if (!visible) {
     return createPortal(
       <Button
         className="!fixed right-4 bottom-4 z-50 shadow-lg"
         icon="annotation"
-        intent={dirty ? 'warning' : 'primary'}
+        intent="primary"
         onClick={() => setVisible(true)}
       >
         快速编辑
-        {dirty ? '（未保存）' : ''}
       </Button>,
       document.body,
     )
@@ -600,15 +564,8 @@ export function FloatingActionRecorder({
                 <div className="truncate text-sm font-semibold text-slate-800 dark:text-slate-100">
                   快速编辑悬浮窗
                 </div>
-                <div
-                  className={clsx(
-                    'text-[11px]',
-                    dirty
-                      ? 'font-medium text-amber-600 dark:text-amber-300'
-                      : 'text-slate-400 dark:text-slate-500',
-                  )}
-                >
-                  {dirty ? '未保存' : '录制中'}
+                <div className="text-[11px] text-slate-400 dark:text-slate-500">
+                  录制中 · 实时同步到动作序列
                 </div>
               </div>
             </div>
@@ -882,21 +839,13 @@ export function FloatingActionRecorder({
             </div>
           </div>
 
-          <div className="grid flex-none grid-cols-2 gap-2 border-t border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
-            <Button
-              className="w-full"
-              small
-              outlined
-              onClick={() => handleSave(false)}
-            >
-              保存到动作序列
-            </Button>
+          <div className="flex flex-none border-t border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800">
             <Button
               className="w-full !border-[var(--maayuan-accent,#8b5cf6)] !bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_18%,var(--maayuan-surface,#faf5ff))] !text-[var(--maayuan-text-strong,#4c1d95)] enabled:hover:!brightness-95 dark:!border-violet-700 dark:!bg-violet-900/50 dark:!text-violet-100 dark:enabled:hover:!bg-violet-800"
               small
-              onClick={() => handleSave(true)}
+              onClick={handleHide}
             >
-              保存并关闭
+              关闭悬浮窗
             </Button>
           </div>
         </Card>
