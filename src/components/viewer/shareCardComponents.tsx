@@ -29,7 +29,8 @@ const shareCardStyle: CSSProperties = {
   background: shareCardPalette.paper,
   color: shareCardPalette.ink,
   padding: '52px 52px 40px',
-  fontFamily: 'Inter, "PingFang SC", "Microsoft YaHei", sans-serif',
+  fontFamily:
+    '"MaaYuan Arrow Symbols", Inter, "PingFang SC", "Microsoft YaHei", sans-serif',
 }
 
 const STAR_LEVELS = [1, 2, 3, 4, 5] as const

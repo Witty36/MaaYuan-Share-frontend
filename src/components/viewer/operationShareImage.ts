@@ -50,7 +50,7 @@ export async function renderOperationShareCardBlob(
     backgroundColor: '#f6f3eb',
     cacheBust: true,
     pixelRatio,
-    skipFonts: true,
+    skipFonts: false,
     // 与 shareCardComponents.tsx 的 shareCardStyle.width:1080 固定定宽保持一致
     width: 1080,
   })
