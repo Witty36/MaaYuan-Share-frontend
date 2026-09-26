@@ -236,6 +236,99 @@ describe('operation share dialog short code switch', () => {
     })
   })
 
+  it('persists a custom table color', async () => {
+    await renderDialog(
+      createOperation(
+        CopilotInfoStatusEnum.Public,
+        undefined,
+        singleRoundActions,
+      ),
+    )
+
+    const colorInput = document.querySelector(
+      'input[type="color"][aria-label="选择表格主题色"]',
+    ) as HTMLInputElement
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      )?.set
+      valueSetter?.call(colorInput, '#336699')
+      colorInput.dispatchEvent(new Event('input', { bubbles: true }))
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(readOperationShareCardConfig(100)?.tableColor).toBe('#336699')
+  })
+
+  it('applies a preset table theme without changing action cell colors', async () => {
+    await renderDialog(
+      createOperation(
+        CopilotInfoStatusEnum.Public,
+        undefined,
+        singleRoundActions,
+      ),
+    )
+
+    await act(async () => {
+      findSwatch('应用蓝色表格配色')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(readOperationShareCardConfig(100)?.tableColor).toBe('#4d6fa8')
+    expect(readOperationShareCardConfig(100)?.cellColors).toEqual({})
+  })
+
+  it('resets to the native table theme preset', async () => {
+    await renderDialog(
+      createOperation(
+        CopilotInfoStatusEnum.Public,
+        undefined,
+        singleRoundActions,
+      ),
+    )
+
+    await act(async () => {
+      findSwatch('应用紫色表格配色')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+    await act(async () => {
+      findSwatch('应用原生表格配色')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(readOperationShareCardConfig(100)?.tableColor).toBeUndefined()
+  })
+
+  it('persists an individual table color override', async () => {
+    await renderDialog(
+      createOperation(
+        CopilotInfoStatusEnum.Public,
+        undefined,
+        singleRoundActions,
+      ),
+    )
+
+    const colorInput = document.querySelector(
+      'input[type="color"][aria-label="图片背景颜色"]',
+    ) as HTMLInputElement
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      )?.set
+      valueSetter?.call(colorInput, '#fefefd')
+      colorInput.dispatchEvent(new Event('input', { bubbles: true }))
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(
+      readOperationShareCardConfig(100)?.tableThemeOverrides?.pageBackground,
+    ).toBe('#fefefd')
+  })
+
   it('toggles the cell pattern switch and persists it', async () => {
     await renderDialog(
       createOperation(

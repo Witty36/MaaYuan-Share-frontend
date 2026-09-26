@@ -46,8 +46,10 @@ export async function renderOperationShareCardBlob(
 ) {
   await waitForOperationShareCardResources(node)
   const { toBlob } = await import('html-to-image')
+  const backgroundColor =
+    window.getComputedStyle(node).backgroundColor || '#ffffff'
   const blob = await toBlob(node, {
-    backgroundColor: '#f6f3eb',
+    backgroundColor,
     cacheBust: true,
     pixelRatio,
     skipFonts: false,
