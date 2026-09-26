@@ -162,7 +162,7 @@ describe('operation share card styles', () => {
   it('derives alternating table colors from a custom base color', () => {
     const tableTheme = getOperationShareTableTheme('#336699')
 
-    expect(tableTheme.bodyBackgrounds).toEqual(['#ebf0f5', '#91acc8'])
+    expect(tableTheme.bodyBackgrounds).toEqual(['#c2d1e0', '#8fabc7'])
     expect(getOperationShareActionCellBackground({}, 1, 1, '#336699')).toBe(
       tableTheme.bodyBackgrounds[0],
     )
