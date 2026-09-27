@@ -63,6 +63,8 @@ const RECORDER_ROUND_OPTIONS = Array.from(
   (_, index) => index + 1,
 )
 const RECORDER_ENEMY_COUNTS = [1, 2, 3, 4, 5] as const
+const getCenterTargetIndex = (enemyCount: number) =>
+  enemyCount === 3 ? 1 : Math.max(1, Math.ceil(enemyCount / 2))
 
 const TARGET_POSITION_TONE_CLASS: Record<number, string> = {
   1: 'border-fuchsia-300 bg-fuchsia-100/80 text-fuchsia-700 hover:bg-fuchsia-200/80 dark:border-fuchsia-500/60 dark:bg-fuchsia-500/20 dark:text-fuchsia-200 dark:hover:bg-fuchsia-500/30',
@@ -70,14 +72,6 @@ const TARGET_POSITION_TONE_CLASS: Record<number, string> = {
   3: 'border-emerald-300 bg-emerald-100/80 text-emerald-700 hover:bg-emerald-200/80 dark:border-emerald-500/60 dark:bg-emerald-500/20 dark:text-emerald-200 dark:hover:bg-emerald-500/30',
   4: 'border-amber-300 bg-amber-100/80 text-amber-800 hover:bg-amber-200/80 dark:border-amber-500/60 dark:bg-amber-500/20 dark:text-amber-200 dark:hover:bg-amber-500/30',
   5: 'border-rose-300 bg-rose-100/80 text-rose-700 hover:bg-rose-200/80 dark:border-rose-500/60 dark:bg-rose-500/20 dark:text-rose-200 dark:hover:bg-rose-500/30',
-}
-
-const TARGET_POSITION_DOT_CLASS: Record<number, string> = {
-  1: 'border-fuchsia-400 bg-fuchsia-300',
-  2: 'border-blue-400 bg-blue-300',
-  3: 'border-emerald-400 bg-emerald-300',
-  4: 'border-amber-400 bg-amber-300',
-  5: 'border-rose-400 bg-rose-300',
 }
 
 const TONE_CHIP_CLASS: Record<RecorderButtonTone, string> = {
@@ -145,18 +139,56 @@ const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), Math.max(min, max))
 
 const getRecorderTargetLabel = (targetIndex: number, enemyCount: number) => {
-  const centerIndex = (enemyCount + 1) / 2
-  if (enemyCount % 2 === 1 && targetIndex === centerIndex) {
-    return '中'
+  if (enemyCount === 5) {
+    return ['4', '3', '0', '2', '1'][targetIndex - 1] ?? String(targetIndex)
+  }
+  if (enemyCount === 4) {
+    return ['3', '0', '2', '1'][targetIndex - 1] ?? String(targetIndex)
+  }
+  if (enemyCount === 3) {
+    return ['0', '2', '1'][targetIndex - 1] ?? String(targetIndex)
+  }
+  if (enemyCount === 2) {
+    return ['0', '1'][targetIndex - 1] ?? String(targetIndex)
+  }
+  if (enemyCount === 1) {
+    return '0'
   }
 
-  if (targetIndex < centerIndex) {
-    const distance = Math.ceil(centerIndex - targetIndex)
-    return distance === 1 ? '左一' : `左${distance === 2 ? '二' : distance}`
+  return String(targetIndex)
+}
+
+const getRecorderTargetGridPosition = (
+  targetIndex: number,
+  enemyCount: number,
+) => {
+  if (enemyCount === 5) {
+    if (targetIndex === 1) return { column: 1, row: 2 }
+    if (targetIndex === 2) return { column: 2, row: 1 }
+    if (targetIndex === 3) return { column: 3, row: 2 }
+    if (targetIndex === 4) return { column: 4, row: 1 }
+    return { column: 5, row: 2 }
+  }
+  if (enemyCount === 4) {
+    if (targetIndex === 1) return { column: 2, row: 1 }
+    if (targetIndex === 2) return { column: 3, row: 2 }
+    if (targetIndex === 3) return { column: 4, row: 1 }
+    return { column: 5, row: 2 }
+  }
+  if (enemyCount === 3) {
+    if (targetIndex === 1) return { column: 3, row: 2 }
+    if (targetIndex === 2) return { column: 4, row: 1 }
+    return { column: 5, row: 2 }
+  }
+  if (enemyCount === 2) {
+    if (targetIndex === 1) return { column: 3, row: 2 }
+    return { column: 5, row: 2 }
   }
 
-  const distance = targetIndex - Math.floor(centerIndex)
-  return distance === 1 ? '右一' : `右${distance === 2 ? '二' : distance}`
+  return {
+    column: targetIndex + Math.floor((5 - enemyCount) / 2),
+    row: 2,
+  }
 }
 
 const cloneEntries = (entries: string[][]) => entries.map((entry) => [...entry])
@@ -204,7 +236,9 @@ export function FloatingActionRecorder({
   const [position, setPosition] = useState(() => getInitialPosition(size))
   const [visible, setVisible] = useState(false)
   const [enemyCount, setEnemyCount] = useState(5)
-  const [selectedTargetIndex, setSelectedTargetIndex] = useState(1)
+  const [selectedTargetIndex, setSelectedTargetIndex] = useState(() =>
+    getCenterTargetIndex(5),
+  )
   const [showTargetSwitches, setShowTargetSwitches] = useState(true)
   const [currentRound, setCurrentRound] = useState(() =>
     getNextRecorderRound(roundActions),
@@ -290,13 +324,17 @@ export function FloatingActionRecorder({
     () =>
       Array.from({ length: enemyCount }, (_, index) => {
         const targetIndex = index + 1
+        const position = getRecorderTargetGridPosition(targetIndex, enemyCount)
         return {
           targetIndex,
           label: getRecorderTargetLabel(targetIndex, enemyCount),
+          gridColumn: position.column,
+          gridRow: position.row,
         }
       }),
     [enemyCount],
   )
+  const centerTargetIndex = getCenterTargetIndex(enemyCount)
 
   const handleAppendToken = useCallback(
     (token: string) => {
@@ -306,9 +344,12 @@ export function FloatingActionRecorder({
         token,
         isRecorderAttackToken(token) ? selectedTargetIndex : undefined,
       )
-      onChange(rebuildRecorderTargetSwitches(next, enemyCount))
+      onChange(
+        rebuildRecorderTargetSwitches(next, enemyCount, centerTargetIndex),
+      )
     },
     [
+      centerTargetIndex,
       currentRound,
       enemyCount,
       onChange,
@@ -319,9 +360,16 @@ export function FloatingActionRecorder({
 
   const handleEnemyCountChange = useCallback(
     (count: number) => {
+      const nextCenterTargetIndex = getCenterTargetIndex(count)
       setEnemyCount(count)
-      setSelectedTargetIndex((current) => clamp(current, 1, count))
-      onChange(rebuildRecorderTargetSwitches(roundActions, count))
+      setSelectedTargetIndex(nextCenterTargetIndex)
+      onChange(
+        rebuildRecorderTargetSwitches(
+          roundActions,
+          count,
+          nextCenterTargetIndex,
+        ),
+      )
     },
     [onChange, roundActions],
   )
@@ -349,6 +397,7 @@ export function FloatingActionRecorder({
         rebuildRecorderTargetSwitches(
           copyRoundInRecorder(roundActions, round),
           enemyCount,
+          centerTargetIndex,
         ),
       )
       setCurrentRound(nextRound)
@@ -359,7 +408,7 @@ export function FloatingActionRecorder({
         intent: 'success',
       })
     },
-    [enemyCount, onChange, roundActions],
+    [centerTargetIndex, enemyCount, onChange, roundActions],
   )
 
   const handleCopySpecificRound = useCallback(
@@ -391,6 +440,7 @@ export function FloatingActionRecorder({
         rebuildRecorderTargetSwitches(
           copyRoundInRecorder(roundActions, sourceRound, targetRound),
           enemyCount,
+          centerTargetIndex,
         ),
       )
       setCurrentRound(nextRound)
@@ -401,7 +451,13 @@ export function FloatingActionRecorder({
         intent: 'success',
       })
     },
-    [copySourceRoundInput, enemyCount, onChange, roundActions],
+    [
+      copySourceRoundInput,
+      centerTargetIndex,
+      enemyCount,
+      onChange,
+      roundActions,
+    ],
   )
 
   const handleDeleteRound = useCallback(
@@ -409,6 +465,7 @@ export function FloatingActionRecorder({
       const next = rebuildRecorderTargetSwitches(
         removeRoundInRecorder(roundActions, round),
         enemyCount,
+        centerTargetIndex,
       )
       const remainingMax = Math.max(1, ...getRecorderRoundNumbers(next))
       onChange(next)
@@ -421,7 +478,7 @@ export function FloatingActionRecorder({
         intent: 'success',
       })
     },
-    [enemyCount, onChange, roundActions],
+    [centerTargetIndex, enemyCount, onChange, roundActions],
   )
 
   const handleRemoveToken = useCallback(
@@ -430,10 +487,11 @@ export function FloatingActionRecorder({
         rebuildRecorderTargetSwitches(
           removeRecorderToken(roundActions, round, index),
           enemyCount,
+          centerTargetIndex,
         ),
       )
     },
-    [enemyCount, onChange, roundActions],
+    [centerTargetIndex, enemyCount, onChange, roundActions],
   )
 
   const handleConvertToken = useCallback(
@@ -467,10 +525,11 @@ export function FloatingActionRecorder({
         rebuildRecorderTargetSwitches(
           setRecorderTokenTarget(roundActions, round, index, targetIndex),
           enemyCount,
+          centerTargetIndex,
         ),
       )
     },
-    [enemyCount, onChange, roundActions],
+    [centerTargetIndex, enemyCount, onChange, roundActions],
   )
 
   const handleHide = useCallback(() => {
@@ -606,25 +665,27 @@ export function FloatingActionRecorder({
                 <span className="text-[10px] text-slate-500 dark:text-slate-400">
                   目标
                 </span>
-                {targetLegend.map(({ targetIndex: choiceIndex, label }) => (
-                  <button
-                    key={choiceIndex}
-                    type="button"
-                    title={`将此动作标记为${label}`}
-                    aria-pressed={normalizedTargetIndex === choiceIndex}
-                    className={clsx(
-                      'inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
-                      TARGET_POSITION_TONE_CLASS[choiceIndex],
-                      normalizedTargetIndex === choiceIndex &&
-                        'ring-1 ring-slate-700 dark:ring-slate-100',
-                    )}
-                    onClick={() =>
-                      handleSetTokenTarget(round, item.index, choiceIndex)
-                    }
-                  >
-                    {label}
-                  </button>
-                ))}
+                {targetLegend.map(({ targetIndex: choiceIndex, label }) => {
+                  return (
+                    <button
+                      key={choiceIndex}
+                      type="button"
+                      title={`将此动作标记为${label}`}
+                      aria-pressed={normalizedTargetIndex === choiceIndex}
+                      className={clsx(
+                        'inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
+                        TARGET_POSITION_TONE_CLASS[choiceIndex],
+                        normalizedTargetIndex === choiceIndex &&
+                          'ring-1 ring-slate-700 dark:ring-slate-100',
+                      )}
+                      onClick={() =>
+                        handleSetTokenTarget(round, item.index, choiceIndex)
+                      }
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
                 {targetIndex !== undefined ? (
                   <Button
                     small
@@ -768,73 +829,76 @@ export function FloatingActionRecorder({
             </div>
 
             <div className="flex-none space-y-1">
-              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border border-slate-200 bg-slate-50/70 px-2 py-1.5 dark:border-slate-700 dark:bg-slate-800/40">
-                <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                  敌方人数
-                </span>
-                <div className="inline-flex overflow-hidden rounded-sm border border-slate-300 dark:border-slate-600">
-                  {RECORDER_ENEMY_COUNTS.map((count, index) => (
-                    <button
-                      key={count}
-                      type="button"
-                      aria-pressed={enemyCount === count}
-                      className={clsx(
-                        'h-6 w-6 text-[11px] font-medium transition',
-                        index > 0 &&
-                          'border-l border-slate-300 dark:border-slate-600',
-                        enemyCount === count
-                          ? 'bg-slate-700 text-white dark:bg-slate-200 dark:text-slate-900'
-                          : 'bg-white text-slate-600 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-700',
-                      )}
-                      onClick={() => handleEnemyCountChange(count)}
-                    >
-                      {count}
-                    </button>
-                  ))}
-                </div>
-                <span className="ml-1 text-[10px] text-slate-500 dark:text-slate-400">
-                  动作目标
-                </span>
-                <div
-                  className="flex flex-wrap items-center gap-1"
-                  role="group"
-                  aria-label="选择接下来录制动作的目标"
-                >
-                  {targetLegend.map(({ targetIndex, label }) => {
-                    const selected = targetIndex === selectedTargetIndex
-                    return (
-                      <button
-                        key={targetIndex}
-                        type="button"
-                        aria-pressed={selected}
-                        title={`接下来录制的攻击动作标记为${label}`}
-                        className={clsx(
-                          'inline-flex items-center gap-1 rounded-sm border px-1 py-0.5 text-[10px] font-medium transition',
-                          TARGET_POSITION_TONE_CLASS[targetIndex],
-                          selected &&
-                            'font-semibold ring-2 ring-slate-700 ring-offset-1 ring-offset-slate-50 dark:ring-slate-100 dark:ring-offset-slate-800',
-                        )}
-                        onClick={() => setSelectedTargetIndex(targetIndex)}
-                      >
-                        <span
+              <div className="space-y-1.5 rounded-md border border-slate-200 bg-slate-50/70 px-2 py-2 dark:border-slate-700 dark:bg-slate-800/40">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                    <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                      敌方人数
+                    </span>
+                    <div className="inline-flex overflow-hidden rounded-sm border border-slate-300 dark:border-slate-600">
+                      {RECORDER_ENEMY_COUNTS.map((count, index) => (
+                        <button
+                          key={count}
+                          type="button"
+                          aria-pressed={enemyCount === count}
                           className={clsx(
-                            'h-1.5 w-1.5 rounded-full border',
-                            TARGET_POSITION_DOT_CLASS[targetIndex],
+                            'h-6 w-6 text-[11px] font-medium transition',
+                            index > 0 &&
+                              'border-l border-slate-300 dark:border-slate-600',
+                            enemyCount === count
+                              ? 'bg-slate-700 text-white dark:bg-slate-200 dark:text-slate-900'
+                              : 'bg-white text-slate-600 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-700',
                           )}
-                        />
-                        {label}
-                      </button>
-                    )
-                  })}
+                          onClick={() => handleEnemyCountChange(count)}
+                        >
+                          {count}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <Switch
+                    checked={showTargetSwitches}
+                    label="显示额外动作"
+                    className="!mb-0 !ml-auto !text-[10px]"
+                    onChange={(event) =>
+                      setShowTargetSwitches(event.currentTarget.checked)
+                    }
+                  />
                 </div>
-                <Switch
-                  checked={showTargetSwitches}
-                  label="显示额外目标"
-                  className="!mb-0 !ml-auto !text-[10px]"
-                  onChange={(event) =>
-                    setShowTargetSwitches(event.currentTarget.checked)
-                  }
-                />
+                <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-200 pt-1.5 dark:border-slate-700">
+                  <span className="shrink-0 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                    站位
+                  </span>
+                  <div
+                    className="grid min-h-10 min-w-[136px] max-w-[180px] flex-1 grid-cols-5 grid-rows-2 items-center justify-items-center gap-x-1 gap-y-0.5"
+                    role="group"
+                    aria-label="选择接下来录制动作的目标"
+                  >
+                    {targetLegend.map(
+                      ({ targetIndex, label, gridColumn, gridRow }) => {
+                        const selected = targetIndex === selectedTargetIndex
+                        return (
+                          <button
+                            key={targetIndex}
+                            type="button"
+                            aria-pressed={selected}
+                            title={`接下来录制的攻击动作标记为${label}`}
+                            style={{ gridColumn, gridRow }}
+                            className={clsx(
+                              'inline-flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold transition',
+                              TARGET_POSITION_TONE_CLASS[targetIndex],
+                              selected &&
+                                'font-semibold ring-2 ring-slate-700 ring-offset-1 ring-offset-slate-50 dark:ring-slate-100 dark:ring-offset-slate-800',
+                            )}
+                            onClick={() => setSelectedTargetIndex(targetIndex)}
+                          >
+                            {label}
+                          </button>
+                        )
+                      },
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="grid grid-cols-5 gap-1">
                 {RECORDER_SLOT_KEYS.map((slot) => {
