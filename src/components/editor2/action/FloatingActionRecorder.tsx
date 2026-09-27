@@ -931,7 +931,7 @@ export function FloatingActionRecorder({
           popoverClassName="[&>.bp4-popover2-content]:!p-0 overflow-hidden"
           content={
             <div className="p-0.5">
-              <div className="flex items-center gap-0.5">
+              <div className="flex items-center justify-center gap-0.5">
                 {actionButtons}
                 <Button
                   small
