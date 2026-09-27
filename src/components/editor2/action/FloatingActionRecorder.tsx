@@ -1,4 +1,12 @@
-import { Button, Card, Classes, Icon, Menu, MenuItem } from '@blueprintjs/core'
+import {
+  Button,
+  Card,
+  Classes,
+  Icon,
+  Menu,
+  MenuItem,
+  Switch,
+} from '@blueprintjs/core'
 import { Popover2 } from '@blueprintjs/popover2'
 
 import clsx from 'clsx'
@@ -17,7 +25,10 @@ import {
   getNextRecorderRound,
   getRecorderRoundNumbers,
   groupRecorderRoundActions,
+  isRecorderAttackToken,
+  rebuildRecorderTargetSwitches,
   removeRecorderToken,
+  setRecorderTokenTarget,
 } from './recordingUtils'
 import type { RecorderRoundItem } from './recordingUtils'
 import type { MappingOptions, RoundActionsInput } from './roundMapping'
@@ -51,6 +62,23 @@ const RECORDER_ROUND_OPTIONS = Array.from(
   { length: 49 },
   (_, index) => index + 1,
 )
+const RECORDER_ENEMY_COUNTS = [1, 2, 3, 4, 5] as const
+
+const TARGET_POSITION_TONE_CLASS: Record<number, string> = {
+  1: 'border-fuchsia-300 bg-fuchsia-100/80 text-fuchsia-700 hover:bg-fuchsia-200/80 dark:border-fuchsia-500/60 dark:bg-fuchsia-500/20 dark:text-fuchsia-200 dark:hover:bg-fuchsia-500/30',
+  2: 'border-blue-300 bg-blue-100/80 text-blue-700 hover:bg-blue-200/80 dark:border-blue-500/60 dark:bg-blue-500/20 dark:text-blue-200 dark:hover:bg-blue-500/30',
+  3: 'border-emerald-300 bg-emerald-100/80 text-emerald-700 hover:bg-emerald-200/80 dark:border-emerald-500/60 dark:bg-emerald-500/20 dark:text-emerald-200 dark:hover:bg-emerald-500/30',
+  4: 'border-amber-300 bg-amber-100/80 text-amber-800 hover:bg-amber-200/80 dark:border-amber-500/60 dark:bg-amber-500/20 dark:text-amber-200 dark:hover:bg-amber-500/30',
+  5: 'border-rose-300 bg-rose-100/80 text-rose-700 hover:bg-rose-200/80 dark:border-rose-500/60 dark:bg-rose-500/20 dark:text-rose-200 dark:hover:bg-rose-500/30',
+}
+
+const TARGET_POSITION_DOT_CLASS: Record<number, string> = {
+  1: 'border-fuchsia-400 bg-fuchsia-300',
+  2: 'border-blue-400 bg-blue-300',
+  3: 'border-emerald-400 bg-emerald-300',
+  4: 'border-amber-400 bg-amber-300',
+  5: 'border-rose-400 bg-rose-300',
+}
 
 const TONE_CHIP_CLASS: Record<RecorderButtonTone, string> = {
   ultimate:
@@ -88,20 +116,6 @@ const RECORDER_BUTTON_ROWS: RecorderActionButton[][] = [
   createSlotButtons('normal', '普', 'A'),
   createSlotButtons('defense', '下', '↓'),
   createSlotButtons('sp', 'sp', '圈'),
-  [
-    {
-      key: 'left',
-      label: '左',
-      token: '额外:左侧目标',
-      tone: 'extra',
-    },
-    {
-      key: 'right',
-      label: '右',
-      token: '额外:右侧目标',
-      tone: 'extra',
-    },
-  ],
 ]
 
 const getInitialSize = () => {
@@ -130,8 +144,22 @@ const getInitialPosition = (size: { width: number; height: number }) => {
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), Math.max(min, max))
 
-const cloneEntries = (entries: string[][]) =>
-  entries.map((entry) => [...entry])
+const getRecorderTargetLabel = (targetIndex: number, enemyCount: number) => {
+  const centerIndex = (enemyCount + 1) / 2
+  if (enemyCount % 2 === 1 && targetIndex === centerIndex) {
+    return '中'
+  }
+
+  if (targetIndex < centerIndex) {
+    const distance = Math.ceil(centerIndex - targetIndex)
+    return distance === 1 ? '左一' : `左${distance === 2 ? '二' : distance}`
+  }
+
+  const distance = targetIndex - Math.floor(centerIndex)
+  return distance === 1 ? '右一' : `右${distance === 2 ? '二' : distance}`
+}
+
+const cloneEntries = (entries: string[][]) => entries.map((entry) => [...entry])
 
 const copyRoundInRecorder = (
   input: RoundActionsInput,
@@ -175,6 +203,9 @@ export function FloatingActionRecorder({
   const [size, setSize] = useState(getInitialSize)
   const [position, setPosition] = useState(() => getInitialPosition(size))
   const [visible, setVisible] = useState(false)
+  const [enemyCount, setEnemyCount] = useState(5)
+  const [selectedTargetIndex, setSelectedTargetIndex] = useState(1)
+  const [showTargetSwitches, setShowTargetSwitches] = useState(true)
   const [currentRound, setCurrentRound] = useState(() =>
     getNextRecorderRound(roundActions),
   )
@@ -248,17 +279,51 @@ export function FloatingActionRecorder({
         const round = index + 1
         return {
           round,
-          groups: groupRecorderRoundActions(roundActions, round),
+          groups: groupRecorderRoundActions(roundActions, round, {
+            showTargetSwitches,
+          }),
         }
       }),
-    [roundActions, maxRound],
+    [roundActions, maxRound, showTargetSwitches],
+  )
+  const targetLegend = useMemo(
+    () =>
+      Array.from({ length: enemyCount }, (_, index) => {
+        const targetIndex = index + 1
+        return {
+          targetIndex,
+          label: getRecorderTargetLabel(targetIndex, enemyCount),
+        }
+      }),
+    [enemyCount],
   )
 
   const handleAppendToken = useCallback(
     (token: string) => {
-      onChange(appendRecorderToken(roundActions, currentRound, token))
+      const next = appendRecorderToken(
+        roundActions,
+        currentRound,
+        token,
+        isRecorderAttackToken(token) ? selectedTargetIndex : undefined,
+      )
+      onChange(rebuildRecorderTargetSwitches(next, enemyCount))
     },
-    [currentRound, onChange, roundActions],
+    [
+      currentRound,
+      enemyCount,
+      onChange,
+      roundActions,
+      selectedTargetIndex,
+    ],
+  )
+
+  const handleEnemyCountChange = useCallback(
+    (count: number) => {
+      setEnemyCount(count)
+      setSelectedTargetIndex((current) => clamp(current, 1, count))
+      onChange(rebuildRecorderTargetSwitches(roundActions, count))
+    },
+    [onChange, roundActions],
   )
 
   const handlePreviousRound = useCallback(() => {
@@ -280,7 +345,12 @@ export function FloatingActionRecorder({
   const handleCopyRound = useCallback(
     (round: number) => {
       const nextRound = round + 1
-      onChange(copyRoundInRecorder(roundActions, round))
+      onChange(
+        rebuildRecorderTargetSwitches(
+          copyRoundInRecorder(roundActions, round),
+          enemyCount,
+        ),
+      )
       setCurrentRound(nextRound)
       pendingScrollRoundRef.current = nextRound
       setOpenRoundMenu(null)
@@ -289,7 +359,7 @@ export function FloatingActionRecorder({
         intent: 'success',
       })
     },
-    [onChange, roundActions],
+    [enemyCount, onChange, roundActions],
   )
 
   const handleCopySpecificRound = useCallback(
@@ -317,7 +387,12 @@ export function FloatingActionRecorder({
       }
 
       const nextRound = targetRound + 1
-      onChange(copyRoundInRecorder(roundActions, sourceRound, targetRound))
+      onChange(
+        rebuildRecorderTargetSwitches(
+          copyRoundInRecorder(roundActions, sourceRound, targetRound),
+          enemyCount,
+        ),
+      )
       setCurrentRound(nextRound)
       pendingScrollRoundRef.current = nextRound
       setOpenRoundMenu(null)
@@ -326,12 +401,15 @@ export function FloatingActionRecorder({
         intent: 'success',
       })
     },
-    [copySourceRoundInput, onChange, roundActions],
+    [copySourceRoundInput, enemyCount, onChange, roundActions],
   )
 
   const handleDeleteRound = useCallback(
     (round: number) => {
-      const next = removeRoundInRecorder(roundActions, round)
+      const next = rebuildRecorderTargetSwitches(
+        removeRoundInRecorder(roundActions, round),
+        enemyCount,
+      )
       const remainingMax = Math.max(1, ...getRecorderRoundNumbers(next))
       onChange(next)
       setCurrentRound((currentRound) =>
@@ -343,14 +421,19 @@ export function FloatingActionRecorder({
         intent: 'success',
       })
     },
-    [onChange, roundActions],
+    [enemyCount, onChange, roundActions],
   )
 
   const handleRemoveToken = useCallback(
     (round: number, index: number) => {
-      onChange(removeRecorderToken(roundActions, round, index))
+      onChange(
+        rebuildRecorderTargetSwitches(
+          removeRecorderToken(roundActions, round, index),
+          enemyCount,
+        ),
+      )
     },
-    [onChange, roundActions],
+    [enemyCount, onChange, roundActions],
   )
 
   const handleConvertToken = useCallback(
@@ -378,6 +461,18 @@ export function FloatingActionRecorder({
     [onChange, roundActions],
   )
 
+  const handleSetTokenTarget = useCallback(
+    (round: number, index: number, targetIndex?: number) => {
+      onChange(
+        rebuildRecorderTargetSwitches(
+          setRecorderTokenTarget(roundActions, round, index, targetIndex),
+          enemyCount,
+        ),
+      )
+    },
+    [enemyCount, onChange, roundActions],
+  )
+
   const handleHide = useCallback(() => {
     setVisible(false)
   }, [])
@@ -398,6 +493,30 @@ export function FloatingActionRecorder({
 
   const renderActionToken = (item: RecorderRoundItem, round: number) => {
     const isExtra = item.display.area === 'extra'
+    const targetIndex = item.targetIndex
+    const normalizedTargetIndex =
+      targetIndex === undefined
+        ? undefined
+        : clamp(targetIndex, 1, enemyCount)
+    const targetLabel =
+      normalizedTargetIndex === undefined
+        ? undefined
+        : getRecorderTargetLabel(normalizedTargetIndex, enemyCount)
+    const targetToneClass =
+      normalizedTargetIndex === undefined
+        ? undefined
+        : TARGET_POSITION_TONE_CLASS[normalizedTargetIndex]
+    if (item.automaticTargetSwitch) {
+      return (
+        <span
+          key={`${round}-${item.index}-${item.token}`}
+          className="inline-flex min-h-3 items-center rounded-sm px-1 text-[10px] font-normal leading-3 text-[var(--maayuan-text,#7c3aed)] opacity-55 dark:text-slate-400"
+          title="根据相邻动作的目标自动生成，不需要单独编辑"
+        >
+          {formatRecorderRoundItem(item)}
+        </span>
+      )
+    }
     const slot = item.display.area === 'slot' ? item.display.slot : undefined
     const slotName =
       slot === undefined ? undefined : slotAssignments?.[slot]?.name?.trim()
@@ -465,35 +584,86 @@ export function FloatingActionRecorder({
         portalClassName="z-[1600]"
         popoverClassName="[&>.bp4-popover2-content]:!p-0 overflow-hidden"
         content={
-          <div className="flex items-center gap-0.5 p-0.5">
-            {actionButtons}
-            <Button
-              small
-              minimal
-              intent="danger"
-              className={clsx(
-                Classes.POPOVER_DISMISS,
-                '!h-6 !min-h-6 !w-6 !min-w-6 !p-0 !text-sm !font-semibold',
-              )}
-              title="删除动作"
-              onClick={() => handleRemoveToken(round, item.index)}
-            >
-              删
-            </Button>
+          <div className="p-0.5">
+            <div className="flex items-center gap-0.5">
+              {actionButtons}
+              <Button
+                small
+                minimal
+                intent="danger"
+                className={clsx(
+                  Classes.POPOVER_DISMISS,
+                  '!h-6 !min-h-6 !w-6 !min-w-6 !p-0 !text-sm !font-semibold',
+                )}
+                title="删除动作"
+                onClick={() => handleRemoveToken(round, item.index)}
+              >
+                删
+              </Button>
+            </div>
+            {slot !== undefined ? (
+              <div className="mt-0.5 flex items-center gap-1 border-t border-slate-200 px-0.5 pt-1 dark:border-slate-700">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                  目标
+                </span>
+                {targetLegend.map(({ targetIndex: choiceIndex, label }) => (
+                  <button
+                    key={choiceIndex}
+                    type="button"
+                    title={`将此动作标记为${label}`}
+                    aria-pressed={normalizedTargetIndex === choiceIndex}
+                    className={clsx(
+                      'inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
+                      TARGET_POSITION_TONE_CLASS[choiceIndex],
+                      normalizedTargetIndex === choiceIndex &&
+                        'ring-1 ring-slate-700 dark:ring-slate-100',
+                    )}
+                    onClick={() =>
+                      handleSetTokenTarget(round, item.index, choiceIndex)
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+                {targetIndex !== undefined ? (
+                  <Button
+                    small
+                    minimal
+                    className="!h-5 !min-h-5 !px-1 !text-[10px]"
+                    title="清除此动作的目标标记"
+                    onClick={() =>
+                      handleSetTokenTarget(round, item.index, undefined)
+                    }
+                  >
+                    清除
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         }
       >
         <button
           type="button"
           className={clsx(
-            'inline-flex items-center rounded-sm px-0.5 transition hover:bg-black/5 dark:hover:bg-white/10',
+            'inline-flex items-center rounded-sm border border-transparent px-1 transition',
+            targetToneClass,
             isExtra
-              ? 'min-h-3 text-[10px] font-normal leading-3 text-stone-500 dark:text-stone-400'
-              : 'min-h-4 text-[13px] font-semibold leading-4 text-stone-700 dark:text-stone-100',
+              ? 'min-h-3 text-[10px] font-normal leading-3 text-stone-500 hover:bg-black/5 dark:text-stone-400 dark:hover:bg-white/10'
+              : clsx(
+                  'min-h-4 text-[13px] font-semibold leading-4',
+                  targetToneClass
+                    ? undefined
+                    : 'text-stone-700 dark:text-stone-100',
+                ),
           )}
           title={`第 ${round} 回合第 ${item.order} 个动作：${formatRecorderRoundItem(
             item,
-          )}${slotName ? `（${slotName}）` : ''}（点击编辑、删除动作）`}
+          )}${slotName ? `（${slotName}）` : ''}${
+            targetLabel && targetIndex
+              ? `（目标：${targetLabel} / ${normalizedTargetIndex}号位）`
+              : ''
+          }（点击编辑、删除动作）`}
         >
           {formatRecorderRoundItem(item)}
         </button>
@@ -598,6 +768,74 @@ export function FloatingActionRecorder({
             </div>
 
             <div className="flex-none space-y-1">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-sm border border-slate-200 bg-slate-50/70 px-2 py-1.5 dark:border-slate-700 dark:bg-slate-800/40">
+                <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                  敌方人数
+                </span>
+                <div className="inline-flex overflow-hidden rounded-sm border border-slate-300 dark:border-slate-600">
+                  {RECORDER_ENEMY_COUNTS.map((count, index) => (
+                    <button
+                      key={count}
+                      type="button"
+                      aria-pressed={enemyCount === count}
+                      className={clsx(
+                        'h-6 w-6 text-[11px] font-medium transition',
+                        index > 0 &&
+                          'border-l border-slate-300 dark:border-slate-600',
+                        enemyCount === count
+                          ? 'bg-slate-700 text-white dark:bg-slate-200 dark:text-slate-900'
+                          : 'bg-white text-slate-600 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-700',
+                      )}
+                      onClick={() => handleEnemyCountChange(count)}
+                    >
+                      {count}
+                    </button>
+                  ))}
+                </div>
+                <span className="ml-1 text-[10px] text-slate-500 dark:text-slate-400">
+                  动作目标
+                </span>
+                <div
+                  className="flex flex-wrap items-center gap-1"
+                  role="group"
+                  aria-label="选择接下来录制动作的目标"
+                >
+                  {targetLegend.map(({ targetIndex, label }) => {
+                    const selected = targetIndex === selectedTargetIndex
+                    return (
+                      <button
+                        key={targetIndex}
+                        type="button"
+                        aria-pressed={selected}
+                        title={`接下来录制的攻击动作标记为${label}`}
+                        className={clsx(
+                          'inline-flex items-center gap-1 rounded-sm border px-1 py-0.5 text-[10px] font-medium transition',
+                          TARGET_POSITION_TONE_CLASS[targetIndex],
+                          selected &&
+                            'font-semibold ring-2 ring-slate-700 ring-offset-1 ring-offset-slate-50 dark:ring-slate-100 dark:ring-offset-slate-800',
+                        )}
+                        onClick={() => setSelectedTargetIndex(targetIndex)}
+                      >
+                        <span
+                          className={clsx(
+                            'h-1.5 w-1.5 rounded-full border',
+                            TARGET_POSITION_DOT_CLASS[targetIndex],
+                          )}
+                        />
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+                <Switch
+                  checked={showTargetSwitches}
+                  label="显示额外目标"
+                  className="!mb-0 !ml-auto !text-[10px]"
+                  onChange={(event) =>
+                    setShowTargetSwitches(event.currentTarget.checked)
+                  }
+                />
+              </div>
               <div className="grid grid-cols-5 gap-1">
                 {RECORDER_SLOT_KEYS.map((slot) => {
                   const name = slotAssignments?.[Number(slot)]?.name?.trim()
