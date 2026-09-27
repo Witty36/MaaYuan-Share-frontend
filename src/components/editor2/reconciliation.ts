@@ -184,6 +184,8 @@ export function toMaaOperation(operation: EditorOperation): CopilotOperationLoos
         intermediatePostDelay,
         recorderTargetIndex: _recorderTargetIndex,
         recorderAutomaticTargetSwitch: _recorderAutomaticTargetSwitch,
+        recorderDeadTargetIndices: _recorderDeadTargetIndices,
+        recorderSpawnedTargetIndices: _recorderSpawnedTargetIndices,
         ...newAction
       }: WithoutIdDeep<EditorAction> & Action = action;
       // preDelay 等于当前动作的 intermediatePostDelay

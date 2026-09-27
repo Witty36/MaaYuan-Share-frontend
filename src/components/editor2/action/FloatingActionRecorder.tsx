@@ -22,12 +22,18 @@ import {
   appendRecorderToken,
   cloneRoundActions,
   formatRecorderRoundItem,
+  getRecorderActiveTargetIndices,
+  getRecorderDeadTargetIndices,
+  getRecorderSpawnedTargetIndices,
   getNextRecorderRound,
   getRecorderRoundNumbers,
   groupRecorderRoundActions,
   isRecorderAttackToken,
+  isRecorderAutomaticTargetSwitchMetadata,
   rebuildRecorderTargetSwitches,
   removeRecorderToken,
+  setRecorderTokenDeadTargets,
+  setRecorderTokenSpawnedTargets,
   setRecorderTokenTarget,
 } from './recordingUtils'
 import type { RecorderRoundItem } from './recordingUtils'
@@ -63,8 +69,29 @@ const RECORDER_ROUND_OPTIONS = Array.from(
   (_, index) => index + 1,
 )
 const RECORDER_ENEMY_COUNTS = [1, 2, 3, 4, 5] as const
-const getCenterTargetIndex = (enemyCount: number) =>
-  enemyCount === 3 ? 1 : Math.max(1, Math.ceil(enemyCount / 2))
+const RECORDER_TARGET_LABELS = ['0', '1', '2', '3', '4'] as const
+const RECORDER_TARGET_INDICES = RECORDER_TARGET_LABELS.map(
+  (_, index) => index + 1,
+)
+const RECORDER_CENTER_TARGET_INDEX = 1
+const getInitialRecorderTargetIndices = (enemyCount: number) =>
+  RECORDER_TARGET_INDICES.slice(
+    0,
+    Math.min(
+      Math.max(Math.round(enemyCount), 1),
+      RECORDER_TARGET_INDICES.length,
+    ),
+  )
+const RECORDER_TARGET_GRID_POSITION: Record<
+  string,
+  { column: number; row: number }
+> = {
+  '4': { column: 1, row: 2 },
+  '3': { column: 2, row: 1 },
+  '0': { column: 3, row: 2 },
+  '2': { column: 4, row: 1 },
+  '1': { column: 5, row: 2 },
+}
 
 const TARGET_POSITION_TONE_CLASS: Record<string, string> = {
   '1': 'border-fuchsia-300 bg-fuchsia-100/80 text-fuchsia-700 hover:bg-fuchsia-200/80 dark:border-fuchsia-500/60 dark:bg-fuchsia-500/20 dark:text-fuchsia-200 dark:hover:bg-fuchsia-500/30',
@@ -140,60 +167,53 @@ const getInitialPosition = (size: { width: number; height: number }) => {
 const clamp = (value: number, min: number, max: number) =>
   Math.min(Math.max(value, min), Math.max(min, max))
 
-const getRecorderTargetLabel = (targetIndex: number, enemyCount: number) => {
-  if (enemyCount === 5) {
-    return ['4', '3', '0', '2', '1'][targetIndex - 1] ?? String(targetIndex)
-  }
-  if (enemyCount === 4) {
-    return ['3', '0', '2', '1'][targetIndex - 1] ?? String(targetIndex)
-  }
-  if (enemyCount === 3) {
-    return ['0', '2', '1'][targetIndex - 1] ?? String(targetIndex)
-  }
-  if (enemyCount === 2) {
-    return ['0', '1'][targetIndex - 1] ?? String(targetIndex)
-  }
-  if (enemyCount === 1) {
-    return '0'
-  }
-
-  return String(targetIndex)
-}
-
-const getRecorderTargetGridPosition = (
+const getNearestRecorderTargetIndex = (
   targetIndex: number,
-  enemyCount: number,
-) => {
-  if (enemyCount === 5) {
-    if (targetIndex === 1) return { column: 1, row: 2 }
-    if (targetIndex === 2) return { column: 2, row: 1 }
-    if (targetIndex === 3) return { column: 3, row: 2 }
-    if (targetIndex === 4) return { column: 4, row: 1 }
-    return { column: 5, row: 2 }
-  }
-  if (enemyCount === 4) {
-    if (targetIndex === 1) return { column: 2, row: 1 }
-    if (targetIndex === 2) return { column: 3, row: 2 }
-    if (targetIndex === 3) return { column: 4, row: 1 }
-    return { column: 5, row: 2 }
-  }
-  if (enemyCount === 3) {
-    if (targetIndex === 1) return { column: 3, row: 2 }
-    if (targetIndex === 2) return { column: 4, row: 1 }
-    return { column: 5, row: 2 }
-  }
-  if (enemyCount === 2) {
-    if (targetIndex === 1) return { column: 3, row: 2 }
-    return { column: 5, row: 2 }
-  }
+  targetIndices: readonly number[],
+) =>
+  targetIndices.reduce(
+    (nearest, candidate) =>
+      Math.abs(candidate - targetIndex) < Math.abs(nearest - targetIndex)
+        ? candidate
+        : nearest,
+    targetIndices[0] ?? RECORDER_CENTER_TARGET_INDEX,
+  )
 
-  return {
-    column: targetIndex + Math.floor((5 - enemyCount) / 2),
-    row: 2,
-  }
+const getRecorderTargetLabel = (targetIndex: number) =>
+  RECORDER_TARGET_LABELS[targetIndex - 1] ?? String(targetIndex)
+
+const getRecorderTargetGridPosition = (targetIndex: number) => {
+  const label = getRecorderTargetLabel(targetIndex)
+  const position = RECORDER_TARGET_GRID_POSITION[label]
+
+  return position ?? { column: targetIndex, row: 2 }
 }
 
 const cloneEntries = (entries: string[][]) => entries.map((entry) => [...entry])
+
+const getRecorderTargetEventAnchor = (
+  input: RoundActionsInput,
+  throughRound: number,
+) => {
+  for (let round = throughRound; round >= 1; round -= 1) {
+    const entries = input[String(round)] ?? []
+    for (let index = entries.length - 1; index >= 0; index -= 1) {
+      const entry = entries[index]
+      if (!entry?.[0]?.trim()) {
+        continue
+      }
+      if (
+        entry
+          .slice(1)
+          .some((value) => isRecorderAutomaticTargetSwitchMetadata(value))
+      ) {
+        continue
+      }
+      return { round, index }
+    }
+  }
+  return undefined
+}
 
 const copyRoundInRecorder = (
   input: RoundActionsInput,
@@ -238,8 +258,11 @@ export function FloatingActionRecorder({
   const [position, setPosition] = useState(() => getInitialPosition(size))
   const [visible, setVisible] = useState(false)
   const [enemyCount, setEnemyCount] = useState(5)
+  const [availableTargetIndices, setAvailableTargetIndices] = useState<number[]>(
+    () => getInitialRecorderTargetIndices(5),
+  )
   const [selectedTargetIndex, setSelectedTargetIndex] = useState(() =>
-    getCenterTargetIndex(5),
+    RECORDER_CENTER_TARGET_INDEX,
   )
   const [showTargetSwitches, setShowTargetSwitches] = useState(true)
   const [currentRound, setCurrentRound] = useState(() =>
@@ -322,38 +345,69 @@ export function FloatingActionRecorder({
       }),
     [roundActions, maxRound, showTargetSwitches],
   )
-  const targetLegend = useMemo(
+  const activeTargetIndicesForCurrentRound = useMemo(
     () =>
-      Array.from({ length: enemyCount }, (_, index) => {
-        const targetIndex = index + 1
-        const position = getRecorderTargetGridPosition(targetIndex, enemyCount)
+      getRecorderActiveTargetIndices(
+        roundActions,
+        availableTargetIndices,
+        RECORDER_CENTER_TARGET_INDEX,
+        { throughRound: currentRound },
+      ),
+    [availableTargetIndices, currentRound, roundActions],
+  )
+  useEffect(() => {
+    if (activeTargetIndicesForCurrentRound.includes(selectedTargetIndex)) {
+      return
+    }
+
+    setSelectedTargetIndex(
+      getNearestRecorderTargetIndex(
+        selectedTargetIndex,
+        activeTargetIndicesForCurrentRound,
+      ),
+    )
+  }, [activeTargetIndicesForCurrentRound, selectedTargetIndex])
+
+  const allTargetLegend = useMemo(
+    () =>
+      RECORDER_TARGET_INDICES.map((targetIndex) => {
+        const label = getRecorderTargetLabel(targetIndex)
+        const position = getRecorderTargetGridPosition(targetIndex)
         return {
           targetIndex,
-          label: getRecorderTargetLabel(targetIndex, enemyCount),
+          label,
           gridColumn: position.column,
           gridRow: position.row,
         }
       }),
-    [enemyCount],
+    [],
   )
-  const centerTargetIndex = getCenterTargetIndex(enemyCount)
-
   const handleAppendToken = useCallback(
     (token: string) => {
+      const targetIndex = isRecorderAttackToken(token)
+        ? getNearestRecorderTargetIndex(
+            selectedTargetIndex,
+            activeTargetIndicesForCurrentRound,
+          )
+        : undefined
       const next = appendRecorderToken(
         roundActions,
         currentRound,
         token,
-        isRecorderAttackToken(token) ? selectedTargetIndex : undefined,
+        targetIndex,
       )
       onChange(
-        rebuildRecorderTargetSwitches(next, enemyCount, centerTargetIndex),
+        rebuildRecorderTargetSwitches(
+          next,
+          availableTargetIndices,
+          RECORDER_CENTER_TARGET_INDEX,
+        ),
       )
     },
     [
-      centerTargetIndex,
+      activeTargetIndicesForCurrentRound,
+      availableTargetIndices,
       currentRound,
-      enemyCount,
       onChange,
       roundActions,
       selectedTargetIndex,
@@ -362,18 +416,152 @@ export function FloatingActionRecorder({
 
   const handleEnemyCountChange = useCallback(
     (count: number) => {
-      const nextCenterTargetIndex = getCenterTargetIndex(count)
+      const nextTargetIndices = getInitialRecorderTargetIndices(count)
       setEnemyCount(count)
-      setSelectedTargetIndex(nextCenterTargetIndex)
+      setAvailableTargetIndices(nextTargetIndices)
+      setSelectedTargetIndex(RECORDER_CENTER_TARGET_INDEX)
       onChange(
         rebuildRecorderTargetSwitches(
           roundActions,
-          count,
-          nextCenterTargetIndex,
+          nextTargetIndices,
+          RECORDER_CENTER_TARGET_INDEX,
         ),
       )
     },
     [onChange, roundActions],
+  )
+
+  const handleAddTarget = useCallback(
+    (targetIndex: number) => {
+      if (activeTargetIndicesForCurrentRound.includes(targetIndex)) {
+        return
+      }
+
+      const anchor = getRecorderTargetEventAnchor(
+        roundActions,
+        currentRound,
+      )
+      if (anchor) {
+        const entry =
+          roundActions[String(anchor.round)]?.[anchor.index]
+        const spawnedTargetIndices = getRecorderSpawnedTargetIndices(
+          entry?.slice(1) ?? [],
+        )
+        const next = setRecorderTokenSpawnedTargets(
+          roundActions,
+          anchor.round,
+          anchor.index,
+          [
+            ...spawnedTargetIndices.filter(
+              (spawnedTargetIndex) =>
+                spawnedTargetIndex !== targetIndex,
+            ),
+            targetIndex,
+          ],
+        )
+        onChange(
+          rebuildRecorderTargetSwitches(
+            next,
+            availableTargetIndices,
+            RECORDER_CENTER_TARGET_INDEX,
+          ),
+        )
+        setSelectedTargetIndex(targetIndex)
+        return
+      }
+
+      const nextTargetIndices = [
+        ...availableTargetIndices,
+        targetIndex,
+      ].sort((a, b) => a - b)
+      setAvailableTargetIndices(nextTargetIndices)
+      setSelectedTargetIndex(targetIndex)
+      onChange(
+        rebuildRecorderTargetSwitches(
+          roundActions,
+          nextTargetIndices,
+          RECORDER_CENTER_TARGET_INDEX,
+        ),
+      )
+    },
+    [
+      activeTargetIndicesForCurrentRound,
+      availableTargetIndices,
+      currentRound,
+      onChange,
+      roundActions,
+    ],
+  )
+
+  const handleRemoveTarget = useCallback(
+    (targetIndex: number) => {
+      if (
+        targetIndex === RECORDER_CENTER_TARGET_INDEX ||
+        !activeTargetIndicesForCurrentRound.includes(targetIndex)
+      ) {
+        return
+      }
+
+      const anchor = getRecorderTargetEventAnchor(
+        roundActions,
+        currentRound,
+      )
+      if (anchor) {
+        const entry =
+          roundActions[String(anchor.round)]?.[anchor.index]
+        const deadTargetIndices = getRecorderDeadTargetIndices(
+          entry?.slice(1) ?? [],
+        )
+        const next = setRecorderTokenDeadTargets(
+          roundActions,
+          anchor.round,
+          anchor.index,
+          [
+            ...deadTargetIndices.filter(
+              (deadTargetIndex) => deadTargetIndex !== targetIndex,
+            ),
+            targetIndex,
+          ],
+        )
+        onChange(
+          rebuildRecorderTargetSwitches(
+            next,
+            availableTargetIndices,
+            RECORDER_CENTER_TARGET_INDEX,
+          ),
+        )
+        return
+      }
+
+      const nextTargetIndices = availableTargetIndices.filter(
+        (currentTargetIndex) => currentTargetIndex !== targetIndex,
+      )
+      if (nextTargetIndices.length === 0) {
+        return
+      }
+
+      setAvailableTargetIndices(nextTargetIndices)
+      if (selectedTargetIndex === targetIndex) {
+        setSelectedTargetIndex(
+          getNearestRecorderTargetIndex(targetIndex, nextTargetIndices),
+        )
+      }
+      onChange(
+        rebuildRecorderTargetSwitches(
+          roundActions,
+          nextTargetIndices,
+          RECORDER_CENTER_TARGET_INDEX,
+        ),
+      )
+    },
+    [
+      activeTargetIndicesForCurrentRound,
+      availableTargetIndices,
+      currentRound,
+      onChange,
+      roundActions,
+      selectedTargetIndex,
+    ],
   )
 
   const handlePreviousRound = useCallback(() => {
@@ -398,8 +586,8 @@ export function FloatingActionRecorder({
       onChange(
         rebuildRecorderTargetSwitches(
           copyRoundInRecorder(roundActions, round),
-          enemyCount,
-          centerTargetIndex,
+          availableTargetIndices,
+          RECORDER_CENTER_TARGET_INDEX,
         ),
       )
       setCurrentRound(nextRound)
@@ -410,7 +598,7 @@ export function FloatingActionRecorder({
         intent: 'success',
       })
     },
-    [centerTargetIndex, enemyCount, onChange, roundActions],
+    [availableTargetIndices, onChange, roundActions],
   )
 
   const handleCopySpecificRound = useCallback(
@@ -441,8 +629,8 @@ export function FloatingActionRecorder({
       onChange(
         rebuildRecorderTargetSwitches(
           copyRoundInRecorder(roundActions, sourceRound, targetRound),
-          enemyCount,
-          centerTargetIndex,
+          availableTargetIndices,
+          RECORDER_CENTER_TARGET_INDEX,
         ),
       )
       setCurrentRound(nextRound)
@@ -454,9 +642,8 @@ export function FloatingActionRecorder({
       })
     },
     [
+      availableTargetIndices,
       copySourceRoundInput,
-      centerTargetIndex,
-      enemyCount,
       onChange,
       roundActions,
     ],
@@ -466,8 +653,8 @@ export function FloatingActionRecorder({
     (round: number) => {
       const next = rebuildRecorderTargetSwitches(
         removeRoundInRecorder(roundActions, round),
-        enemyCount,
-        centerTargetIndex,
+        availableTargetIndices,
+        RECORDER_CENTER_TARGET_INDEX,
       )
       const remainingMax = Math.max(1, ...getRecorderRoundNumbers(next))
       onChange(next)
@@ -480,7 +667,7 @@ export function FloatingActionRecorder({
         intent: 'success',
       })
     },
-    [centerTargetIndex, enemyCount, onChange, roundActions],
+    [availableTargetIndices, onChange, roundActions],
   )
 
   const handleRemoveToken = useCallback(
@@ -488,12 +675,12 @@ export function FloatingActionRecorder({
       onChange(
         rebuildRecorderTargetSwitches(
           removeRecorderToken(roundActions, round, index),
-          enemyCount,
-          centerTargetIndex,
+          availableTargetIndices,
+          RECORDER_CENTER_TARGET_INDEX,
         ),
       )
     },
-    [centerTargetIndex, enemyCount, onChange, roundActions],
+    [availableTargetIndices, onChange, roundActions],
   )
 
   const handleConvertToken = useCallback(
@@ -523,15 +710,97 @@ export function FloatingActionRecorder({
 
   const handleSetTokenTarget = useCallback(
     (round: number, index: number, targetIndex?: number) => {
+      if (targetIndex !== undefined) {
+        const activeTargetIndices = getRecorderActiveTargetIndices(
+          roundActions,
+          availableTargetIndices,
+          RECORDER_CENTER_TARGET_INDEX,
+          {
+            throughRound: round,
+            beforeActionIndex: index,
+          },
+        )
+        if (!activeTargetIndices.includes(targetIndex)) {
+          return
+        }
+      }
+
       onChange(
         rebuildRecorderTargetSwitches(
           setRecorderTokenTarget(roundActions, round, index, targetIndex),
-          enemyCount,
-          centerTargetIndex,
+          availableTargetIndices,
+          RECORDER_CENTER_TARGET_INDEX,
         ),
       )
     },
-    [centerTargetIndex, enemyCount, onChange, roundActions],
+    [availableTargetIndices, onChange, roundActions],
+  )
+
+  const handleToggleTokenDeath = useCallback(
+    (round: number, index: number, targetIndex: number) => {
+      if (targetIndex === RECORDER_CENTER_TARGET_INDEX) {
+        return
+      }
+
+      const entry = roundActions[String(round)]?.[index]
+      const deadTargetIndices = getRecorderDeadTargetIndices(
+        entry?.slice(1) ?? [],
+      )
+      const isMarked = deadTargetIndices.includes(targetIndex)
+      const nextDeadTargetIndices = isMarked
+        ? deadTargetIndices.filter(
+            (deadTargetIndex) => deadTargetIndex !== targetIndex,
+          )
+        : [...deadTargetIndices, targetIndex]
+
+      onChange(
+        rebuildRecorderTargetSwitches(
+          setRecorderTokenDeadTargets(
+            roundActions,
+            round,
+            index,
+            nextDeadTargetIndices,
+          ),
+          availableTargetIndices,
+          RECORDER_CENTER_TARGET_INDEX,
+        ),
+      )
+    },
+    [availableTargetIndices, onChange, roundActions],
+  )
+
+  const handleToggleTokenSpawn = useCallback(
+    (round: number, index: number, targetIndex: number) => {
+      if (targetIndex === RECORDER_CENTER_TARGET_INDEX) {
+        return
+      }
+
+      const entry = roundActions[String(round)]?.[index]
+      const spawnedTargetIndices = getRecorderSpawnedTargetIndices(
+        entry?.slice(1) ?? [],
+      )
+      const isMarked = spawnedTargetIndices.includes(targetIndex)
+      const nextSpawnedTargetIndices = isMarked
+        ? spawnedTargetIndices.filter(
+            (spawnedTargetIndex) =>
+              spawnedTargetIndex !== targetIndex,
+          )
+        : [...spawnedTargetIndices, targetIndex]
+
+      onChange(
+        rebuildRecorderTargetSwitches(
+          setRecorderTokenSpawnedTargets(
+            roundActions,
+            round,
+            index,
+            nextSpawnedTargetIndices,
+          ),
+          availableTargetIndices,
+          RECORDER_CENTER_TARGET_INDEX,
+        ),
+      )
+    },
+    [availableTargetIndices, onChange, roundActions],
   )
 
   const handleHide = useCallback(() => {
@@ -558,15 +827,28 @@ export function FloatingActionRecorder({
     const normalizedTargetIndex =
       targetIndex === undefined
         ? undefined
-        : clamp(targetIndex, 1, enemyCount)
+        : clamp(targetIndex, 1, RECORDER_TARGET_INDICES.length)
     const targetLabel =
       normalizedTargetIndex === undefined
         ? undefined
-        : getRecorderTargetLabel(normalizedTargetIndex, enemyCount)
+        : getRecorderTargetLabel(normalizedTargetIndex)
     const targetToneClass =
       normalizedTargetIndex === undefined || targetLabel === '0'
         ? undefined
         : TARGET_POSITION_TONE_CLASS[targetLabel]
+    const activeTargetIndicesBeforeAction = getRecorderActiveTargetIndices(
+      roundActions,
+      availableTargetIndices,
+      RECORDER_CENTER_TARGET_INDEX,
+      {
+        throughRound: round,
+        beforeActionIndex: item.index,
+      },
+    )
+    const actionTargetLegend = allTargetLegend.filter(
+      ({ targetIndex: choiceIndex }) =>
+        activeTargetIndicesBeforeAction.includes(choiceIndex),
+    )
     if (item.automaticTargetSwitch) {
       return (
         <span
@@ -638,102 +920,210 @@ export function FloatingActionRecorder({
       </>
     )
     return (
-      <Popover2
+      <span
         key={`${round}-${item.index}-${item.token}`}
-        minimal
-        placement="top"
-        portalClassName="z-[1600]"
-        popoverClassName="[&>.bp4-popover2-content]:!p-0 overflow-hidden"
-        content={
-          <div className="p-0.5">
-            <div className="flex items-center gap-0.5">
-              {actionButtons}
-              <Button
-                small
-                minimal
-                intent="danger"
-                className={clsx(
-                  Classes.POPOVER_DISMISS,
-                  '!h-6 !min-h-6 !w-6 !min-w-6 !p-0 !text-sm !font-semibold',
-                )}
-                title="删除动作"
-                onClick={() => handleRemoveToken(round, item.index)}
-              >
-                删
-              </Button>
-            </div>
-            {slot !== undefined ? (
-              <div className="mt-0.5 flex items-center gap-1 border-t border-slate-200 px-0.5 pt-1 dark:border-slate-700">
-                <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                  目标
-                </span>
-                {targetLegend.map(({ targetIndex: choiceIndex, label }) => {
-                  const isNeutralTarget = label === '0'
-                  return (
-                    <button
-                      key={choiceIndex}
-                      type="button"
-                      title={`将此动作标记为${label}`}
-                      aria-pressed={normalizedTargetIndex === choiceIndex}
-                      className={clsx(
-                        'inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
-                        isNeutralTarget
-                          ? TARGET_POSITION_NEUTRAL_CLASS
-                          : TARGET_POSITION_TONE_CLASS[label],
-                        normalizedTargetIndex === choiceIndex &&
-                          'ring-1 ring-slate-700 dark:ring-slate-100',
-                      )}
-                      onClick={() =>
-                        handleSetTokenTarget(round, item.index, choiceIndex)
-                      }
-                    >
-                      {label}
-                    </button>
-                  )
-                })}
-                {targetIndex !== undefined ? (
-                  <Button
-                    small
-                    minimal
-                    className="!h-5 !min-h-5 !px-1 !text-[10px]"
-                    title="清除此动作的目标标记"
-                    onClick={() =>
-                      handleSetTokenTarget(round, item.index, undefined)
-                    }
-                  >
-                    清除
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        }
+        className="inline-flex min-w-0 max-w-full flex-wrap items-center justify-center gap-x-0 gap-y-0"
       >
-        <button
-          type="button"
-          className={clsx(
-            'inline-flex items-center rounded-sm border border-transparent px-1 transition',
-            targetToneClass,
-            isExtra
-              ? 'min-h-3 text-[10px] font-normal leading-3 text-stone-500 hover:bg-black/5 dark:text-stone-400 dark:hover:bg-white/10'
-              : clsx(
-                  'min-h-4 text-[13px] font-semibold leading-4',
-                  targetToneClass
-                    ? undefined
-                    : 'text-stone-700 dark:text-stone-100',
-                ),
-          )}
-          title={`第 ${round} 回合第 ${item.order} 个动作：${formatRecorderRoundItem(
-            item,
-          )}${slotName ? `（${slotName}）` : ''}${
-            targetLabel && targetIndex
-              ? `（目标：${targetLabel} / ${normalizedTargetIndex}号位）`
-              : ''
-          }（点击编辑、删除动作）`}
+        <Popover2
+          minimal
+          placement="top"
+          portalClassName="z-[1600]"
+          popoverClassName="[&>.bp4-popover2-content]:!p-0 overflow-hidden"
+          content={
+            <div className="p-0.5">
+              <div className="flex items-center gap-0.5">
+                {actionButtons}
+                <Button
+                  small
+                  minimal
+                  intent="danger"
+                  className={clsx(
+                    Classes.POPOVER_DISMISS,
+                    '!h-6 !min-h-6 !w-6 !min-w-6 !p-0 !text-sm !font-semibold',
+                  )}
+                  title="删除动作"
+                  onClick={() => handleRemoveToken(round, item.index)}
+                >
+                  删
+                </Button>
+              </div>
+              {slot !== undefined ? (
+                <>
+                  <div className="mt-0.5 flex items-center gap-1 border-t border-slate-200 px-0.5 pt-1 dark:border-slate-700">
+                    <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                      目标
+                    </span>
+                    {actionTargetLegend.map(({ targetIndex: choiceIndex, label }) => {
+                      const isNeutralTarget = label === '0'
+                      return (
+                        <button
+                          key={choiceIndex}
+                          type="button"
+                          title={`将此动作标记为${label}`}
+                          aria-pressed={normalizedTargetIndex === choiceIndex}
+                          className={clsx(
+                            'inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
+                            isNeutralTarget
+                              ? TARGET_POSITION_NEUTRAL_CLASS
+                              : TARGET_POSITION_TONE_CLASS[label],
+                            normalizedTargetIndex === choiceIndex &&
+                              'ring-1 ring-slate-700 dark:ring-slate-100',
+                          )}
+                          onClick={() =>
+                            handleSetTokenTarget(round, item.index, choiceIndex)
+                          }
+                        >
+                          {label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <div className="mt-0.5 space-y-0.5 border-t border-slate-200 px-0.5 pt-1 dark:border-slate-700">
+                    <div className="flex items-center gap-1">
+                      <span className="w-8 shrink-0 text-[10px] text-slate-500 dark:text-slate-400">
+                        行动后
+                      </span>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                        死亡
+                      </span>
+                      {allTargetLegend
+                        .filter(
+                          ({ targetIndex: choiceIndex }) =>
+                            choiceIndex !== RECORDER_CENTER_TARGET_INDEX,
+                        )
+                        .map(({ targetIndex: choiceIndex, label }) => {
+                          const marked =
+                            item.deadTargetIndices.includes(choiceIndex)
+                          return (
+                            <button
+                              key={choiceIndex}
+                              type="button"
+                              title={`${label} 号位在此动作后死亡`}
+                              aria-pressed={marked}
+                              className={clsx(
+                                'inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
+                                marked
+                                  ? 'border-rose-400 bg-rose-100 text-rose-700 dark:border-rose-500 dark:bg-rose-500/20 dark:text-rose-200'
+                                  : 'border-slate-300 bg-white text-slate-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-rose-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-200',
+                              )}
+                              onClick={() =>
+                                handleToggleTokenDeath(
+                                  round,
+                                  item.index,
+                                  choiceIndex,
+                                )
+                              }
+                            >
+                              死{label}
+                            </button>
+                          )
+                        })}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <span className="w-8 shrink-0" />
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                        出现
+                      </span>
+                      {allTargetLegend
+                        .filter(
+                          ({ targetIndex: choiceIndex }) =>
+                            choiceIndex !== RECORDER_CENTER_TARGET_INDEX,
+                        )
+                        .map(({ targetIndex: choiceIndex, label }) => {
+                          const marked =
+                            item.spawnedTargetIndices.includes(choiceIndex)
+                          return (
+                            <button
+                              key={choiceIndex}
+                              type="button"
+                              title={`${label} 号位在此动作后出现`}
+                              aria-pressed={marked}
+                              className={clsx(
+                                'inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
+                                marked
+                                  ? 'border-cyan-400 bg-cyan-100 text-cyan-700 dark:border-cyan-500 dark:bg-cyan-500/20 dark:text-cyan-200'
+                                  : 'border-slate-300 bg-white text-slate-600 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-cyan-500 dark:hover:bg-cyan-500/10 dark:hover:text-cyan-200',
+                              )}
+                              onClick={() =>
+                                handleToggleTokenSpawn(
+                                  round,
+                                  item.index,
+                                  choiceIndex,
+                                )
+                              }
+                            >
+                              加{label}
+                            </button>
+                          )
+                        })}
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          }
         >
-          {formatRecorderRoundItem(item)}
-        </button>
-      </Popover2>
+          <button
+            type="button"
+            className={clsx(
+              'inline-flex items-center rounded-sm border border-transparent px-1 transition',
+              targetToneClass,
+              isExtra
+                ? 'min-h-3 text-[10px] font-normal leading-3 text-stone-500 hover:bg-black/5 dark:text-stone-400 dark:hover:bg-white/10'
+                : clsx(
+                    'min-h-4 text-[13px] font-semibold leading-4',
+                    targetToneClass
+                      ? undefined
+                      : 'text-stone-700 dark:text-stone-100',
+                  ),
+            )}
+            title={`第 ${round} 回合第 ${item.order} 个动作：${formatRecorderRoundItem(
+              item,
+            )}${slotName ? `（${slotName}）` : ''}${
+              targetLabel && targetIndex
+                ? `（目标：${targetLabel} / ${normalizedTargetIndex}号位）`
+                : ''
+            }（点击编辑、删除动作）`}
+          >
+            {formatRecorderRoundItem(item)}
+          </button>
+        </Popover2>
+        {item.deadTargetIndices.map((deadTargetIndex) => {
+          const deadTargetLabel = getRecorderTargetLabel(deadTargetIndex)
+          return (
+            <button
+              key={deadTargetIndex}
+              type="button"
+              className="ml-0.5 inline-flex h-4 max-w-full shrink-0 cursor-pointer items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-sm border border-rose-300 bg-rose-50 px-1 text-[9px] font-semibold leading-none text-rose-700 transition hover:border-rose-500 hover:bg-rose-100 dark:border-rose-500/60 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:border-rose-400 dark:hover:bg-rose-500/25"
+              title={`第 ${round} 回合第 ${item.order} 个动作后，${deadTargetLabel} 号位死亡；点击移除`}
+              aria-label={`移除第 ${round} 回合第 ${item.order} 个动作后的 ${deadTargetLabel} 号位死亡标记`}
+              onClick={() =>
+                handleToggleTokenDeath(round, item.index, deadTargetIndex)
+              }
+            >
+              {deadTargetLabel}死亡
+            </button>
+          )
+        })}
+        {item.spawnedTargetIndices.map((spawnedTargetIndex) => {
+          const spawnedTargetLabel =
+            getRecorderTargetLabel(spawnedTargetIndex)
+          return (
+            <button
+              key={spawnedTargetIndex}
+              type="button"
+              className="ml-0.5 inline-flex h-4 max-w-full shrink-0 cursor-pointer items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-sm border border-cyan-300 bg-cyan-50 px-1 text-[9px] font-semibold leading-none text-cyan-700 transition hover:border-cyan-500 hover:bg-cyan-100 dark:border-cyan-500/60 dark:bg-cyan-500/15 dark:text-cyan-200 dark:hover:border-cyan-400 dark:hover:bg-cyan-500/25"
+              title={`第 ${round} 回合第 ${item.order} 个动作后，${spawnedTargetLabel} 号位出现；点击移除`}
+              aria-label={`移除第 ${round} 回合第 ${item.order} 个动作后的 ${spawnedTargetLabel} 号位出现标记`}
+              onClick={() =>
+                handleToggleTokenSpawn(round, item.index, spawnedTargetIndex)
+              }
+            >
+              {spawnedTargetLabel}出现
+            </button>
+          )
+        })}
+      </span>
     )
   }
 
@@ -838,7 +1228,7 @@ export function FloatingActionRecorder({
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <div className="inline-flex items-center gap-1.5 whitespace-nowrap">
                     <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                      敌方人数
+                      初始敌人
                     </span>
                     <div className="inline-flex overflow-hidden rounded-sm border border-slate-300 dark:border-slate-600">
                       {RECORDER_ENEMY_COUNTS.map((count, index) => (
@@ -879,29 +1269,68 @@ export function FloatingActionRecorder({
                     role="group"
                     aria-label="选择接下来录制动作的目标"
                   >
-                    {targetLegend.map(
+                    {allTargetLegend.map(
                       ({ targetIndex, label, gridColumn, gridRow }) => {
+                        const isAvailable =
+                          activeTargetIndicesForCurrentRound.includes(
+                            targetIndex,
+                          )
                         const selected = targetIndex === selectedTargetIndex
                         const isNeutralTarget = label === '0'
+
+                        if (!isAvailable) {
+                          return (
+                            <button
+                              key={targetIndex}
+                              type="button"
+                              title={`出现 ${label} 号位`}
+                              aria-label={`出现 ${label} 号位`}
+                              style={{ gridColumn, gridRow }}
+                              className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-400 transition hover:border-slate-500 hover:bg-slate-100 hover:text-slate-600 dark:border-slate-600 dark:text-slate-500 dark:hover:border-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                              onClick={() => handleAddTarget(targetIndex)}
+                            >
+                              <Icon icon="plus" size={10} />
+                            </button>
+                          )
+                        }
+
                         return (
-                          <button
+                          <div
                             key={targetIndex}
-                            type="button"
-                            aria-pressed={selected}
-                            title={`接下来录制的攻击动作标记为${label}`}
                             style={{ gridColumn, gridRow }}
-                            className={clsx(
-                              'inline-flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold transition',
-                              isNeutralTarget
-                                ? TARGET_POSITION_NEUTRAL_CLASS
-                                : TARGET_POSITION_TONE_CLASS[label],
-                              selected &&
-                                'font-semibold ring-2 ring-slate-700 ring-offset-1 ring-offset-slate-50 dark:ring-slate-100 dark:ring-offset-slate-800',
-                            )}
-                            onClick={() => setSelectedTargetIndex(targetIndex)}
+                            className="relative flex h-7 w-7 items-center justify-center"
                           >
-                            {label}
-                          </button>
+                            <button
+                              type="button"
+                              aria-pressed={selected}
+                              title={`接下来录制的攻击动作标记为${label}`}
+                              className={clsx(
+                                'inline-flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold transition',
+                                isNeutralTarget
+                                  ? TARGET_POSITION_NEUTRAL_CLASS
+                                  : TARGET_POSITION_TONE_CLASS[label],
+                                selected &&
+                                  'font-semibold ring-2 ring-slate-700 ring-offset-1 ring-offset-slate-50 dark:ring-slate-100 dark:ring-offset-slate-800',
+                              )}
+                              onClick={() => setSelectedTargetIndex(targetIndex)}
+                            >
+                              {label}
+                            </button>
+                            {!isNeutralTarget ? (
+                              <button
+                                type="button"
+                                title={`移除 ${label} 号位`}
+                                aria-label={`移除 ${label} 号位`}
+                                className="absolute -right-0.5 -top-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-white bg-rose-500 text-white shadow-sm transition hover:bg-rose-600 dark:border-slate-800"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  handleRemoveTarget(targetIndex)
+                                }}
+                              >
+                                <Icon icon="cross" size={7} />
+                              </button>
+                            ) : null}
+                          </div>
                         )
                       },
                     )}
@@ -1117,9 +1546,9 @@ export function FloatingActionRecorder({
                         {RECORDER_SLOT_KEYS.map((slot) => (
                           <td
                             key={slot}
-                            className="h-12 border border-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_45%,var(--maayuan-surface,#faf5ff))] p-0.5 text-center align-middle dark:border-slate-600"
+                            className="h-12 overflow-hidden border border-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_45%,var(--maayuan-surface,#faf5ff))] p-0.5 text-center align-middle dark:border-slate-600"
                           >
-                            <div className="flex min-h-8 flex-wrap items-center justify-center gap-x-0 gap-y-0">
+                            <div className="flex min-h-8 w-full min-w-0 flex-wrap items-center justify-center gap-x-0 gap-y-0">
                               {(groups.slots[Number(slot)] ?? []).map((item) =>
                                 renderActionToken(item, round),
                               )}

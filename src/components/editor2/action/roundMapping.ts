@@ -2,7 +2,11 @@ import { CopilotDocV1 } from "../../../models/copilot.schema";
 import { createAction } from "../factories";
 import { EditorAction } from "../types";
 import {
+  getRecorderSpawnedTargetIndices,
+  getRecorderDeadTargetIndices,
   isRecorderAutomaticTargetSwitchMetadata,
+  parseRecorderSpawnedTargetMetadata,
+  parseRecorderDeadTargetMetadata,
   parseRecorderTargetMetadata,
 } from "./recordingUtils";
 
@@ -17,6 +21,8 @@ export interface ParsedRoundAction {
   slot?: number;
   payload?: number | string;
   targetIndex?: number;
+  deadTargetIndices?: number[];
+  spawnedTargetIndices?: number[];
   automaticTargetSwitch?: boolean;
 }
 
@@ -82,6 +88,9 @@ export function parseRoundActions(input: RoundActionsInput): ParsedRoundAction[]
         const token = String(raw[0] ?? "").trim();
         const parsedToken = parseToken(token);
         const metadata = raw.slice(1);
+        const deadTargetIndices = getRecorderDeadTargetIndices(metadata);
+        const spawnedTargetIndices =
+          getRecorderSpawnedTargetIndices(metadata);
         return {
           round,
           order: index,
@@ -90,6 +99,8 @@ export function parseRoundActions(input: RoundActionsInput): ParsedRoundAction[]
           targetIndex: metadata
             .map((value) => parseRecorderTargetMetadata(value))
             .find((value) => value !== undefined),
+          deadTargetIndices,
+          spawnedTargetIndices,
           automaticTargetSwitch: metadata.some((value) =>
             isRecorderAutomaticTargetSwitchMetadata(value),
           ),
@@ -118,7 +129,9 @@ function appendRecorderMetadataToAction(
 ): EditorAction {
   if (
     parsed.targetIndex === undefined &&
-    !parsed.automaticTargetSwitch
+    !parsed.automaticTargetSwitch &&
+    !parsed.deadTargetIndices?.length &&
+    !parsed.spawnedTargetIndices?.length
   ) {
     return action;
   }
@@ -130,6 +143,12 @@ function appendRecorderMetadataToAction(
       : { recorderTargetIndex: parsed.targetIndex }),
     ...(parsed.automaticTargetSwitch
       ? { recorderAutomaticTargetSwitch: true }
+      : {}),
+    ...(parsed.deadTargetIndices?.length
+      ? { recorderDeadTargetIndices: parsed.deadTargetIndices }
+      : {}),
+    ...(parsed.spawnedTargetIndices?.length
+      ? { recorderSpawnedTargetIndices: parsed.spawnedTargetIndices }
       : {}),
   };
 }
@@ -449,6 +468,12 @@ export function editorActionsToRoundActions(actions: EditorAction[]): RoundActio
     const meta = {
       ...legacyMeta,
       targetIndex: action.recorderTargetIndex ?? legacyMeta.targetIndex,
+      deadTargetIndices:
+        action.recorderDeadTargetIndices ?? legacyMeta.deadTargetIndices ?? [],
+      spawnedTargetIndices:
+        action.recorderSpawnedTargetIndices ??
+        legacyMeta.spawnedTargetIndices ??
+        [],
       automaticTargetSwitch:
         action.recorderAutomaticTargetSwitch ??
         legacyMeta.automaticTargetSwitch,
@@ -465,6 +490,12 @@ export function editorActionsToRoundActions(actions: EditorAction[]): RoundActio
     }
     if (meta.automaticTargetSwitch) {
       entry.push("自动切换");
+    }
+    for (const targetIndex of meta.deadTargetIndices) {
+      entry.push(`敌人死亡:${targetIndex}`);
+    }
+    for (const targetIndex of meta.spawnedTargetIndices) {
+      entry.push(`敌人出现:${targetIndex}`);
     }
     result[roundKey].push(entry);
     fallbackRound = round;
@@ -496,6 +527,8 @@ function extractMetadataFromDoc(doc?: string) {
   const token = bracketValues.find(
     (value) =>
       parseRecorderTargetMetadata(value) === undefined &&
+      parseRecorderDeadTargetMetadata(value) === undefined &&
+      parseRecorderSpawnedTargetMetadata(value) === undefined &&
       !isRecorderAutomaticTargetSwitchMetadata(value),
   );
   return {
@@ -504,6 +537,12 @@ function extractMetadataFromDoc(doc?: string) {
     targetIndex: bracketValues
       .map((value) => parseRecorderTargetMetadata(value))
       .find((value) => value !== undefined),
+    deadTargetIndices: bracketValues
+      .map((value) => parseRecorderDeadTargetMetadata(value))
+      .filter((value): value is number => value !== undefined),
+    spawnedTargetIndices: bracketValues
+      .map((value) => parseRecorderSpawnedTargetMetadata(value))
+      .filter((value): value is number => value !== undefined),
     automaticTargetSwitch: bracketValues.some((value) =>
       isRecorderAutomaticTargetSwitchMetadata(value),
     ),

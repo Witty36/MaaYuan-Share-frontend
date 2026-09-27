@@ -114,6 +114,14 @@ type GenerateEditorAction<T extends CopilotDocV1.Action> = T extends never
            * 标记该左右切换动作是由快速录制自动生成的。
            */
           recorderAutomaticTargetSwitch?: boolean;
+          /**
+           * 该动作完成后死亡的敌人目标位（仅编辑器内部使用，不导出）。
+           */
+          recorderDeadTargetIndices?: number[];
+          /**
+           * 该动作完成后出现的敌人目标位（仅编辑器内部使用，不导出）。
+           */
+          recorderSpawnedTargetIndices?: number[];
         }>
     >;
 
