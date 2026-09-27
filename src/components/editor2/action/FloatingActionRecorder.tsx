@@ -66,13 +66,15 @@ const RECORDER_ENEMY_COUNTS = [1, 2, 3, 4, 5] as const
 const getCenterTargetIndex = (enemyCount: number) =>
   enemyCount === 3 ? 1 : Math.max(1, Math.ceil(enemyCount / 2))
 
-const TARGET_POSITION_TONE_CLASS: Record<number, string> = {
-  1: 'border-fuchsia-300 bg-fuchsia-100/80 text-fuchsia-700 hover:bg-fuchsia-200/80 dark:border-fuchsia-500/60 dark:bg-fuchsia-500/20 dark:text-fuchsia-200 dark:hover:bg-fuchsia-500/30',
-  2: 'border-blue-300 bg-blue-100/80 text-blue-700 hover:bg-blue-200/80 dark:border-blue-500/60 dark:bg-blue-500/20 dark:text-blue-200 dark:hover:bg-blue-500/30',
-  3: 'border-emerald-300 bg-emerald-100/80 text-emerald-700 hover:bg-emerald-200/80 dark:border-emerald-500/60 dark:bg-emerald-500/20 dark:text-emerald-200 dark:hover:bg-emerald-500/30',
-  4: 'border-amber-300 bg-amber-100/80 text-amber-800 hover:bg-amber-200/80 dark:border-amber-500/60 dark:bg-amber-500/20 dark:text-amber-200 dark:hover:bg-amber-500/30',
-  5: 'border-rose-300 bg-rose-100/80 text-rose-700 hover:bg-rose-200/80 dark:border-rose-500/60 dark:bg-rose-500/20 dark:text-rose-200 dark:hover:bg-rose-500/30',
+const TARGET_POSITION_TONE_CLASS: Record<string, string> = {
+  '1': 'border-fuchsia-300 bg-fuchsia-100/80 text-fuchsia-700 hover:bg-fuchsia-200/80 dark:border-fuchsia-500/60 dark:bg-fuchsia-500/20 dark:text-fuchsia-200 dark:hover:bg-fuchsia-500/30',
+  '2': 'border-blue-300 bg-blue-100/80 text-blue-700 hover:bg-blue-200/80 dark:border-blue-500/60 dark:bg-blue-500/20 dark:text-blue-200 dark:hover:bg-blue-500/30',
+  '3': 'border-amber-300 bg-amber-100/80 text-amber-800 hover:bg-amber-200/80 dark:border-amber-500/60 dark:bg-amber-500/20 dark:text-amber-200 dark:hover:bg-amber-500/30',
+  '4': 'border-emerald-300 bg-emerald-100/80 text-emerald-700 hover:bg-emerald-200/80 dark:border-emerald-500/60 dark:bg-emerald-500/20 dark:text-emerald-200 dark:hover:bg-emerald-500/30',
+  '5': 'border-rose-300 bg-rose-100/80 text-rose-700 hover:bg-rose-200/80 dark:border-rose-500/60 dark:bg-rose-500/20 dark:text-rose-200 dark:hover:bg-rose-500/30',
 }
+const TARGET_POSITION_NEUTRAL_CLASS =
+  'border-slate-300 bg-transparent text-slate-600 hover:bg-slate-100/80 dark:border-slate-600 dark:bg-transparent dark:text-slate-300 dark:hover:bg-slate-700/60'
 
 const TONE_CHIP_CLASS: Record<RecorderButtonTone, string> = {
   ultimate:
@@ -562,9 +564,9 @@ export function FloatingActionRecorder({
         ? undefined
         : getRecorderTargetLabel(normalizedTargetIndex, enemyCount)
     const targetToneClass =
-      normalizedTargetIndex === undefined
+      normalizedTargetIndex === undefined || targetLabel === '0'
         ? undefined
-        : TARGET_POSITION_TONE_CLASS[normalizedTargetIndex]
+        : TARGET_POSITION_TONE_CLASS[targetLabel]
     if (item.automaticTargetSwitch) {
       return (
         <span
@@ -666,6 +668,7 @@ export function FloatingActionRecorder({
                   目标
                 </span>
                 {targetLegend.map(({ targetIndex: choiceIndex, label }) => {
+                  const isNeutralTarget = label === '0'
                   return (
                     <button
                       key={choiceIndex}
@@ -674,7 +677,9 @@ export function FloatingActionRecorder({
                       aria-pressed={normalizedTargetIndex === choiceIndex}
                       className={clsx(
                         'inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
-                        TARGET_POSITION_TONE_CLASS[choiceIndex],
+                        isNeutralTarget
+                          ? TARGET_POSITION_NEUTRAL_CLASS
+                          : TARGET_POSITION_TONE_CLASS[label],
                         normalizedTargetIndex === choiceIndex &&
                           'ring-1 ring-slate-700 dark:ring-slate-100',
                       )}
@@ -877,6 +882,7 @@ export function FloatingActionRecorder({
                     {targetLegend.map(
                       ({ targetIndex, label, gridColumn, gridRow }) => {
                         const selected = targetIndex === selectedTargetIndex
+                        const isNeutralTarget = label === '0'
                         return (
                           <button
                             key={targetIndex}
@@ -886,7 +892,9 @@ export function FloatingActionRecorder({
                             style={{ gridColumn, gridRow }}
                             className={clsx(
                               'inline-flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold transition',
-                              TARGET_POSITION_TONE_CLASS[targetIndex],
+                              isNeutralTarget
+                                ? TARGET_POSITION_NEUTRAL_CLASS
+                                : TARGET_POSITION_TONE_CLASS[label],
                               selected &&
                                 'font-semibold ring-2 ring-slate-700 ring-offset-1 ring-offset-slate-50 dark:ring-slate-100 dark:ring-offset-slate-800',
                             )}
