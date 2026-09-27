@@ -5,7 +5,6 @@ import {
   Icon,
   Menu,
   MenuItem,
-  Switch,
 } from '@blueprintjs/core'
 import { Popover2 } from '@blueprintjs/popover2'
 
@@ -77,6 +76,11 @@ const MIN_WIDTH = 320
 const MIN_HEIGHT = 420
 const DEFAULT_WIDTH = 480
 const DEFAULT_HEIGHT = 680
+const RECORDER_CONTROL_BUTTON_CLASS =
+  '!w-full !justify-start !gap-1 !rounded-sm !border !border-slate-200 !bg-white/70 !px-1.5 !py-0 !font-medium !text-slate-600 hover:!border-slate-300 hover:!bg-slate-100 dark:!border-slate-700 dark:!bg-slate-900/40 dark:!text-slate-300 dark:hover:!border-slate-600 dark:hover:!bg-slate-800'
+const RECORDER_CONTROL_BUTTON_TEXT_CLASS = '!text-[11px] !leading-none'
+const RECORDER_CONTROL_BUTTON_ACTIVE_CLASS =
+  '!border-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_42%,var(--maayuan-surface,#fff))] !bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_18%,var(--maayuan-surface,#faf5ff))] !text-[var(--maayuan-text-strong,#4c1d95)] hover:!bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_26%,var(--maayuan-surface,#faf5ff))] dark:!border-violet-500/50 dark:!bg-violet-500/20 dark:!text-violet-100 dark:hover:!bg-violet-500/30'
 const RECORDER_ROUND_OPTIONS = Array.from(
   { length: 49 },
   (_, index) => index + 1,
@@ -286,7 +290,12 @@ export function FloatingActionRecorder({
   const [openRoundMenu, setOpenRoundMenu] = useState<number | null>(null)
   const { width: windowWidth, height: windowHeight } = useWindowSize()
   const breakpoint = useBreakpoint()
-  const canDrag = breakpoint !== 'tablet'
+  const isMobileRecorder = breakpoint === 'tablet'
+  const canDrag = !isMobileRecorder
+  const recorderControlButtonSizeClass = isMobileRecorder
+    ? '!h-7 !min-h-[28px]'
+    : '!h-7 !min-h-[28px]'
+  const recorderControlIconSize = isMobileRecorder ? 14 : 13
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const pendingScrollRoundRef = useRef<number | null>(null)
 
@@ -1599,23 +1608,6 @@ export function FloatingActionRecorder({
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-auto p-3">
-            <div className="grid flex-none grid-cols-[1fr_auto_1fr] items-center gap-2">
-              <Button
-                className="w-full"
-                small
-                disabled={currentRound <= 1}
-                onClick={handlePreviousRound}
-              >
-                上一回合
-              </Button>
-              <div className="px-1 text-center text-sm font-medium text-slate-700 dark:text-slate-200">
-                回合 {currentRound}/{maxRound}
-              </div>
-              <Button className="w-full" small onClick={handleNextRound}>
-                下一回合
-              </Button>
-            </div>
-
             <div className="flex-none space-y-1">
               <div className="space-y-1.5 rounded-md border border-slate-200 bg-slate-50/70 px-2 py-2 dark:border-slate-700 dark:bg-slate-800/40">
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -1644,21 +1636,52 @@ export function FloatingActionRecorder({
                       ))}
                     </div>
                   </div>
-                  <Switch
-                    checked={showTargetSwitches}
-                    label="显示额外动作"
-                    className="!mb-0 !ml-auto !text-[10px]"
-                    onChange={(event) =>
-                      setShowTargetSwitches(event.currentTarget.checked)
-                    }
-                  />
+                  <div className="ml-auto w-[104px] flex-none">
+                    <Button
+                      minimal
+                      small
+                      active={showTargetSwitches}
+                      aria-pressed={showTargetSwitches}
+                      icon={
+                        <Icon
+                          icon={showTargetSwitches ? 'eye-open' : 'eye-off'}
+                          size={recorderControlIconSize}
+                        />
+                      }
+                      title="在当前录制表中显示或隐藏额外动作"
+                      className={clsx(
+                        RECORDER_CONTROL_BUTTON_CLASS,
+                        RECORDER_CONTROL_BUTTON_TEXT_CLASS,
+                        recorderControlButtonSizeClass,
+                        showTargetSwitches &&
+                          RECORDER_CONTROL_BUTTON_ACTIVE_CLASS,
+                      )}
+                      onClick={() =>
+                        setShowTargetSwitches((current) => !current)
+                      }
+                    >
+                      <span className="truncate">显示额外动作</span>
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-200 pt-1.5 dark:border-slate-700">
-                  <span className="shrink-0 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                <div
+                  className={clsx(
+                    'flex flex-wrap items-center gap-1.5 border-t border-slate-200 dark:border-slate-700',
+                    isMobileRecorder
+                      ? 'gap-y-0 pt-0.5'
+                      : 'pt-1.5',
+                  )}
+                >
+                  <span className="shrink-0 text-[10px] font-medium leading-none text-slate-500 dark:text-slate-400">
                     站位
                   </span>
                   <div
-                    className="grid min-h-10 min-w-[136px] max-w-[180px] flex-1 grid-cols-5 grid-rows-2 items-center justify-items-center gap-x-1 gap-y-0.5"
+                    className={clsx(
+                      'grid grid-cols-5 grid-rows-2 items-center justify-items-center',
+                      isMobileRecorder
+                        ? 'order-3 mt-1 w-full min-w-0 flex-none gap-x-1 gap-y-0'
+                        : 'min-h-10 min-w-[136px] max-w-[180px] flex-1 gap-x-1 gap-y-0.5',
+                    )}
                     role="group"
                     aria-label="选择接下来录制动作的目标"
                   >
@@ -1679,10 +1702,16 @@ export function FloatingActionRecorder({
                               title={`出现 ${label} 号位`}
                               aria-label={`出现 ${label} 号位`}
                               style={{ gridColumn, gridRow }}
-                              className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-400 transition hover:border-slate-500 hover:bg-slate-100 hover:text-slate-600 dark:border-slate-600 dark:text-slate-500 dark:hover:border-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300"
+                              className={clsx(
+                                'inline-flex items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-400 transition hover:border-slate-500 hover:bg-slate-100 hover:text-slate-600 dark:border-slate-600 dark:text-slate-500 dark:hover:border-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300',
+                                isMobileRecorder ? 'h-10 w-10' : 'h-9 w-9',
+                              )}
                               onClick={() => handleAddTarget(targetIndex)}
                             >
-                              <Icon icon="plus" size={10} />
+                              <Icon
+                                icon="plus"
+                                size={isMobileRecorder ? 14 : 10}
+                              />
                             </button>
                           )
                         }
@@ -1691,14 +1720,20 @@ export function FloatingActionRecorder({
                           <div
                             key={targetIndex}
                             style={{ gridColumn, gridRow }}
-                            className="relative flex h-7 w-7 items-center justify-center"
+                            className={clsx(
+                              'relative flex items-center justify-center',
+                              isMobileRecorder ? 'h-10 w-10' : 'h-9 w-9',
+                            )}
                           >
                             <button
                               type="button"
                               aria-pressed={selected}
                               title={`接下来录制的攻击动作标记为${label}`}
                               className={clsx(
-                                'inline-flex h-6 w-6 items-center justify-center rounded-full border text-[11px] font-semibold transition',
+                                'inline-flex items-center justify-center rounded-full border font-semibold transition',
+                                isMobileRecorder
+                                  ? 'h-10 w-10 text-[12px]'
+                                  : 'h-9 w-9 text-[13px]',
                                 isNeutralTarget
                                   ? TARGET_POSITION_NEUTRAL_CLASS
                                   : TARGET_POSITION_TONE_CLASS[label],
@@ -1714,13 +1749,21 @@ export function FloatingActionRecorder({
                                 type="button"
                                 title={`移除 ${label} 号位`}
                                 aria-label={`移除 ${label} 号位`}
-                                className="absolute -right-0.5 -top-0.5 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full border border-white bg-rose-500 text-white shadow-sm transition hover:bg-rose-600 dark:border-slate-800"
+                                className={clsx(
+                                  'absolute inline-flex items-center justify-center rounded-full border-white bg-rose-500 text-white shadow-sm transition hover:bg-rose-600 dark:border-slate-800',
+                                  isMobileRecorder
+                                    ? '-right-1.5 -top-1.5 h-5 w-5 border-2'
+                                    : '-right-0.5 -top-0.5 h-3.5 w-3.5 border',
+                                )}
                                 onClick={(event) => {
                                   event.stopPropagation()
                                   handleRemoveTarget(targetIndex)
                                 }}
                               >
-                                <Icon icon="cross" size={7} />
+                                <Icon
+                                  icon="cross"
+                                  size={isMobileRecorder ? 9 : 7}
+                                />
                               </button>
                             ) : null}
                           </div>
@@ -1728,24 +1771,38 @@ export function FloatingActionRecorder({
                       },
                     )}
                   </div>
-                  <div className="ml-auto grid w-[112px] gap-1">
+                  <div
+                    className={clsx(
+                      'ml-auto grid gap-1',
+                      isMobileRecorder
+                        ? 'order-2 w-[212px] grid-cols-2'
+                        : 'w-[104px]',
+                    )}
+                  >
                     <Button
                       minimal
                       small
                       active={showEnemyEvents}
-                      icon={showEnemyEvents ? 'eye-open' : 'eye-off'}
+                      aria-pressed={showEnemyEvents}
+                      icon={
+                        <Icon
+                          icon={showEnemyEvents ? 'eye-open' : 'eye-off'}
+                          size={recorderControlIconSize}
+                        />
+                      }
                       title="在当前录制表中显示或隐藏敌方存活状态标记"
                       className={clsx(
-                        '!w-full !justify-start !text-[10px]',
+                        RECORDER_CONTROL_BUTTON_CLASS,
+                        RECORDER_CONTROL_BUTTON_TEXT_CLASS,
+                        recorderControlButtonSizeClass,
                         showEnemyEvents &&
-                          '!bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_18%,var(--maayuan-surface,#faf5ff))] !text-[var(--maayuan-text-strong,#4c1d95)] dark:!border dark:!border-violet-500/50 dark:!bg-violet-500/20 dark:!text-violet-100 dark:hover:!bg-violet-500/30',
+                          RECORDER_CONTROL_BUTTON_ACTIVE_CLASS,
                       )}
                       onClick={() =>
                         setShowEnemyEvents((current) => !current)
                       }
                     >
-                      <span className="font-semibold">敌方</span>
-                      存活状态
+                      <span className="truncate">敌方存活状态</span>
                     </Button>
                     <Popover2
                       placement="bottom-end"
@@ -1808,16 +1865,37 @@ export function FloatingActionRecorder({
                       <Button
                         minimal
                         small
-                        className="!w-full !justify-start !text-[10px]"
+                        className={clsx(
+                          RECORDER_CONTROL_BUTTON_CLASS,
+                          RECORDER_CONTROL_BUTTON_TEXT_CLASS,
+                          recorderControlButtonSizeClass,
+                        )}
                         title="查看敌方死亡与出现情况"
-                        icon="menu"
+                        icon={
+                          <Icon icon="list" size={recorderControlIconSize} />
+                        }
                       >
-                        <span className="font-semibold">敌方</span>
-                        情况
+                        <span className="truncate">敌方情况</span>
                       </Button>
                     </Popover2>
                   </div>
                 </div>
+              </div>
+              <div className="grid flex-none grid-cols-[1fr_auto_1fr] items-center gap-2">
+                <Button
+                  className="w-full"
+                  small
+                  disabled={currentRound <= 1}
+                  onClick={handlePreviousRound}
+                >
+                  上一回合
+                </Button>
+                <div className="px-1 text-center text-sm font-medium text-slate-700 dark:text-slate-200">
+                  回合 {currentRound}/{maxRound}
+                </div>
+                <Button className="w-full" small onClick={handleNextRound}>
+                  下一回合
+                </Button>
               </div>
               <div className="grid grid-cols-5 gap-1">
                 {RECORDER_SLOT_KEYS.map((slot) => {
@@ -2028,7 +2106,7 @@ export function FloatingActionRecorder({
                         {RECORDER_SLOT_KEYS.map((slot) => (
                           <td
                             key={slot}
-                            className="h-12 overflow-hidden border border-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_45%,var(--maayuan-surface,#faf5ff))] p-0.5 text-center align-middle dark:border-slate-600"
+                            className="h-[46px] overflow-hidden border border-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_45%,var(--maayuan-surface,#faf5ff))] p-0.5 text-center align-middle dark:border-slate-600"
                           >
                             <div className="flex min-h-8 w-full min-w-0 flex-wrap items-center justify-center gap-x-0 gap-y-0">
                               {(groups.slots[Number(slot)] ?? []).map((item) =>
