@@ -803,6 +803,163 @@ export function FloatingActionRecorder({
     [availableTargetIndices, onChange, roundActions],
   )
 
+  const handleChangeTokenDeathTarget = useCallback(
+    (
+      round: number,
+      index: number,
+      fromTargetIndex: number,
+      toTargetIndex: number,
+    ) => {
+      if (
+        fromTargetIndex === toTargetIndex ||
+        toTargetIndex === RECORDER_CENTER_TARGET_INDEX
+      ) {
+        return
+      }
+
+      const entry = roundActions[String(round)]?.[index]
+      const deadTargetIndices = getRecorderDeadTargetIndices(
+        entry?.slice(1) ?? [],
+      )
+      if (!deadTargetIndices.includes(fromTargetIndex)) {
+        return
+      }
+
+      onChange(
+        rebuildRecorderTargetSwitches(
+          setRecorderTokenDeadTargets(
+            roundActions,
+            round,
+            index,
+            [
+              ...deadTargetIndices.filter(
+                (deadTargetIndex) => deadTargetIndex !== fromTargetIndex,
+              ),
+              toTargetIndex,
+            ],
+          ),
+          availableTargetIndices,
+          RECORDER_CENTER_TARGET_INDEX,
+        ),
+      )
+    },
+    [availableTargetIndices, onChange, roundActions],
+  )
+
+  const handleChangeTokenSpawnTarget = useCallback(
+    (
+      round: number,
+      index: number,
+      fromTargetIndex: number,
+      toTargetIndex: number,
+    ) => {
+      if (
+        fromTargetIndex === toTargetIndex ||
+        toTargetIndex === RECORDER_CENTER_TARGET_INDEX
+      ) {
+        return
+      }
+
+      const entry = roundActions[String(round)]?.[index]
+      const spawnedTargetIndices = getRecorderSpawnedTargetIndices(
+        entry?.slice(1) ?? [],
+      )
+      if (!spawnedTargetIndices.includes(fromTargetIndex)) {
+        return
+      }
+
+      onChange(
+        rebuildRecorderTargetSwitches(
+          setRecorderTokenSpawnedTargets(
+            roundActions,
+            round,
+            index,
+            [
+              ...spawnedTargetIndices.filter(
+                (spawnedTargetIndex) =>
+                  spawnedTargetIndex !== fromTargetIndex,
+              ),
+              toTargetIndex,
+            ],
+          ),
+          availableTargetIndices,
+          RECORDER_CENTER_TARGET_INDEX,
+        ),
+      )
+    },
+    [availableTargetIndices, onChange, roundActions],
+  )
+
+  const handleChangeTokenMarkerType = useCallback(
+    (
+      round: number,
+      index: number,
+      targetIndex: number,
+      nextType: 'dead' | 'spawn',
+    ) => {
+      if (targetIndex === RECORDER_CENTER_TARGET_INDEX) {
+        return
+      }
+
+      const entry = roundActions[String(round)]?.[index]
+      const metadata = entry?.slice(1) ?? []
+      const deadTargetIndices = getRecorderDeadTargetIndices(metadata)
+      const spawnedTargetIndices = getRecorderSpawnedTargetIndices(metadata)
+      const isChangingFromDead =
+        nextType === 'spawn' && deadTargetIndices.includes(targetIndex)
+      const isChangingFromSpawn =
+        nextType === 'dead' && spawnedTargetIndices.includes(targetIndex)
+
+      if (!isChangingFromDead && !isChangingFromSpawn) {
+        return
+      }
+
+      const nextDeadTargetIndices =
+        nextType === 'dead'
+          ? [
+              ...deadTargetIndices.filter(
+                (deadTargetIndex) => deadTargetIndex !== targetIndex,
+              ),
+              targetIndex,
+            ]
+          : deadTargetIndices.filter(
+              (deadTargetIndex) => deadTargetIndex !== targetIndex,
+            )
+      const nextSpawnedTargetIndices =
+        nextType === 'spawn'
+          ? [
+              ...spawnedTargetIndices.filter(
+                (spawnedTargetIndex) => spawnedTargetIndex !== targetIndex,
+              ),
+              targetIndex,
+            ]
+          : spawnedTargetIndices.filter(
+              (spawnedTargetIndex) => spawnedTargetIndex !== targetIndex,
+            )
+
+      const next = setRecorderTokenSpawnedTargets(
+        setRecorderTokenDeadTargets(
+          roundActions,
+          round,
+          index,
+          nextDeadTargetIndices,
+        ),
+        round,
+        index,
+        nextSpawnedTargetIndices,
+      )
+
+      onChange(
+        rebuildRecorderTargetSwitches(
+          next,
+          availableTargetIndices,
+          RECORDER_CENTER_TARGET_INDEX,
+        ),
+      )
+    },
+    [availableTargetIndices, onChange, roundActions],
+  )
+
   const handleHide = useCallback(() => {
     setVisible(false)
   }, [])
@@ -1091,36 +1248,198 @@ export function FloatingActionRecorder({
         {item.deadTargetIndices.map((deadTargetIndex) => {
           const deadTargetLabel = getRecorderTargetLabel(deadTargetIndex)
           return (
-            <button
+            <Popover2
               key={deadTargetIndex}
-              type="button"
-              className="ml-0.5 inline-flex h-4 max-w-full shrink-0 cursor-pointer items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-sm border border-rose-300 bg-rose-50 px-1 text-[9px] font-semibold leading-none text-rose-700 transition hover:border-rose-500 hover:bg-rose-100 dark:border-rose-500/60 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:border-rose-400 dark:hover:bg-rose-500/25"
-              title={`第 ${round} 回合第 ${item.order} 个动作后，${deadTargetLabel} 号位死亡；点击移除`}
-              aria-label={`移除第 ${round} 回合第 ${item.order} 个动作后的 ${deadTargetLabel} 号位死亡标记`}
-              onClick={() =>
-                handleToggleTokenDeath(round, item.index, deadTargetIndex)
+              minimal
+              placement="top"
+              portalClassName="z-[1600]"
+              popoverClassName="[&>.bp4-popover2-content]:!p-0 overflow-hidden"
+              content={
+                <div className="flex items-center gap-0.5 p-0.5">
+                  <span className="px-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-200">
+                    死亡
+                  </span>
+                  {allTargetLegend
+                    .filter(
+                      ({ targetIndex: choiceIndex }) =>
+                        choiceIndex !== RECORDER_CENTER_TARGET_INDEX,
+                    )
+                    .map(({ targetIndex: choiceIndex, label }) => {
+                      const selected = choiceIndex === deadTargetIndex
+                      return (
+                        <button
+                          key={choiceIndex}
+                          type="button"
+                          title={`改为${label}号位死亡`}
+                          aria-pressed={selected}
+                          className={clsx(
+                            Classes.POPOVER_DISMISS,
+                            'inline-flex h-6 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
+                            selected
+                              ? 'border-rose-400 bg-rose-100 text-rose-700 dark:border-rose-500 dark:bg-rose-500/25 dark:text-rose-100'
+                              : 'border-slate-300 bg-white text-slate-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-rose-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-200',
+                          )}
+                          onClick={() =>
+                            handleChangeTokenDeathTarget(
+                              round,
+                              item.index,
+                              deadTargetIndex,
+                              choiceIndex,
+                            )
+                          }
+                        >
+                          死{label}
+                        </button>
+                      )
+                    })}
+                  <button
+                    type="button"
+                    title="改为出现标记"
+                    className={clsx(
+                      Classes.POPOVER_DISMISS,
+                      'inline-flex h-6 min-w-10 items-center justify-center rounded-sm border border-cyan-300 bg-cyan-50 px-1 text-[10px] font-semibold text-cyan-700 transition hover:border-cyan-400 hover:bg-cyan-100 dark:border-cyan-500/70 dark:bg-cyan-500/15 dark:text-cyan-200 dark:hover:border-cyan-400 dark:hover:bg-cyan-500/25',
+                    )}
+                    onClick={() =>
+                      handleChangeTokenMarkerType(
+                        round,
+                        item.index,
+                        deadTargetIndex,
+                        'spawn',
+                      )
+                    }
+                  >
+                    改出现
+                  </button>
+                  <Button
+                    small
+                    minimal
+                    intent="danger"
+                    className={clsx(
+                      Classes.POPOVER_DISMISS,
+                      '!h-6 !min-h-6 !w-7 !min-w-7 !p-0 !text-[10px] !font-semibold',
+                    )}
+                    title="删除死亡标记"
+                    onClick={() =>
+                      handleToggleTokenDeath(
+                        round,
+                        item.index,
+                        deadTargetIndex,
+                      )
+                    }
+                  >
+                    删
+                  </Button>
+                </div>
               }
             >
-              {deadTargetLabel}死亡
-            </button>
+              <button
+                type="button"
+                className="ml-0.5 inline-flex h-4 max-w-full shrink-0 cursor-pointer items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-sm border border-rose-300 bg-rose-50 px-1 text-[9px] font-semibold leading-none text-rose-700 transition hover:border-rose-500 hover:bg-rose-100 dark:border-rose-500/60 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:border-rose-400 dark:hover:bg-rose-500/25"
+                title={`第 ${round} 回合第 ${item.order} 个动作后，${deadTargetLabel} 号位死亡；点击编辑`}
+                aria-label={`编辑第 ${round} 回合第 ${item.order} 个动作后的 ${deadTargetLabel} 号位死亡标记`}
+              >
+                {deadTargetLabel}死亡
+              </button>
+            </Popover2>
           )
         })}
         {item.spawnedTargetIndices.map((spawnedTargetIndex) => {
           const spawnedTargetLabel =
             getRecorderTargetLabel(spawnedTargetIndex)
           return (
-            <button
+            <Popover2
               key={spawnedTargetIndex}
-              type="button"
-              className="ml-0.5 inline-flex h-4 max-w-full shrink-0 cursor-pointer items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-sm border border-cyan-300 bg-cyan-50 px-1 text-[9px] font-semibold leading-none text-cyan-700 transition hover:border-cyan-500 hover:bg-cyan-100 dark:border-cyan-500/60 dark:bg-cyan-500/15 dark:text-cyan-200 dark:hover:border-cyan-400 dark:hover:bg-cyan-500/25"
-              title={`第 ${round} 回合第 ${item.order} 个动作后，${spawnedTargetLabel} 号位出现；点击移除`}
-              aria-label={`移除第 ${round} 回合第 ${item.order} 个动作后的 ${spawnedTargetLabel} 号位出现标记`}
-              onClick={() =>
-                handleToggleTokenSpawn(round, item.index, spawnedTargetIndex)
+              minimal
+              placement="top"
+              portalClassName="z-[1600]"
+              popoverClassName="[&>.bp4-popover2-content]:!p-0 overflow-hidden"
+              content={
+                <div className="flex items-center gap-0.5 p-0.5">
+                  <span className="px-0.5 text-[10px] font-medium text-cyan-700 dark:text-cyan-200">
+                    出现
+                  </span>
+                  {allTargetLegend
+                    .filter(
+                      ({ targetIndex: choiceIndex }) =>
+                        choiceIndex !== RECORDER_CENTER_TARGET_INDEX,
+                    )
+                    .map(({ targetIndex: choiceIndex, label }) => {
+                      const selected = choiceIndex === spawnedTargetIndex
+                      return (
+                        <button
+                          key={choiceIndex}
+                          type="button"
+                          title={`改为${label}号位出现`}
+                          aria-pressed={selected}
+                          className={clsx(
+                            Classes.POPOVER_DISMISS,
+                            'inline-flex h-6 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
+                            selected
+                              ? 'border-cyan-400 bg-cyan-100 text-cyan-700 dark:border-cyan-500 dark:bg-cyan-500/25 dark:text-cyan-100'
+                              : 'border-slate-300 bg-white text-slate-600 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-cyan-500 dark:hover:bg-cyan-500/10 dark:hover:text-cyan-200',
+                          )}
+                          onClick={() =>
+                            handleChangeTokenSpawnTarget(
+                              round,
+                              item.index,
+                              spawnedTargetIndex,
+                              choiceIndex,
+                            )
+                          }
+                        >
+                          加{label}
+                        </button>
+                      )
+                    })}
+                  <button
+                    type="button"
+                    title="改为死亡标记"
+                    className={clsx(
+                      Classes.POPOVER_DISMISS,
+                      'inline-flex h-6 min-w-10 items-center justify-center rounded-sm border border-rose-300 bg-rose-50 px-1 text-[10px] font-semibold text-rose-700 transition hover:border-rose-400 hover:bg-rose-100 dark:border-rose-500/70 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:border-rose-400 dark:hover:bg-rose-500/25',
+                    )}
+                    onClick={() =>
+                      handleChangeTokenMarkerType(
+                        round,
+                        item.index,
+                        spawnedTargetIndex,
+                        'dead',
+                      )
+                    }
+                  >
+                    改死亡
+                  </button>
+                  <Button
+                    small
+                    minimal
+                    intent="danger"
+                    className={clsx(
+                      Classes.POPOVER_DISMISS,
+                      '!h-6 !min-h-6 !w-7 !min-w-7 !p-0 !text-[10px] !font-semibold',
+                    )}
+                    title="删除出现标记"
+                    onClick={() =>
+                      handleToggleTokenSpawn(
+                        round,
+                        item.index,
+                        spawnedTargetIndex,
+                      )
+                    }
+                  >
+                    删
+                  </Button>
+                </div>
               }
             >
-              {spawnedTargetLabel}出现
-            </button>
+              <button
+                type="button"
+                className="ml-0.5 inline-flex h-4 max-w-full shrink-0 cursor-pointer items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-sm border border-cyan-300 bg-cyan-50 px-1 text-[9px] font-semibold leading-none text-cyan-700 transition hover:border-cyan-500 hover:bg-cyan-100 dark:border-cyan-500/60 dark:bg-cyan-500/15 dark:text-cyan-200 dark:hover:border-cyan-400 dark:hover:bg-cyan-500/25"
+                title={`第 ${round} 回合第 ${item.order} 个动作后，${spawnedTargetLabel} 号位出现；点击编辑`}
+                aria-label={`编辑第 ${round} 回合第 ${item.order} 个动作后的 ${spawnedTargetLabel} 号位出现标记`}
+              >
+                {spawnedTargetLabel}出现
+              </button>
+            </Popover2>
           )
         })}
       </span>
