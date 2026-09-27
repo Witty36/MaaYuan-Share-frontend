@@ -59,6 +59,19 @@ interface FloatingActionRecorderProps {
   onChange: (next: RoundActionsInput) => void
 }
 
+interface RecorderEnemyEventSummary {
+  round: number
+  order: number
+  actionLabel: string
+  type: 'dead' | 'spawn'
+}
+
+interface RecorderEnemyEventSummaryGroup {
+  targetIndex: number
+  label: string
+  events: RecorderEnemyEventSummary[]
+}
+
 const HEADER_CLASS = 'action-recorder-header'
 const MIN_WIDTH = 320
 const MIN_HEIGHT = 420
@@ -345,6 +358,62 @@ export function FloatingActionRecorder({
         }
       }),
     [roundActions, maxRound, showTargetSwitches],
+  )
+  const enemyEventSummaries = useMemo(() => {
+    const summaries: RecorderEnemyEventSummaryGroup[] =
+      RECORDER_TARGET_INDICES.slice(1).map((targetIndex) => ({
+        targetIndex,
+        label: getRecorderTargetLabel(targetIndex),
+        events: [],
+      }))
+    const summariesByTargetIndex = new Map(
+      summaries.map((summary) => [summary.targetIndex, summary]),
+    )
+
+    getRecorderRoundNumbers(roundActions).forEach((round) => {
+      const groups = groupRecorderRoundActions(roundActions, round)
+      const items = Object.values(groups.slots)
+        .flat()
+        .filter((item) => isRecorderAttackToken(item.token))
+        .sort((a, b) => a.index - b.index)
+
+      items.forEach((item, itemIndex) => {
+        const order = itemIndex + 1
+        const actionLabel = `${
+          slotAssignments?.[item.display.slot]?.name?.trim() ||
+          `${item.display.slot}号位`
+        }${formatRecorderRoundItem({ ...item, order })}`
+        const events: RecorderEnemyEventSummary[] = [
+          ...item.deadTargetIndices.map((targetIndex) => ({
+            targetIndex,
+            type: 'dead' as const,
+          })),
+          ...item.spawnedTargetIndices.map((targetIndex) => ({
+            targetIndex,
+            type: 'spawn' as const,
+          })),
+        ]
+
+        events.forEach(({ targetIndex, type }) => {
+          const summary = summariesByTargetIndex.get(targetIndex)
+          if (!summary) {
+            return
+          }
+          summary.events.push({
+            round,
+            order,
+            actionLabel,
+            type,
+          })
+        })
+      })
+    })
+
+    return summaries
+  }, [roundActions, slotAssignments])
+  const enemyEventSummaryCount = enemyEventSummaries.reduce(
+    (total, summary) => total + summary.events.length,
+    0,
   )
   const activeTargetIndicesForCurrentRound = useMemo(
     () =>
@@ -1659,24 +1728,95 @@ export function FloatingActionRecorder({
                       },
                     )}
                   </div>
-                  <Button
-                    minimal
-                    small
-                    active={showEnemyEvents}
-                    icon={showEnemyEvents ? 'eye-open' : 'eye-off'}
-                    title="在当前录制表中显示或隐藏敌方存活状态标记"
-                    className={clsx(
-                      '!ml-auto !text-[10px]',
-                      showEnemyEvents &&
-                        '!bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_18%,var(--maayuan-surface,#faf5ff))] !text-[var(--maayuan-text-strong,#4c1d95)] dark:!border dark:!border-violet-500/50 dark:!bg-violet-500/20 dark:!text-violet-100 dark:hover:!bg-violet-500/30',
-                    )}
-                    onClick={() =>
-                      setShowEnemyEvents((current) => !current)
-                    }
-                  >
-                    <span className="font-semibold">敌方</span>
-                    存活状态
-                  </Button>
+                  <div className="ml-auto grid w-[112px] gap-1">
+                    <Button
+                      minimal
+                      small
+                      active={showEnemyEvents}
+                      icon={showEnemyEvents ? 'eye-open' : 'eye-off'}
+                      title="在当前录制表中显示或隐藏敌方存活状态标记"
+                      className={clsx(
+                        '!w-full !justify-start !text-[10px]',
+                        showEnemyEvents &&
+                          '!bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_18%,var(--maayuan-surface,#faf5ff))] !text-[var(--maayuan-text-strong,#4c1d95)] dark:!border dark:!border-violet-500/50 dark:!bg-violet-500/20 dark:!text-violet-100 dark:hover:!bg-violet-500/30',
+                      )}
+                      onClick={() =>
+                        setShowEnemyEvents((current) => !current)
+                      }
+                    >
+                      <span className="font-semibold">敌方</span>
+                      存活状态
+                    </Button>
+                    <Popover2
+                      placement="bottom-end"
+                      portalClassName="z-[1600]"
+                      popoverClassName="[&>.bp4-popover2-content]:!p-0 overflow-hidden"
+                      content={
+                        <div className="flex max-h-[60vh] w-[272px] flex-col overflow-hidden rounded-md border border-slate-200 bg-white text-slate-700 shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                          <div className="flex flex-none items-center justify-between border-b border-slate-200 bg-slate-50 px-2.5 py-1.5 dark:border-slate-700 dark:bg-slate-800">
+                            <span className="text-[11px] font-semibold">
+                              敌方情况
+                            </span>
+                            <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                              共 {enemyEventSummaryCount} 处变化
+                            </span>
+                          </div>
+                          <div className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto overscroll-contain dark:divide-slate-800">
+                            {enemyEventSummaries.map((summary) => (
+                              <div
+                                key={summary.targetIndex}
+                                className="grid grid-cols-[42px_1fr] gap-2 px-2.5 py-2"
+                              >
+                                <span className="pt-0.5 text-[10px] font-semibold text-slate-600 dark:text-slate-300">
+                                  {summary.label}号位
+                                </span>
+                                <div className="flex flex-wrap gap-1">
+                                  {summary.events.length > 0 ? (
+                                    summary.events.map((event, index) => (
+                                      <span
+                                        key={`${event.round}-${event.order}-${event.type}-${index}`}
+                                        className={clsx(
+                                          'inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-[10px] leading-none',
+                                          event.type === 'dead'
+                                            ? 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/50 dark:bg-rose-500/10 dark:text-rose-200'
+                                            : 'border-cyan-200 bg-cyan-50 text-cyan-700 dark:border-cyan-500/50 dark:bg-cyan-500/10 dark:text-cyan-200',
+                                        )}
+                                      >
+                                        <span>第{event.round}回合 ·</span>
+                                        <span title={`第${event.order}动作`}>
+                                          {event.actionLabel}
+                                        </span>
+                                        <span className="font-semibold">
+                                          {event.type === 'dead'
+                                            ? '死亡'
+                                            : '出现'}
+                                        </span>
+                                      </span>
+                                    ))
+                                  ) : (
+                                    <span className="pt-0.5 text-[10px] text-slate-400 dark:text-slate-500">
+                                      无变化
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      }
+                    >
+                      <Button
+                        minimal
+                        small
+                        className="!w-full !justify-start !text-[10px]"
+                        title="查看敌方死亡与出现情况"
+                        icon="menu"
+                      >
+                        <span className="font-semibold">敌方</span>
+                        情况
+                      </Button>
+                    </Popover2>
+                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-5 gap-1">
