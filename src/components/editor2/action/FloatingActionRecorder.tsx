@@ -265,6 +265,7 @@ export function FloatingActionRecorder({
     RECORDER_CENTER_TARGET_INDEX,
   )
   const [showTargetSwitches, setShowTargetSwitches] = useState(true)
+  const [showEnemyEvents, setShowEnemyEvents] = useState(true)
   const [currentRound, setCurrentRound] = useState(() =>
     getNextRecorderRound(roundActions),
   )
@@ -1245,7 +1246,9 @@ export function FloatingActionRecorder({
             {formatRecorderRoundItem(item)}
           </button>
         </Popover2>
-        {item.deadTargetIndices.map((deadTargetIndex) => {
+        {showEnemyEvents ? (
+          <>
+            {item.deadTargetIndices.map((deadTargetIndex) => {
           const deadTargetLabel = getRecorderTargetLabel(deadTargetIndex)
           return (
             <Popover2
@@ -1342,8 +1345,8 @@ export function FloatingActionRecorder({
               </button>
             </Popover2>
           )
-        })}
-        {item.spawnedTargetIndices.map((spawnedTargetIndex) => {
+            })}
+            {item.spawnedTargetIndices.map((spawnedTargetIndex) => {
           const spawnedTargetLabel =
             getRecorderTargetLabel(spawnedTargetIndex)
           return (
@@ -1441,7 +1444,9 @@ export function FloatingActionRecorder({
               </button>
             </Popover2>
           )
-        })}
+            })}
+          </>
+        ) : null}
       </span>
     )
   }
@@ -1654,6 +1659,24 @@ export function FloatingActionRecorder({
                       },
                     )}
                   </div>
+                  <Button
+                    minimal
+                    small
+                    active={showEnemyEvents}
+                    icon={showEnemyEvents ? 'eye-open' : 'eye-off'}
+                    title="在当前录制表中显示或隐藏敌方存活状态标记"
+                    className={clsx(
+                      '!ml-auto !text-[10px]',
+                      showEnemyEvents &&
+                        '!bg-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_18%,var(--maayuan-surface,#faf5ff))] !text-[var(--maayuan-text-strong,#4c1d95)] dark:!border dark:!border-violet-500/50 dark:!bg-violet-500/20 dark:!text-violet-100 dark:hover:!bg-violet-500/30',
+                    )}
+                    onClick={() =>
+                      setShowEnemyEvents((current) => !current)
+                    }
+                  >
+                    <span className="font-semibold">敌方</span>
+                    存活状态
+                  </Button>
                 </div>
               </div>
               <div className="grid grid-cols-5 gap-1">
