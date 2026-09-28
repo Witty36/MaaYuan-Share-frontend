@@ -8,6 +8,10 @@ import {
   formatRecorderRoundItem,
   getNextRecorderRound,
   getRecorderRoundNumbers,
+  getRecorderTargetGridPosition,
+  getRecorderTargetRotation,
+  getRecorderTargetSwitchPath,
+  getRotatedRecorderTargetGridPosition,
   groupRecorderRoundActions,
   removeRecorderToken,
 } from './recordingUtils'
@@ -95,6 +99,55 @@ describe('recordingUtils', () => {
     expect(describeRecorderToken('额外:右侧目标')).toEqual({
       area: 'extra',
       label: '右侧目标',
+    })
+  })
+
+  describe('standing grid rotation', () => {
+    it('keeps label 0 at the center by default', () => {
+      expect(getRecorderTargetRotation(1)).toBe(0)
+      expect(getRecorderTargetGridPosition(1)).toEqual({
+        column: 3,
+        row: 2,
+      })
+    })
+
+    it('rotates a clicked target into the center and keeps the ring order', () => {
+      const label3TargetIndex = 4
+      const rotation = getRecorderTargetRotation(label3TargetIndex)
+
+      expect(rotation).toBe(3)
+      expect(
+        getRotatedRecorderTargetGridPosition(label3TargetIndex, rotation),
+      ).toEqual({ column: 3, row: 2 })
+      expect(getRotatedRecorderTargetGridPosition(5, rotation)).toEqual({
+        column: 5,
+        row: 2,
+      })
+      expect(getRotatedRecorderTargetGridPosition(1, rotation)).toEqual({
+        column: 4,
+        row: 1,
+      })
+      expect(getRotatedRecorderTargetGridPosition(2, rotation)).toEqual({
+        column: 2,
+        row: 1,
+      })
+      expect(getRotatedRecorderTargetGridPosition(3, rotation)).toEqual({
+        column: 1,
+        row: 2,
+      })
+    })
+
+    it('resets to center rotation for unknown target indices', () => {
+      expect(getRecorderTargetRotation(6)).toBe(0)
+    })
+
+    it('builds a path that matches the automatic target switches', () => {
+      const targetIndices = [1, 2, 3, 4, 5]
+
+      expect(getRecorderTargetSwitchPath(5, 1, targetIndices)).toEqual([1])
+      expect(getRecorderTargetSwitchPath(5, 2, targetIndices)).toEqual([1, 2])
+      expect(getRecorderTargetSwitchPath(5, 3, targetIndices)).toEqual([4, 3])
+      expect(getRecorderTargetSwitchPath(3, 3, targetIndices)).toEqual([])
     })
   })
 

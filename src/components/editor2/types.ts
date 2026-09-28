@@ -106,6 +106,29 @@ type GenerateEditorAction<T extends CopilotDocV1.Action> = T extends never
         WithId<{
           intermediatePreDelay?: number;
           intermediatePostDelay?: number;
+          /**
+           * 快速录制悬浮窗使用的目标位标记（仅编辑器内部使用，不导出）。
+           */
+          recorderTargetIndex?: number;
+          /**
+           * 标记该左右切换动作是由快速录制自动生成的。
+           */
+          recorderAutomaticTargetSwitch?: boolean;
+          /**
+           * 该动作完成后死亡的敌人目标位（仅编辑器内部使用，不导出）。
+           */
+          recorderDeadTargetIndices?: number[];
+          /**
+           * 敌人死亡后游戏自动切换到的主位（仅编辑器内部使用，不导出）。
+           */
+          recorderDeadTargetFallbacks?: Array<{
+            deadTargetIndex: number;
+            fallbackTargetIndex: number;
+          }>;
+          /**
+           * 该动作完成后出现的敌人目标位（仅编辑器内部使用，不导出）。
+           */
+          recorderSpawnedTargetIndices?: number[];
         }>
     >;
 

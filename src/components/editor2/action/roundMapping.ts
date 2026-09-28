@@ -1,6 +1,18 @@
 import { CopilotDocV1 } from "../../../models/copilot.schema";
 import { createAction } from "../factories";
 import { EditorAction } from "../types";
+import {
+  getRecorderDeadTargetFallbacks,
+  getRecorderSpawnedTargetIndices,
+  getRecorderDeadTargetIndices,
+  isRecorderAutomaticTargetSwitchMetadata,
+  parseRecorderDeadTargetFallbackMetadata,
+  parseRecorderSpawnedTargetMetadata,
+  parseRecorderDeadTargetMetadata,
+  parseRecorderTargetMetadata,
+  serializeRecorderDeadTargetFallbackMetadata,
+} from "./recordingUtils";
+import type { RecorderDeadTargetFallback } from "./recordingUtils";
 
 export type RoundActionsInput = Record<string, string[][]>;
 
@@ -12,6 +24,11 @@ export interface ParsedRoundAction {
   kind: ParsedTokenKind;
   slot?: number;
   payload?: number | string;
+  targetIndex?: number;
+  deadTargetIndices?: number[];
+  deadTargetFallbacks?: RecorderDeadTargetFallback[];
+  spawnedTargetIndices?: number[];
+  automaticTargetSwitch?: boolean;
 }
 
 type ParsedTokenKind =
@@ -75,11 +92,30 @@ export function parseRoundActions(input: RoundActionsInput): ParsedRoundAction[]
         const raw = Array.isArray(entry) ? entry : [String(entry)];
         const token = String(raw[0] ?? "").trim();
         const parsedToken = parseToken(token);
+        const metadata = raw.slice(1);
+        const deadTargetIndices = getRecorderDeadTargetIndices(metadata);
+        const deadTargetFallbacks = Array.from(
+          getRecorderDeadTargetFallbacks(metadata).entries(),
+        ).map(([deadTargetIndex, fallbackTargetIndex]) => ({
+          deadTargetIndex,
+          fallbackTargetIndex,
+        }));
+        const spawnedTargetIndices =
+          getRecorderSpawnedTargetIndices(metadata);
         return {
           round,
           order: index,
           token,
           raw,
+          targetIndex: metadata
+            .map((value) => parseRecorderTargetMetadata(value))
+            .find((value) => value !== undefined),
+          deadTargetIndices,
+          deadTargetFallbacks,
+          spawnedTargetIndices,
+          automaticTargetSwitch: metadata.some((value) =>
+            isRecorderAutomaticTargetSwitchMetadata(value),
+          ),
           ...parsedToken,
         };
       });
@@ -94,7 +130,43 @@ export function roundActionsToEditorActions(
   options?: MappingOptions,
 ): EditorAction[] {
   const parsed = parseRoundActions(input);
-  return parsed.map((item) => mapParsedAction(item, options));
+  return parsed.map((item) =>
+    appendRecorderMetadataToAction(mapParsedAction(item, options), item),
+  );
+}
+
+function appendRecorderMetadataToAction(
+  action: EditorAction,
+  parsed: ParsedRoundAction,
+): EditorAction {
+  if (
+    parsed.targetIndex === undefined &&
+    !parsed.automaticTargetSwitch &&
+    !parsed.deadTargetIndices?.length &&
+    !parsed.deadTargetFallbacks?.length &&
+    !parsed.spawnedTargetIndices?.length
+  ) {
+    return action;
+  }
+
+  return {
+    ...action,
+    ...(parsed.targetIndex === undefined
+      ? {}
+      : { recorderTargetIndex: parsed.targetIndex }),
+    ...(parsed.automaticTargetSwitch
+      ? { recorderAutomaticTargetSwitch: true }
+      : {}),
+    ...(parsed.deadTargetIndices?.length
+      ? { recorderDeadTargetIndices: parsed.deadTargetIndices }
+      : {}),
+    ...(parsed.deadTargetFallbacks?.length
+      ? { recorderDeadTargetFallbacks: parsed.deadTargetFallbacks }
+      : {}),
+    ...(parsed.spawnedTargetIndices?.length
+      ? { recorderSpawnedTargetIndices: parsed.spawnedTargetIndices }
+      : {}),
+  };
 }
 
 /**
@@ -408,14 +480,52 @@ export function editorActionsToRoundActions(actions: EditorAction[]): RoundActio
   let fallbackRound = 1;
 
   actions.forEach((action) => {
-    const meta = extractMetadataFromDoc(action.doc);
+    const legacyMeta = extractMetadataFromDoc(action.doc);
+    const meta = {
+      ...legacyMeta,
+      targetIndex: action.recorderTargetIndex ?? legacyMeta.targetIndex,
+      deadTargetIndices:
+        action.recorderDeadTargetIndices ?? legacyMeta.deadTargetIndices ?? [],
+      deadTargetFallbacks:
+        action.recorderDeadTargetFallbacks ??
+        legacyMeta.deadTargetFallbacks ??
+        [],
+      spawnedTargetIndices:
+        action.recorderSpawnedTargetIndices ??
+        legacyMeta.spawnedTargetIndices ??
+        [],
+      automaticTargetSwitch:
+        action.recorderAutomaticTargetSwitch ??
+        legacyMeta.automaticTargetSwitch,
+    };
     const round = meta.round ?? fallbackRound;
     const token = meta.token ?? guessTokenFromAction(action);
     const roundKey = String(round);
     if (!result[roundKey]) {
       result[roundKey] = [];
     }
-    result[roundKey].push([token]);
+    const entry = [token];
+    if (meta.targetIndex !== undefined) {
+      entry.push(`目标位:${meta.targetIndex}`);
+    }
+    if (meta.automaticTargetSwitch) {
+      entry.push("自动切换");
+    }
+    for (const targetIndex of meta.deadTargetIndices) {
+      entry.push(`敌人死亡:${targetIndex}`);
+    }
+    for (const fallback of meta.deadTargetFallbacks) {
+      entry.push(
+        serializeRecorderDeadTargetFallbackMetadata(
+          fallback.deadTargetIndex,
+          fallback.fallbackTargetIndex,
+        ),
+      );
+    }
+    for (const targetIndex of meta.spawnedTargetIndices) {
+      entry.push(`敌人出现:${targetIndex}`);
+    }
+    result[roundKey].push(entry);
     fallbackRound = round;
   });
 
@@ -424,7 +534,13 @@ export function editorActionsToRoundActions(actions: EditorAction[]): RoundActio
       .sort(([a], [b]) => Number(a) - Number(b))
       .map(([roundKey, entries]) => [
         roundKey,
-        entries.filter((entry) => entry && entry[0]?.trim()).map((entry) => [entry[0].trim()]),
+        entries
+          .filter((entry) => entry && entry[0]?.trim())
+          .map((entry) =>
+            entry.map((value, index) =>
+              index === 0 ? value.trim() : value.trim(),
+            ),
+          ),
       ]),
   );
 }
@@ -434,10 +550,36 @@ function extractMetadataFromDoc(doc?: string) {
     return {};
   }
   const roundMatch = doc.match(/第(\d+)回合·动作(\d+)/);
-  const tokenMatch = doc.match(/\[([^\]]+)\]\s*$/);
+  const bracketMatches = doc.match(/\[([^\]]+)\]/g) ?? [];
+  const bracketValues = bracketMatches.map((match) => match.slice(1, -1).trim());
+  const token = bracketValues.find(
+    (value) =>
+      parseRecorderTargetMetadata(value) === undefined &&
+      parseRecorderDeadTargetMetadata(value) === undefined &&
+      parseRecorderDeadTargetFallbackMetadata(value) === undefined &&
+      parseRecorderSpawnedTargetMetadata(value) === undefined &&
+      !isRecorderAutomaticTargetSwitchMetadata(value),
+  );
   return {
     round: roundMatch ? Number(roundMatch[1]) : undefined,
-    token: tokenMatch ? tokenMatch[1].trim() : undefined,
+    token,
+    targetIndex: bracketValues
+      .map((value) => parseRecorderTargetMetadata(value))
+      .find((value) => value !== undefined),
+    deadTargetIndices: bracketValues
+      .map((value) => parseRecorderDeadTargetMetadata(value))
+      .filter((value): value is number => value !== undefined),
+    deadTargetFallbacks: bracketValues
+      .map((value) => parseRecorderDeadTargetFallbackMetadata(value))
+      .filter(
+        (value): value is RecorderDeadTargetFallback => value !== undefined,
+      ),
+    spawnedTargetIndices: bracketValues
+      .map((value) => parseRecorderSpawnedTargetMetadata(value))
+      .filter((value): value is number => value !== undefined),
+    automaticTargetSwitch: bracketValues.some((value) =>
+      isRecorderAutomaticTargetSwitchMetadata(value),
+    ),
   };
 }
 
