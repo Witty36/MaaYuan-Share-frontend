@@ -9,7 +9,14 @@ import {
 import { Popover2 } from '@blueprintjs/popover2'
 
 import clsx from 'clsx'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { Rnd } from 'react-rnd'
 import { useWindowSize } from 'react-use'
@@ -37,6 +44,7 @@ import {
   isRecorderAutomaticTargetSwitchMetadata,
   rebuildRecorderTargetSwitches,
   removeRecorderToken,
+  setRecorderTokenDeadTargetFallback,
   setRecorderTokenDeadTargets,
   setRecorderTokenSpawnedTargets,
   setRecorderTokenTarget,
@@ -279,6 +287,15 @@ export function FloatingActionRecorder({
   >(null)
   const [showTargetSwitches, setShowTargetSwitches] = useState(true)
   const [showEnemyEvents, setShowEnemyEvents] = useState(true)
+  const [targetRemovalDialogIndex, setTargetRemovalDialogIndex] = useState<
+    number | null
+  >(null)
+  const [targetRemovalFallbackIndex, setTargetRemovalFallbackIndex] = useState<
+    number | null
+  >(null)
+  const [targetRemovalDialogAnchorX, setTargetRemovalDialogAnchorX] = useState<
+    number | null
+  >(null)
   const [currentRound, setCurrentRound] = useState(() =>
     getNextRecorderRound(roundActions),
   )
@@ -293,6 +310,7 @@ export function FloatingActionRecorder({
     : '!h-7 !min-h-[28px]'
   const recorderControlIconSize = isMobileRecorder ? 14 : 13
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const targetBoardRef = useRef<HTMLDivElement>(null)
   const pendingScrollRoundRef = useRef<number | null>(null)
   const targetSwitchTimerRef = useRef<number | null>(null)
   const targetSwitchSequenceRef = useRef(0)
@@ -449,6 +467,15 @@ export function FloatingActionRecorder({
       ),
     [availableTargetIndices, currentRound, roundActions],
   )
+  const targetRemovalFallbackOptions = useMemo(
+    () =>
+      targetRemovalDialogIndex === null
+        ? []
+        : activeTargetIndicesForCurrentRound.filter(
+            (targetIndex) => targetIndex !== targetRemovalDialogIndex,
+          ),
+    [activeTargetIndicesForCurrentRound, targetRemovalDialogIndex],
+  )
   useEffect(() => {
     if (activeTargetIndicesForCurrentRound.includes(selectedTargetIndex)) {
       return
@@ -466,6 +493,32 @@ export function FloatingActionRecorder({
     activeTargetIndicesForCurrentRound,
     cancelTargetSwitchAnimation,
     selectedTargetIndex,
+  ])
+
+  useLayoutEffect(() => {
+    if (targetRemovalDialogIndex === null) {
+      setTargetRemovalDialogAnchorX(null)
+      return
+    }
+
+    const board = targetBoardRef.current
+    const anchorParent = board?.offsetParent
+
+    if (!board || !(anchorParent instanceof HTMLElement)) {
+      return
+    }
+
+    const nextAnchorX = board.offsetLeft + board.offsetWidth / 2
+    setTargetRemovalDialogAnchorX((current) =>
+      current === nextAnchorX ? current : nextAnchorX,
+    )
+  }, [
+    isMobileRecorder,
+    size.height,
+    size.width,
+    targetRemovalDialogIndex,
+    windowHeight,
+    windowWidth,
   ])
 
   const allTargetLegend = useMemo(
@@ -503,6 +556,18 @@ export function FloatingActionRecorder({
 
   const handleSelectTarget = useCallback(
     (targetIndex: number) => {
+      if (targetRemovalDialogIndex !== null) {
+        if (
+          targetIndex === targetRemovalDialogIndex ||
+          !activeTargetIndicesForCurrentRound.includes(targetIndex)
+        ) {
+          return
+        }
+
+        setTargetRemovalFallbackIndex(targetIndex)
+        return
+      }
+
       cancelTargetSwitchAnimation()
 
       const currentTargetIndex =
@@ -553,6 +618,7 @@ export function FloatingActionRecorder({
       activeTargetIndicesForCurrentRound,
       cancelTargetSwitchAnimation,
       selectedTargetIndex,
+      targetRemovalDialogIndex,
       targetSwitchPreviewIndex,
     ],
   )
@@ -610,6 +676,10 @@ export function FloatingActionRecorder({
 
   const handleAddTarget = useCallback(
     (targetIndex: number) => {
+      if (targetRemovalDialogIndex !== null) {
+        return
+      }
+
       if (activeTargetIndicesForCurrentRound.includes(targetIndex)) {
         return
       }
@@ -645,7 +715,6 @@ export function FloatingActionRecorder({
             RECORDER_CENTER_TARGET_INDEX,
           ),
         )
-        setSelectedTargetIndex(targetIndex)
         return
       }
 
@@ -654,7 +723,6 @@ export function FloatingActionRecorder({
         targetIndex,
       ].sort((a, b) => a - b)
       setAvailableTargetIndices(nextTargetIndices)
-      setSelectedTargetIndex(targetIndex)
       onChange(
         rebuildRecorderTargetSwitches(
           roundActions,
@@ -670,15 +738,13 @@ export function FloatingActionRecorder({
       currentRound,
       onChange,
       roundActions,
+      targetRemovalDialogIndex,
     ],
   )
 
-  const handleRemoveTarget = useCallback(
-    (targetIndex: number) => {
-      if (
-        targetIndex === RECORDER_CENTER_TARGET_INDEX ||
-        !activeTargetIndicesForCurrentRound.includes(targetIndex)
-      ) {
+  const removeRecorderTarget = useCallback(
+    (targetIndex: number, fallbackTargetIndex?: number) => {
+      if (!activeTargetIndicesForCurrentRound.includes(targetIndex)) {
         return
       }
 
@@ -705,13 +771,26 @@ export function FloatingActionRecorder({
             targetIndex,
           ],
         )
+        const nextWithFallback =
+          fallbackTargetIndex === undefined
+            ? next
+            : setRecorderTokenDeadTargetFallback(
+                next,
+                anchor.round,
+                anchor.index,
+                targetIndex,
+                fallbackTargetIndex,
+              )
         onChange(
           rebuildRecorderTargetSwitches(
-            next,
+            nextWithFallback,
             availableTargetIndices,
             RECORDER_CENTER_TARGET_INDEX,
           ),
         )
+        if (fallbackTargetIndex !== undefined) {
+          setSelectedTargetIndex(fallbackTargetIndex)
+        }
         return
       }
 
@@ -723,7 +802,12 @@ export function FloatingActionRecorder({
       }
 
       setAvailableTargetIndices(nextTargetIndices)
-      if (selectedTargetIndex === targetIndex) {
+      if (
+        fallbackTargetIndex !== undefined &&
+        nextTargetIndices.includes(fallbackTargetIndex)
+      ) {
+        setSelectedTargetIndex(fallbackTargetIndex)
+      } else if (selectedTargetIndex === targetIndex) {
         setSelectedTargetIndex(
           getNearestRecorderTargetIndex(targetIndex, nextTargetIndices),
         )
@@ -746,6 +830,54 @@ export function FloatingActionRecorder({
       selectedTargetIndex,
     ],
   )
+
+  const handleRemoveTarget = useCallback(
+    (targetIndex: number, targetIsMain: boolean) => {
+      cancelTargetSwitchAnimation()
+
+      const fallbackTargetOptions = activeTargetIndicesForCurrentRound.filter(
+        (currentTargetIndex) => currentTargetIndex !== targetIndex,
+      )
+
+      if (targetIsMain && fallbackTargetOptions.length > 0) {
+        setTargetSwitchPreviewIndex(null)
+        setTargetRemovalFallbackIndex(null)
+        setTargetRemovalDialogIndex(targetIndex)
+        return
+      }
+
+      removeRecorderTarget(targetIndex)
+    },
+    [
+      activeTargetIndicesForCurrentRound,
+      cancelTargetSwitchAnimation,
+      removeRecorderTarget,
+    ],
+  )
+
+  const closeTargetRemovalDialog = useCallback(() => {
+    setTargetRemovalDialogIndex(null)
+    setTargetRemovalFallbackIndex(null)
+  }, [])
+
+  const handleConfirmTargetRemoval = useCallback(() => {
+    if (
+      targetRemovalDialogIndex === null ||
+      targetRemovalFallbackIndex === null
+    ) {
+      return
+    }
+
+    const targetIndex = targetRemovalDialogIndex
+    const fallbackTargetIndex = targetRemovalFallbackIndex
+    closeTargetRemovalDialog()
+    removeRecorderTarget(targetIndex, fallbackTargetIndex)
+  }, [
+    closeTargetRemovalDialog,
+    removeRecorderTarget,
+    targetRemovalDialogIndex,
+    targetRemovalFallbackIndex,
+  ])
 
   const handlePreviousRound = useCallback(() => {
     setCurrentRound((current) => Math.max(1, current - 1))
@@ -921,10 +1053,6 @@ export function FloatingActionRecorder({
 
   const handleToggleTokenDeath = useCallback(
     (round: number, index: number, targetIndex: number) => {
-      if (targetIndex === RECORDER_CENTER_TARGET_INDEX) {
-        return
-      }
-
       const entry = roundActions[String(round)]?.[index]
       const deadTargetIndices = getRecorderDeadTargetIndices(
         entry?.slice(1) ?? [],
@@ -954,10 +1082,6 @@ export function FloatingActionRecorder({
 
   const handleToggleTokenSpawn = useCallback(
     (round: number, index: number, targetIndex: number) => {
-      if (targetIndex === RECORDER_CENTER_TARGET_INDEX) {
-        return
-      }
-
       const entry = roundActions[String(round)]?.[index]
       const spawnedTargetIndices = getRecorderSpawnedTargetIndices(
         entry?.slice(1) ?? [],
@@ -993,10 +1117,7 @@ export function FloatingActionRecorder({
       fromTargetIndex: number,
       toTargetIndex: number,
     ) => {
-      if (
-        fromTargetIndex === toTargetIndex ||
-        toTargetIndex === RECORDER_CENTER_TARGET_INDEX
-      ) {
+      if (fromTargetIndex === toTargetIndex) {
         return
       }
 
@@ -1036,10 +1157,7 @@ export function FloatingActionRecorder({
       fromTargetIndex: number,
       toTargetIndex: number,
     ) => {
-      if (
-        fromTargetIndex === toTargetIndex ||
-        toTargetIndex === RECORDER_CENTER_TARGET_INDEX
-      ) {
+      if (fromTargetIndex === toTargetIndex) {
         return
       }
 
@@ -1080,10 +1198,6 @@ export function FloatingActionRecorder({
       targetIndex: number,
       nextType: 'dead' | 'spawn',
     ) => {
-      if (targetIndex === RECORDER_CENTER_TARGET_INDEX) {
-        return
-      }
-
       const entry = roundActions[String(round)]?.[index]
       const metadata = entry?.slice(1) ?? []
       const deadTargetIndices = getRecorderDeadTargetIndices(metadata)
@@ -1145,7 +1259,8 @@ export function FloatingActionRecorder({
 
   const handleHide = useCallback(() => {
     setVisible(false)
-  }, [])
+    closeTargetRemovalDialog()
+  }, [closeTargetRemovalDialog])
 
   if (!visible) {
     return createPortal(
@@ -1326,12 +1441,8 @@ export function FloatingActionRecorder({
                       <span className="text-[10px] text-slate-500 dark:text-slate-400">
                         死亡
                       </span>
-                      {allTargetLegend
-                        .filter(
-                          ({ targetIndex: choiceIndex }) =>
-                            choiceIndex !== RECORDER_CENTER_TARGET_INDEX,
-                        )
-                        .map(({ targetIndex: choiceIndex, label }) => {
+                      {allTargetLegend.map(
+                        ({ targetIndex: choiceIndex, label }) => {
                           const marked =
                             item.deadTargetIndices.includes(choiceIndex)
                           return (
@@ -1364,12 +1475,8 @@ export function FloatingActionRecorder({
                       <span className="text-[10px] text-slate-500 dark:text-slate-400">
                         出现
                       </span>
-                      {allTargetLegend
-                        .filter(
-                          ({ targetIndex: choiceIndex }) =>
-                            choiceIndex !== RECORDER_CENTER_TARGET_INDEX,
-                        )
-                        .map(({ targetIndex: choiceIndex, label }) => {
+                      {allTargetLegend.map(
+                        ({ targetIndex: choiceIndex, label }) => {
                           const marked =
                             item.spawnedTargetIndices.includes(choiceIndex)
                           return (
@@ -1444,12 +1551,8 @@ export function FloatingActionRecorder({
                   <span className="px-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-200">
                     死亡
                   </span>
-                  {allTargetLegend
-                    .filter(
-                      ({ targetIndex: choiceIndex }) =>
-                        choiceIndex !== RECORDER_CENTER_TARGET_INDEX,
-                    )
-                    .map(({ targetIndex: choiceIndex, label }) => {
+                  {allTargetLegend.map(
+                    ({ targetIndex: choiceIndex, label }) => {
                       const selected = choiceIndex === deadTargetIndex
                       return (
                         <button
@@ -1543,12 +1646,8 @@ export function FloatingActionRecorder({
                   <span className="px-0.5 text-[10px] font-medium text-cyan-700 dark:text-cyan-200">
                     出现
                   </span>
-                  {allTargetLegend
-                    .filter(
-                      ({ targetIndex: choiceIndex }) =>
-                        choiceIndex !== RECORDER_CENTER_TARGET_INDEX,
-                    )
-                    .map(({ targetIndex: choiceIndex, label }) => {
+                  {allTargetLegend.map(
+                    ({ targetIndex: choiceIndex, label }) => {
                       const selected = choiceIndex === spawnedTargetIndex
                       return (
                         <button
@@ -1780,6 +1879,7 @@ export function FloatingActionRecorder({
                     站位
                   </span>
                   <div
+                    ref={targetBoardRef}
                     className={clsx(
                       'relative',
                       isMobileRecorder
@@ -1802,6 +1902,9 @@ export function FloatingActionRecorder({
                           )
                         const selected =
                           targetIndex === visualSelectedTargetIndex
+                        const selectedForRemoval =
+                          targetRemovalDialogIndex !== null &&
+                          targetIndex === targetRemovalFallbackIndex
                         const isNeutralTarget = label === '0'
 
                         if (!isAvailable) {
@@ -1811,9 +1914,11 @@ export function FloatingActionRecorder({
                               type="button"
                               title={`出现 ${label} 号位`}
                               aria-label={`出现 ${label} 号位`}
+                              disabled={targetRemovalDialogIndex !== null}
                               style={positionStyle}
                               className={clsx(
                                 'absolute inline-flex items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-400 transition-colors hover:border-slate-500 hover:bg-slate-100 hover:text-slate-600 dark:border-slate-600 dark:text-slate-500 dark:hover:border-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300',
+                                'disabled:cursor-not-allowed disabled:opacity-35',
                                 isMobileRecorder ? 'h-10 w-10' : 'h-9 w-9',
                               )}
                               onClick={() => handleAddTarget(targetIndex)}
@@ -1837,8 +1942,14 @@ export function FloatingActionRecorder({
                           >
                             <button
                               type="button"
-                              aria-pressed={selected}
-                              title={`接下来录制的攻击动作标记为${label}`}
+                              aria-pressed={selected || selectedForRemoval}
+                              title={
+                                targetRemovalDialogIndex !== null
+                                  ? targetIndex === targetRemovalDialogIndex
+                                    ? `${label} 号位正在删除`
+                                    : `选择 ${label} 号位作为死亡后切换目标`
+                                  : `接下来录制的攻击动作标记为${label}`
+                              }
                               className={clsx(
                                 'inline-flex items-center justify-center rounded-full border font-semibold transition',
                                 isMobileRecorder
@@ -1847,35 +1958,37 @@ export function FloatingActionRecorder({
                                 isNeutralTarget
                                   ? TARGET_POSITION_NEUTRAL_CLASS
                                   : TARGET_POSITION_TONE_CLASS[label],
-                                selected &&
-                                  'font-semibold ring-2 ring-slate-700 ring-offset-1 ring-offset-slate-50 dark:ring-slate-100 dark:ring-offset-slate-800',
+                                selectedForRemoval
+                                  ? 'font-semibold ring-2 ring-[var(--maayuan-accent,#8b5cf6)] ring-offset-1 ring-offset-slate-50 dark:ring-offset-slate-800'
+                                  : selected &&
+                                      'font-semibold ring-2 ring-slate-700 ring-offset-1 ring-offset-slate-50 dark:ring-slate-100 dark:ring-offset-slate-800',
                               )}
                               onClick={() => handleSelectTarget(targetIndex)}
                             >
                               {label}
                             </button>
-                            {!isNeutralTarget ? (
-                              <button
-                                type="button"
-                                title={`移除 ${label} 号位`}
-                                aria-label={`移除 ${label} 号位`}
-                                className={clsx(
-                                  'absolute inline-flex items-center justify-center rounded-full border-white bg-rose-500 text-white shadow-sm transition hover:bg-rose-600 dark:border-slate-800',
-                                  isMobileRecorder
-                                    ? '-right-1.5 -top-1.5 h-5 w-5 border-2'
-                                    : '-right-0.5 -top-0.5 h-3.5 w-3.5 border',
-                                )}
-                                onClick={(event) => {
-                                  event.stopPropagation()
-                                  handleRemoveTarget(targetIndex)
-                                }}
-                              >
-                                <Icon
-                                  icon="cross"
-                                  size={isMobileRecorder ? 9 : 7}
-                                />
-                              </button>
-                            ) : null}
+                            <button
+                              type="button"
+                              title={`移除 ${label} 号位`}
+                              aria-label={`移除 ${label} 号位`}
+                              disabled={targetRemovalDialogIndex !== null}
+                              className={clsx(
+                                'absolute inline-flex items-center justify-center rounded-full border-white bg-rose-500 text-white shadow-sm transition hover:bg-rose-600 dark:border-slate-800',
+                                'disabled:cursor-not-allowed disabled:opacity-40',
+                                isMobileRecorder
+                                  ? '-right-1.5 -top-1.5 h-5 w-5 border-2'
+                                  : '-right-0.5 -top-0.5 h-3.5 w-3.5 border',
+                              )}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                handleRemoveTarget(targetIndex, selected)
+                              }}
+                            >
+                              <Icon
+                                icon="cross"
+                                size={isMobileRecorder ? 9 : 7}
+                              />
+                            </button>
                           </div>
                         )
                       },
@@ -2258,6 +2371,98 @@ export function FloatingActionRecorder({
             </Button>
           </div>
         </Card>
+        {targetRemovalDialogIndex !== null ? (
+          <div
+            role="dialog"
+            aria-modal="false"
+            aria-label={`删除 ${getRecorderTargetLabel(targetRemovalDialogIndex)} 号位`}
+            className={clsx(
+              'pointer-events-auto absolute z-30 -translate-x-1/2 overflow-hidden rounded-md border border-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_42%,var(--maayuan-surface,#faf5ff))] bg-[color-mix(in_srgb,var(--maayuan-surface,#fff)_97%,var(--maayuan-accent,#8b5cf6)_3%)] shadow-2xl dark:border-slate-600 dark:bg-slate-800',
+              isMobileRecorder ? 'bottom-14' : 'top-[190px]',
+            )}
+            style={{
+              left: targetRemovalDialogAnchorX ?? '50%',
+              width: isMobileRecorder
+                ? 'min(calc(100% - 16px), 200px)'
+                : 200,
+            }}
+          >
+            <div className="flex items-start gap-1.5 px-2.5 pb-1.5 pt-2">
+              <span className="mt-0.5 inline-flex h-5 w-5 flex-none items-center justify-center rounded-full bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">
+                <Icon icon="trash" size={10} />
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] font-semibold leading-4 text-[var(--maayuan-text-strong,#4c1d95)] dark:text-slate-100">
+                  删除 {getRecorderTargetLabel(targetRemovalDialogIndex)} 号位
+                </div>
+                <div className="text-[9px] leading-3 text-slate-500 dark:text-slate-400">
+                  选择敌人死亡后自动切换到的位置
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5 border-t border-slate-200/80 px-2.5 py-1.5 dark:border-slate-700">
+              <span className="flex-none text-[9px] font-medium text-slate-500 dark:text-slate-400">
+                切换至
+              </span>
+              <div className="flex min-w-0 flex-1 items-center justify-around gap-1">
+                {targetRemovalFallbackOptions.map((targetIndex) => {
+                  const label = getRecorderTargetLabel(targetIndex)
+                  const selected =
+                    targetIndex === targetRemovalFallbackIndex
+                  const isNeutralTarget = label === '0'
+
+                  return (
+                    <button
+                      key={targetIndex}
+                      type="button"
+                      aria-pressed={selected}
+                      title={`选择 ${label} 号位作为死亡后切换目标`}
+                      className={clsx(
+                        'inline-flex h-6 w-6 flex-none items-center justify-center rounded-full border text-[10px] font-semibold transition',
+                        selected
+                          ? isNeutralTarget
+                            ? TARGET_POSITION_NEUTRAL_CLASS
+                            : TARGET_POSITION_TONE_CLASS[label]
+                          : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900/40 dark:text-slate-300 dark:hover:border-slate-500 dark:hover:bg-slate-700',
+                        selected &&
+                          'ring-2 ring-[var(--maayuan-accent,#8b5cf6)] ring-offset-1 ring-offset-white dark:ring-offset-slate-800',
+                      )}
+                      onClick={() =>
+                        setTargetRemovalFallbackIndex(targetIndex)
+                      }
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-1.5 border-t border-slate-200/80 bg-slate-50/70 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/30">
+              <span className="text-[9px] text-slate-400 dark:text-slate-500">
+                也可直接点击上方站位
+              </span>
+              <div className="flex flex-none gap-1">
+                <Button
+                  small
+                  minimal
+                  className="!h-6 !min-h-6 !px-1.5 !text-[10px]"
+                  onClick={closeTargetRemovalDialog}
+                >
+                  取消
+                </Button>
+                <Button
+                  small
+                  intent="danger"
+                  className="!h-6 !min-h-6 !px-2 !text-[10px]"
+                  disabled={targetRemovalFallbackIndex === null}
+                  onClick={handleConfirmTargetRemoval}
+                >
+                  确认删除
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </Rnd>
     </div>,
     document.body,

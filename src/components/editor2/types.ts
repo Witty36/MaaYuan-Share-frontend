@@ -119,6 +119,13 @@ type GenerateEditorAction<T extends CopilotDocV1.Action> = T extends never
            */
           recorderDeadTargetIndices?: number[];
           /**
+           * 敌人死亡后游戏自动切换到的主位（仅编辑器内部使用，不导出）。
+           */
+          recorderDeadTargetFallbacks?: Array<{
+            deadTargetIndex: number;
+            fallbackTargetIndex: number;
+          }>;
+          /**
            * 该动作完成后出现的敌人目标位（仅编辑器内部使用，不导出）。
            */
           recorderSpawnedTargetIndices?: number[];

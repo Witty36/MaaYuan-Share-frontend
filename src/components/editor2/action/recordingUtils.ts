@@ -87,8 +87,14 @@ const BASE_ACTION_LABELS: Record<string, string> = {
 
 const RECORDER_TARGET_METADATA_PREFIX = '目标位:'
 const RECORDER_DEAD_TARGET_METADATA_PREFIX = '敌人死亡:'
+const RECORDER_DEAD_TARGET_FALLBACK_METADATA_PREFIX = '敌人死亡后主位:'
 const RECORDER_SPAWNED_TARGET_METADATA_PREFIX = '敌人出现:'
 export const RECORDER_AUTOMATIC_TARGET_SWITCH_METADATA = '自动切换'
+
+export interface RecorderDeadTargetFallback {
+  deadTargetIndex: number
+  fallbackTargetIndex: number
+}
 
 export function serializeRecorderTargetMetadata(
   targetIndex?: number,
@@ -128,6 +134,41 @@ export function getRecorderDeadTargetIndices(
         .filter((value): value is number => value !== undefined),
     ),
   ).sort((a, b) => a - b)
+}
+
+export function serializeRecorderDeadTargetFallbackMetadata(
+  deadTargetIndex: number,
+  fallbackTargetIndex: number,
+): string {
+  return `${RECORDER_DEAD_TARGET_FALLBACK_METADATA_PREFIX}${deadTargetIndex}>${fallbackTargetIndex}`
+}
+
+export function parseRecorderDeadTargetFallbackMetadata(
+  value?: string,
+): RecorderDeadTargetFallback | undefined {
+  const match = value?.trim().match(/^敌人死亡后主位:([1-5])>([1-5])$/)
+  if (!match) {
+    return undefined
+  }
+
+  const deadTargetIndex = Number(match[1])
+  const fallbackTargetIndex = Number(match[2])
+  return deadTargetIndex === fallbackTargetIndex
+    ? undefined
+    : { deadTargetIndex, fallbackTargetIndex }
+}
+
+export function getRecorderDeadTargetFallbacks(
+  metadata: readonly string[],
+): Map<number, number> {
+  const fallbacks = new Map<number, number>()
+  metadata.forEach((value) => {
+    const fallback = parseRecorderDeadTargetFallbackMetadata(value)
+    if (fallback) {
+      fallbacks.set(fallback.deadTargetIndex, fallback.fallbackTargetIndex)
+    }
+  })
+  return fallbacks
 }
 
 export function parseRecorderSpawnedTargetMetadata(
@@ -266,17 +307,85 @@ export function setRecorderTokenDeadTargets(
   )
     .sort((a, b) => a - b)
     .map((targetIndex) => `${RECORDER_DEAD_TARGET_METADATA_PREFIX}${targetIndex}`)
+  const deadTargetIndexSet = new Set(
+    deadTargetMetadata.map((value) => parseRecorderDeadTargetMetadata(value)),
+  )
+
+  result[key] = actions.map((action, actionIndex) =>
+    actionIndex === index
+      ? (() => {
+          const fallbackMetadata = Array.from(
+            getRecorderDeadTargetFallbacks(action.slice(1)).entries(),
+          )
+            .filter(
+              ([deadTargetIndex, fallbackTargetIndex]) =>
+                deadTargetIndexSet.has(deadTargetIndex) &&
+                deadTargetIndex !== fallbackTargetIndex &&
+                !deadTargetIndexSet.has(fallbackTargetIndex),
+            )
+            .map(([deadTargetIndex, fallbackTargetIndex]) =>
+              serializeRecorderDeadTargetFallbackMetadata(
+                deadTargetIndex,
+                fallbackTargetIndex,
+              ),
+            )
+
+          return [
+            action[0],
+            ...action
+              .slice(1)
+              .filter(
+                (value) =>
+                  parseRecorderDeadTargetMetadata(value) === undefined &&
+                  parseRecorderDeadTargetFallbackMetadata(value) === undefined,
+              ),
+            ...deadTargetMetadata,
+            ...fallbackMetadata,
+          ]
+        })()
+      : action,
+  )
+  return result
+}
+
+export function setRecorderTokenDeadTargetFallback(
+  input: RoundActionsInput,
+  round: number,
+  index: number,
+  deadTargetIndex: number,
+  fallbackTargetIndex?: number,
+): RoundActionsInput {
+  const result = cloneRoundActions(input)
+  const key = String(round)
+  const actions = result[key] ?? []
+  const entry = actions[index]
+  if (!entry) {
+    return result
+  }
+
+  const deadTargetIndices = getRecorderDeadTargetIndices(entry.slice(1))
+  const fallbackMetadata =
+    fallbackTargetIndex !== undefined &&
+    deadTargetIndices.includes(deadTargetIndex) &&
+    deadTargetIndex !== fallbackTargetIndex
+      ? [
+          serializeRecorderDeadTargetFallbackMetadata(
+            deadTargetIndex,
+            fallbackTargetIndex,
+          ),
+        ]
+      : []
 
   result[key] = actions.map((action, actionIndex) =>
     actionIndex === index
       ? [
           action[0],
-          ...action
-            .slice(1)
-            .filter(
-              (value) => parseRecorderDeadTargetMetadata(value) === undefined,
-            ),
-          ...deadTargetMetadata,
+          ...action.slice(1).filter(
+            (value) =>
+              parseRecorderDeadTargetFallbackMetadata(value)
+                ?.deadTargetIndex !== deadTargetIndex,
+          ),
+          ...fallbackMetadata,
         ]
       : action,
   )
@@ -451,9 +560,7 @@ const applyRecorderTargetMetadata = (
 
   const nextTargetIndices = new Set(activeTargetIndices)
   for (const targetIndex of deadTargetIndices) {
-    if (targetIndex !== initialTargetIndex) {
-      nextTargetIndices.delete(targetIndex)
-    }
+    nextTargetIndices.delete(targetIndex)
   }
   for (const targetIndex of spawnedTargetIndices) {
     nextTargetIndices.add(targetIndex)
@@ -586,10 +693,17 @@ export function rebuildRecorderTargetSwitches(
       ) {
         activeTargetIndices = nextActiveTargetIndices
         if (!activeTargetIndices.includes(currentTargetIndex)) {
-          currentTargetIndex = getNearestRecorderTarget(
-            currentTargetIndex,
-            activeTargetIndices,
-          )
+          const fallbackTargetIndex = getRecorderDeadTargetFallbacks(
+            metadata,
+          ).get(currentTargetIndex)
+          currentTargetIndex =
+            fallbackTargetIndex !== undefined &&
+            activeTargetIndices.includes(fallbackTargetIndex)
+              ? fallbackTargetIndex
+              : getNearestRecorderTarget(
+                  currentTargetIndex,
+                  activeTargetIndices,
+                )
         }
       }
     })
