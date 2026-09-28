@@ -30,6 +30,7 @@ import {
   getRecorderTargetGridPosition,
   getRecorderTargetLabel,
   getRecorderTargetRotation,
+  getRecorderTargetSwitchPath,
   getRotatedRecorderTargetGridPosition,
   groupRecorderRoundActions,
   isRecorderAttackToken,
@@ -81,6 +82,7 @@ const MIN_WIDTH = 320
 const MIN_HEIGHT = 420
 const DEFAULT_WIDTH = 480
 const DEFAULT_HEIGHT = 680
+const TARGET_SWITCH_STEP_DURATION = 160
 const RECORDER_CONTROL_BUTTON_CLASS =
   '!w-full !justify-start !gap-1 !rounded-sm !border !border-slate-200 !bg-white/70 !px-1.5 !py-0 !font-medium !text-slate-600 hover:!border-slate-300 hover:!bg-slate-100 dark:!border-slate-700 dark:!bg-slate-900/40 dark:!text-slate-300 dark:hover:!border-slate-600 dark:hover:!bg-slate-800'
 const RECORDER_CONTROL_BUTTON_TEXT_CLASS = '!text-[11px] !leading-none'
@@ -95,6 +97,14 @@ const RECORDER_TARGET_INDICES = RECORDER_TARGET_LABELS.map(
   (_, index) => index + 1,
 )
 const RECORDER_CENTER_TARGET_INDEX = 1
+const getRecorderTargetPositionStyle = (
+  gridColumn: number,
+  gridRow: number,
+) => ({
+  left: `${(gridColumn - 0.5) * 20}%`,
+  top: `${(gridRow - 0.5) * 50}%`,
+  transform: 'translate(-50%, -50%)',
+})
 const getInitialRecorderTargetIndices = (enemyCount: number) =>
   RECORDER_TARGET_INDICES.slice(
     0,
@@ -264,6 +274,9 @@ export function FloatingActionRecorder({
   const [selectedTargetIndex, setSelectedTargetIndex] = useState(() =>
     RECORDER_CENTER_TARGET_INDEX,
   )
+  const [targetSwitchPreviewIndex, setTargetSwitchPreviewIndex] = useState<
+    number | null
+  >(null)
   const [showTargetSwitches, setShowTargetSwitches] = useState(true)
   const [showEnemyEvents, setShowEnemyEvents] = useState(true)
   const [currentRound, setCurrentRound] = useState(() =>
@@ -281,6 +294,25 @@ export function FloatingActionRecorder({
   const recorderControlIconSize = isMobileRecorder ? 14 : 13
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const pendingScrollRoundRef = useRef<number | null>(null)
+  const targetSwitchTimerRef = useRef<number | null>(null)
+  const targetSwitchSequenceRef = useRef(0)
+  const targetSwitchPendingTargetRef = useRef<number | null>(null)
+
+  const cancelTargetSwitchAnimation = useCallback(() => {
+    if (targetSwitchTimerRef.current !== null) {
+      window.clearTimeout(targetSwitchTimerRef.current)
+      targetSwitchTimerRef.current = null
+    }
+    targetSwitchSequenceRef.current += 1
+    targetSwitchPendingTargetRef.current = null
+  }, [])
+
+  useEffect(
+    () => () => {
+      cancelTargetSwitchAnimation()
+    },
+    [cancelTargetSwitchAnimation],
+  )
 
   useEffect(() => {
     setSize((current) => ({
@@ -422,13 +454,19 @@ export function FloatingActionRecorder({
       return
     }
 
+    cancelTargetSwitchAnimation()
+    setTargetSwitchPreviewIndex(null)
     setSelectedTargetIndex(
       getNearestRecorderTargetIndex(
         selectedTargetIndex,
         activeTargetIndicesForCurrentRound,
       ),
     )
-  }, [activeTargetIndicesForCurrentRound, selectedTargetIndex])
+  }, [
+    activeTargetIndicesForCurrentRound,
+    cancelTargetSwitchAnimation,
+    selectedTargetIndex,
+  ])
 
   const allTargetLegend = useMemo(
     () =>
@@ -444,8 +482,10 @@ export function FloatingActionRecorder({
       }),
     [],
   )
+  const visualSelectedTargetIndex =
+    targetSwitchPreviewIndex ?? selectedTargetIndex
   const rotatedAllTargetLegend = useMemo(() => {
-    const rotation = getRecorderTargetRotation(selectedTargetIndex)
+    const rotation = getRecorderTargetRotation(visualSelectedTargetIndex)
 
     return allTargetLegend.map((target) => {
       const position = getRotatedRecorderTargetGridPosition(
@@ -459,12 +499,69 @@ export function FloatingActionRecorder({
         gridRow: position.row,
       }
     })
-  }, [allTargetLegend, selectedTargetIndex])
+  }, [allTargetLegend, visualSelectedTargetIndex])
+
+  const handleSelectTarget = useCallback(
+    (targetIndex: number) => {
+      cancelTargetSwitchAnimation()
+
+      const currentTargetIndex =
+        targetSwitchPreviewIndex ?? selectedTargetIndex
+      const path = getRecorderTargetSwitchPath(
+        currentTargetIndex,
+        targetIndex,
+        activeTargetIndicesForCurrentRound,
+      )
+      if (path.length === 0) {
+        setSelectedTargetIndex(targetIndex)
+        setTargetSwitchPreviewIndex(null)
+        return
+      }
+
+      targetSwitchPendingTargetRef.current = targetIndex
+      setTargetSwitchPreviewIndex(currentTargetIndex)
+      const sequence = targetSwitchSequenceRef.current
+      let pathIndex = 0
+
+      const runNextStep = () => {
+        if (sequence !== targetSwitchSequenceRef.current) {
+          return
+        }
+
+        if (pathIndex < path.length) {
+          setTargetSwitchPreviewIndex(path[pathIndex])
+          pathIndex += 1
+          targetSwitchTimerRef.current = window.setTimeout(
+            runNextStep,
+            TARGET_SWITCH_STEP_DURATION,
+          )
+          return
+        }
+
+        setSelectedTargetIndex(targetIndex)
+        setTargetSwitchPreviewIndex(null)
+        targetSwitchPendingTargetRef.current = null
+        targetSwitchTimerRef.current = null
+      }
+
+      targetSwitchTimerRef.current = window.setTimeout(
+        runNextStep,
+        TARGET_SWITCH_STEP_DURATION,
+      )
+    },
+    [
+      activeTargetIndicesForCurrentRound,
+      cancelTargetSwitchAnimation,
+      selectedTargetIndex,
+      targetSwitchPreviewIndex,
+    ],
+  )
+
   const handleAppendToken = useCallback(
     (token: string) => {
       const targetIndex = isRecorderAttackToken(token)
         ? getNearestRecorderTargetIndex(
-            selectedTargetIndex,
+            targetSwitchPendingTargetRef.current ?? selectedTargetIndex,
             activeTargetIndicesForCurrentRound,
           )
         : undefined
@@ -494,6 +591,8 @@ export function FloatingActionRecorder({
 
   const handleEnemyCountChange = useCallback(
     (count: number) => {
+      cancelTargetSwitchAnimation()
+      setTargetSwitchPreviewIndex(null)
       const nextTargetIndices = getInitialRecorderTargetIndices(count)
       setEnemyCount(count)
       setAvailableTargetIndices(nextTargetIndices)
@@ -506,7 +605,7 @@ export function FloatingActionRecorder({
         ),
       )
     },
-    [onChange, roundActions],
+    [cancelTargetSwitchAnimation, onChange, roundActions],
   )
 
   const handleAddTarget = useCallback(
@@ -515,6 +614,8 @@ export function FloatingActionRecorder({
         return
       }
 
+      cancelTargetSwitchAnimation()
+      setTargetSwitchPreviewIndex(null)
       const anchor = getRecorderTargetEventAnchor(
         roundActions,
         currentRound,
@@ -565,6 +666,7 @@ export function FloatingActionRecorder({
     [
       activeTargetIndicesForCurrentRound,
       availableTargetIndices,
+      cancelTargetSwitchAnimation,
       currentRound,
       onChange,
       roundActions,
@@ -580,6 +682,8 @@ export function FloatingActionRecorder({
         return
       }
 
+      cancelTargetSwitchAnimation()
+      setTargetSwitchPreviewIndex(null)
       const anchor = getRecorderTargetEventAnchor(
         roundActions,
         currentRound,
@@ -635,6 +739,7 @@ export function FloatingActionRecorder({
     [
       activeTargetIndicesForCurrentRound,
       availableTargetIndices,
+      cancelTargetSwitchAnimation,
       currentRound,
       onChange,
       roundActions,
@@ -1676,21 +1781,27 @@ export function FloatingActionRecorder({
                   </span>
                   <div
                     className={clsx(
-                      'grid grid-cols-5 grid-rows-2 items-center justify-items-center',
+                      'relative',
                       isMobileRecorder
-                        ? 'order-3 mt-1 w-full min-w-0 flex-none gap-x-1 gap-y-0'
-                        : 'min-h-10 min-w-[136px] max-w-[180px] flex-1 gap-x-1 gap-y-0.5',
+                        ? 'order-3 mt-1 h-20 w-full min-w-0 flex-none'
+                        : 'h-[76px] min-w-[136px] max-w-[180px] flex-1',
                     )}
                     role="group"
                     aria-label="选择接下来录制动作的目标"
                   >
                     {rotatedAllTargetLegend.map(
                       ({ targetIndex, label, gridColumn, gridRow }) => {
+                        const positionStyle =
+                          getRecorderTargetPositionStyle(
+                            gridColumn,
+                            gridRow,
+                          )
                         const isAvailable =
                           activeTargetIndicesForCurrentRound.includes(
                             targetIndex,
                           )
-                        const selected = targetIndex === selectedTargetIndex
+                        const selected =
+                          targetIndex === visualSelectedTargetIndex
                         const isNeutralTarget = label === '0'
 
                         if (!isAvailable) {
@@ -1700,9 +1811,9 @@ export function FloatingActionRecorder({
                               type="button"
                               title={`出现 ${label} 号位`}
                               aria-label={`出现 ${label} 号位`}
-                              style={{ gridColumn, gridRow }}
+                              style={positionStyle}
                               className={clsx(
-                                'inline-flex items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-400 transition hover:border-slate-500 hover:bg-slate-100 hover:text-slate-600 dark:border-slate-600 dark:text-slate-500 dark:hover:border-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300',
+                                'absolute inline-flex items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-400 transition-colors hover:border-slate-500 hover:bg-slate-100 hover:text-slate-600 dark:border-slate-600 dark:text-slate-500 dark:hover:border-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300',
                                 isMobileRecorder ? 'h-10 w-10' : 'h-9 w-9',
                               )}
                               onClick={() => handleAddTarget(targetIndex)}
@@ -1718,9 +1829,9 @@ export function FloatingActionRecorder({
                         return (
                           <div
                             key={targetIndex}
-                            style={{ gridColumn, gridRow }}
+                            style={positionStyle}
                             className={clsx(
-                              'relative flex items-center justify-center',
+                              'absolute flex items-center justify-center',
                               isMobileRecorder ? 'h-10 w-10' : 'h-9 w-9',
                             )}
                           >
@@ -1739,7 +1850,7 @@ export function FloatingActionRecorder({
                                 selected &&
                                   'font-semibold ring-2 ring-slate-700 ring-offset-1 ring-offset-slate-50 dark:ring-slate-100 dark:ring-offset-slate-800',
                               )}
-                              onClick={() => setSelectedTargetIndex(targetIndex)}
+                              onClick={() => handleSelectTarget(targetIndex)}
                             >
                               {label}
                             </button>

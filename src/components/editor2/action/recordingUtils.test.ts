@@ -10,6 +10,7 @@ import {
   getRecorderRoundNumbers,
   getRecorderTargetGridPosition,
   getRecorderTargetRotation,
+  getRecorderTargetSwitchPath,
   getRotatedRecorderTargetGridPosition,
   groupRecorderRoundActions,
   removeRecorderToken,
@@ -138,6 +139,15 @@ describe('recordingUtils', () => {
 
     it('resets to center rotation for unknown target indices', () => {
       expect(getRecorderTargetRotation(6)).toBe(0)
+    })
+
+    it('builds a path that matches the automatic target switches', () => {
+      const targetIndices = [1, 2, 3, 4, 5]
+
+      expect(getRecorderTargetSwitchPath(5, 1, targetIndices)).toEqual([1])
+      expect(getRecorderTargetSwitchPath(5, 2, targetIndices)).toEqual([1, 2])
+      expect(getRecorderTargetSwitchPath(5, 3, targetIndices)).toEqual([4, 3])
+      expect(getRecorderTargetSwitchPath(3, 3, targetIndices)).toEqual([])
     })
   })
 

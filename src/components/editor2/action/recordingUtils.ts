@@ -412,6 +412,27 @@ const getRecorderTargetSwitchTokens = (
   )
 }
 
+export function getRecorderTargetSwitchPath(
+  currentTargetIndex: number,
+  targetIndex: number,
+  targetIndices: readonly number[],
+): number[] {
+  let movingTargetIndex = currentTargetIndex
+
+  return getRecorderTargetSwitchTokens(
+    currentTargetIndex,
+    targetIndex,
+    targetIndices,
+  ).map((switchToken) => {
+    movingTargetIndex = moveRecorderTarget(
+      movingTargetIndex,
+      switchToken === '额外:左侧目标' ? -1 : 1,
+      targetIndices,
+    )
+    return movingTargetIndex
+  })
+}
+
 interface RecorderTargetStateOptions {
   throughRound?: number
   beforeActionIndex?: number
