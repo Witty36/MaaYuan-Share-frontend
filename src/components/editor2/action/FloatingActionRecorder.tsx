@@ -18,14 +18,19 @@ import { useBreakpoint } from '../../../utils/device'
 import { AppToaster } from '../../Toaster'
 import {
   RECORDER_SLOT_KEYS,
+  RECORDER_TARGET_LABELS,
   appendRecorderToken,
   cloneRoundActions,
   formatRecorderRoundItem,
+  getNextRecorderRound,
   getRecorderActiveTargetIndices,
   getRecorderDeadTargetIndices,
-  getRecorderSpawnedTargetIndices,
-  getNextRecorderRound,
   getRecorderRoundNumbers,
+  getRecorderSpawnedTargetIndices,
+  getRecorderTargetGridPosition,
+  getRecorderTargetLabel,
+  getRecorderTargetRotation,
+  getRotatedRecorderTargetGridPosition,
   groupRecorderRoundActions,
   isRecorderAttackToken,
   isRecorderAutomaticTargetSwitchMetadata,
@@ -86,7 +91,6 @@ const RECORDER_ROUND_OPTIONS = Array.from(
   (_, index) => index + 1,
 )
 const RECORDER_ENEMY_COUNTS = [1, 2, 3, 4, 5] as const
-const RECORDER_TARGET_LABELS = ['0', '1', '2', '3', '4'] as const
 const RECORDER_TARGET_INDICES = RECORDER_TARGET_LABELS.map(
   (_, index) => index + 1,
 )
@@ -99,17 +103,6 @@ const getInitialRecorderTargetIndices = (enemyCount: number) =>
       RECORDER_TARGET_INDICES.length,
     ),
   )
-const RECORDER_TARGET_GRID_POSITION: Record<
-  string,
-  { column: number; row: number }
-> = {
-  '4': { column: 1, row: 2 },
-  '3': { column: 2, row: 1 },
-  '0': { column: 3, row: 2 },
-  '2': { column: 4, row: 1 },
-  '1': { column: 5, row: 2 },
-}
-
 const TARGET_POSITION_TONE_CLASS: Record<string, string> = {
   '1': 'border-fuchsia-300 bg-fuchsia-100/80 text-fuchsia-700 hover:bg-fuchsia-200/80 dark:border-fuchsia-500/60 dark:bg-fuchsia-500/20 dark:text-fuchsia-200 dark:hover:bg-fuchsia-500/30',
   '2': 'border-blue-300 bg-blue-100/80 text-blue-700 hover:bg-blue-200/80 dark:border-blue-500/60 dark:bg-blue-500/20 dark:text-blue-200 dark:hover:bg-blue-500/30',
@@ -195,16 +188,6 @@ const getNearestRecorderTargetIndex = (
         : nearest,
     targetIndices[0] ?? RECORDER_CENTER_TARGET_INDEX,
   )
-
-const getRecorderTargetLabel = (targetIndex: number) =>
-  RECORDER_TARGET_LABELS[targetIndex - 1] ?? String(targetIndex)
-
-const getRecorderTargetGridPosition = (targetIndex: number) => {
-  const label = getRecorderTargetLabel(targetIndex)
-  const position = RECORDER_TARGET_GRID_POSITION[label]
-
-  return position ?? { column: targetIndex, row: 2 }
-}
 
 const cloneEntries = (entries: string[][]) => entries.map((entry) => [...entry])
 
@@ -461,6 +444,22 @@ export function FloatingActionRecorder({
       }),
     [],
   )
+  const rotatedAllTargetLegend = useMemo(() => {
+    const rotation = getRecorderTargetRotation(selectedTargetIndex)
+
+    return allTargetLegend.map((target) => {
+      const position = getRotatedRecorderTargetGridPosition(
+        target.targetIndex,
+        rotation,
+      )
+
+      return {
+        ...target,
+        gridColumn: position.column,
+        gridRow: position.row,
+      }
+    })
+  }, [allTargetLegend, selectedTargetIndex])
   const handleAppendToken = useCallback(
     (token: string) => {
       const targetIndex = isRecorderAttackToken(token)
@@ -1685,7 +1684,7 @@ export function FloatingActionRecorder({
                     role="group"
                     aria-label="选择接下来录制动作的目标"
                   >
-                    {allTargetLegend.map(
+                    {rotatedAllTargetLegend.map(
                       ({ targetIndex, label, gridColumn, gridRow }) => {
                         const isAvailable =
                           activeTargetIndicesForCurrentRound.includes(

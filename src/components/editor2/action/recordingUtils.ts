@@ -2,6 +2,55 @@ import type { RoundActionsInput } from './roundMapping'
 
 export const RECORDER_SLOT_KEYS = ['1', '2', '3', '4', '5'] as const
 
+export const RECORDER_TARGET_LABELS = ['0', '1', '2', '3', '4'] as const
+
+export const RECORDER_TARGET_GRID_POSITION: Record<
+  string,
+  { column: number; row: number }
+> = {
+  '4': { column: 1, row: 2 },
+  '3': { column: 2, row: 1 },
+  '0': { column: 3, row: 2 },
+  '2': { column: 4, row: 1 },
+  '1': { column: 5, row: 2 },
+}
+
+export function getRecorderTargetLabel(targetIndex: number): string {
+  return RECORDER_TARGET_LABELS[targetIndex - 1] ?? String(targetIndex)
+}
+
+export function getRecorderTargetRotation(targetIndex: number): number {
+  const label = RECORDER_TARGET_LABELS[targetIndex - 1]
+
+  return label === undefined ? 0 : Number(label)
+}
+
+export function getRecorderTargetGridPosition(targetIndex: number): {
+  column: number
+  row: number
+} {
+  const label = getRecorderTargetLabel(targetIndex)
+  const position = RECORDER_TARGET_GRID_POSITION[label]
+
+  return position ?? { column: targetIndex, row: 2 }
+}
+
+export function getRotatedRecorderTargetGridPosition(
+  targetIndex: number,
+  centerLabel: number,
+): { column: number; row: number } {
+  const targetLabel = Number(getRecorderTargetLabel(targetIndex))
+  const baseLabel = String(
+    (targetLabel - centerLabel + RECORDER_TARGET_LABELS.length) %
+      RECORDER_TARGET_LABELS.length,
+  )
+
+  return (
+    RECORDER_TARGET_GRID_POSITION[baseLabel] ??
+    getRecorderTargetGridPosition(targetIndex)
+  )
+}
+
 export type RecorderTokenDisplay =
   | {
       area: 'slot'
