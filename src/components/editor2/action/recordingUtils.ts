@@ -196,9 +196,7 @@ export function isRecorderAttackToken(token: string): boolean {
 
 export function isRecorderTargetSwitchToken(token: string): boolean {
   const normalized = token.trim()
-  return (
-    normalized === '额外:左侧目标' || normalized === '额外:右侧目标'
-  )
+  return normalized === '额外:左侧目标' || normalized === '额外:右侧目标'
 }
 
 export function cloneRoundActions(
@@ -306,7 +304,9 @@ export function setRecorderTokenDeadTargets(
     ),
   )
     .sort((a, b) => a - b)
-    .map((targetIndex) => `${RECORDER_DEAD_TARGET_METADATA_PREFIX}${targetIndex}`)
+    .map(
+      (targetIndex) => `${RECORDER_DEAD_TARGET_METADATA_PREFIX}${targetIndex}`,
+    )
   const deadTargetIndexSet = new Set(
     deadTargetMetadata.map((value) => parseRecorderDeadTargetMetadata(value)),
   )
@@ -380,11 +380,13 @@ export function setRecorderTokenDeadTargetFallback(
     actionIndex === index
       ? [
           action[0],
-          ...action.slice(1).filter(
-            (value) =>
-              parseRecorderDeadTargetFallbackMetadata(value)
-                ?.deadTargetIndex !== deadTargetIndex,
-          ),
+          ...action
+            .slice(1)
+            .filter(
+              (value) =>
+                parseRecorderDeadTargetFallbackMetadata(value)
+                  ?.deadTargetIndex !== deadTargetIndex,
+            ),
           ...fallbackMetadata,
         ]
       : action,
@@ -483,8 +485,7 @@ const moveRecorderTarget = (
   }
 
   return targetIndices[
-    (currentPosition + direction + targetIndices.length) %
-      targetIndices.length
+    (currentPosition + direction + targetIndices.length) % targetIndices.length
   ]
 }
 
@@ -513,9 +514,7 @@ const getRecorderTargetSwitchTokens = (
 
   // 与 auto-fight-gen 保持一致：顺时针为右侧目标，逆时针为左侧目标。
   return new Array(
-    clockwiseDistance <= counterDistance
-      ? clockwiseDistance
-      : counterDistance,
+    clockwiseDistance <= counterDistance ? clockwiseDistance : counterDistance,
   ).fill(
     clockwiseDistance <= counterDistance ? '额外:右侧目标' : '额外:左侧目标',
   )
@@ -580,7 +579,9 @@ export function getRecorderActiveTargetIndices(
   initialTargetIndex = 1,
   options: RecorderTargetStateOptions = {},
 ): number[] {
-  const targetIndices = normalizeRecorderTargetIndices(targetIndicesOrEnemyCount)
+  const targetIndices = normalizeRecorderTargetIndices(
+    targetIndicesOrEnemyCount,
+  )
   let activeTargetIndices = targetIndices.length > 0 ? [...targetIndices] : [1]
   const throughRound = options.throughRound ?? Number.POSITIVE_INFINITY
 
@@ -611,12 +612,105 @@ export function getRecorderActiveTargetIndices(
     : [initialTargetIndex]
 }
 
+export function getRecorderCurrentMainTargetIndex(
+  input: RoundActionsInput,
+  targetIndicesOrEnemyCount: number | readonly number[],
+  initialTargetIndex = 1,
+  options: RecorderTargetStateOptions = {},
+): number {
+  const targetIndices = normalizeRecorderTargetIndices(
+    targetIndicesOrEnemyCount,
+  )
+  let activeTargetIndices = targetIndices.length > 0 ? [...targetIndices] : [1]
+  let currentTargetIndex = activeTargetIndices.includes(initialTargetIndex)
+    ? initialTargetIndex
+    : getNearestRecorderTarget(initialTargetIndex, activeTargetIndices)
+  const throughRound = options.throughRound ?? Number.POSITIVE_INFINITY
+
+  getRecorderRoundNumbers(input).forEach((round) => {
+    if (round > throughRound) {
+      return
+    }
+
+    for (const [index, entry] of (input[String(round)] ?? []).entries()) {
+      if (
+        round === throughRound &&
+        options.beforeActionIndex !== undefined &&
+        index >= options.beforeActionIndex
+      ) {
+        break
+      }
+
+      const metadata = entry.slice(1)
+      if (
+        metadata.some((value) => isRecorderAutomaticTargetSwitchMetadata(value))
+      ) {
+        continue
+      }
+
+      const token = entry[0]?.trim() ?? ''
+      const targetIndex = metadata
+        .map((value) => parseRecorderTargetMetadata(value))
+        .find((value) => value !== undefined)
+
+      if (token === '额外:左侧目标' || token === '额外:右侧目标') {
+        currentTargetIndex = moveRecorderTarget(
+          currentTargetIndex,
+          token === '额外:左侧目标' ? -1 : 1,
+          activeTargetIndices,
+        )
+        continue
+      }
+
+      if (
+        isRecorderAttackToken(token) &&
+        targetIndex !== undefined &&
+        activeTargetIndices.includes(targetIndex)
+      ) {
+        currentTargetIndex = targetIndex
+      }
+
+      const nextActiveTargetIndices = applyRecorderTargetMetadata(
+        activeTargetIndices,
+        metadata,
+        initialTargetIndex,
+      )
+      if (
+        nextActiveTargetIndices.length !== activeTargetIndices.length ||
+        nextActiveTargetIndices.some(
+          (targetIndex, index) => activeTargetIndices[index] !== targetIndex,
+        )
+      ) {
+        activeTargetIndices = nextActiveTargetIndices
+        if (!activeTargetIndices.includes(currentTargetIndex)) {
+          const fallbackTargetIndex =
+            getRecorderDeadTargetFallbacks(metadata).get(currentTargetIndex)
+          currentTargetIndex =
+            fallbackTargetIndex !== undefined &&
+            activeTargetIndices.includes(fallbackTargetIndex)
+              ? fallbackTargetIndex
+              : getNearestRecorderTarget(
+                  currentTargetIndex,
+                  activeTargetIndices,
+                )
+        }
+      }
+    }
+  })
+
+  return activeTargetIndices.includes(currentTargetIndex)
+    ? currentTargetIndex
+    : getNearestRecorderTarget(currentTargetIndex, activeTargetIndices)
+}
+
 export function rebuildRecorderTargetSwitches(
   input: RoundActionsInput,
   targetIndicesOrEnemyCount: number | readonly number[],
   initialTargetIndex = 1,
 ): RoundActionsInput {
-  const targetIndices = normalizeRecorderTargetIndices(targetIndicesOrEnemyCount)
+  const targetIndices = normalizeRecorderTargetIndices(
+    targetIndicesOrEnemyCount,
+  )
   const safeTargetIndices = targetIndices.length > 0 ? targetIndices : [1]
   let activeTargetIndices = [...safeTargetIndices]
   const result: RoundActionsInput = {}
@@ -631,9 +725,7 @@ export function rebuildRecorderTargetSwitches(
     ;(input[key] ?? []).forEach((entry) => {
       const metadata = entry.slice(1)
       if (
-        metadata.some((value) =>
-          isRecorderAutomaticTargetSwitchMetadata(value),
-        )
+        metadata.some((value) => isRecorderAutomaticTargetSwitchMetadata(value))
       ) {
         return
       }
@@ -687,15 +779,13 @@ export function rebuildRecorderTargetSwitches(
       if (
         nextActiveTargetIndices.length !== activeTargetIndices.length ||
         nextActiveTargetIndices.some(
-          (targetIndex, index) =>
-            activeTargetIndices[index] !== targetIndex,
+          (targetIndex, index) => activeTargetIndices[index] !== targetIndex,
         )
       ) {
         activeTargetIndices = nextActiveTargetIndices
         if (!activeTargetIndices.includes(currentTargetIndex)) {
-          const fallbackTargetIndex = getRecorderDeadTargetFallbacks(
-            metadata,
-          ).get(currentTargetIndex)
+          const fallbackTargetIndex =
+            getRecorderDeadTargetFallbacks(metadata).get(currentTargetIndex)
           currentTargetIndex =
             fallbackTargetIndex !== undefined &&
             activeTargetIndices.includes(fallbackTargetIndex)

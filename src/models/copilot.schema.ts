@@ -36,6 +36,30 @@ export namespace CopilotDocV1 {
     stageName: string;
     difficulty?: OpDifficulty;
     simingActions?: SimingActionMap;
+    /**
+     * 快速编辑悬浮窗的敌方状态、主位与动作目标标记，仅前端记录与分享图读取。
+     */
+    recorderMeta?: RecorderMeta;
+  }
+
+  export interface RecorderMeta {
+    version?: number;
+    initialEnemies?: number[];
+    initialMain?: number;
+    changes?: Record<
+      string,
+      Record<
+        string,
+        {
+          target?: number;
+          left?: number;
+          right?: number;
+          dead?: number[];
+          spawned?: number[];
+          fallback?: Record<number, number>;
+        }
+      >
+    >;
   }
 
   export type OperationSnakeCased = import("type-fest").SnakeCasedPropertiesDeep<Operation>;

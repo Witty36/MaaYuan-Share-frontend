@@ -37,6 +37,10 @@ export type EditorOperationBase = Simplify<
      * 活动关卡自定义的难度描述，优先用于导出司命配置
      */
     activityDifficultyOverride?: string;
+    /**
+     * 快速编辑悬浮窗的持久化状态，序列化为顶层 recorder_meta。
+     */
+    recorderMeta?: CopilotDocV1.RecorderMeta;
   }
 >;
 

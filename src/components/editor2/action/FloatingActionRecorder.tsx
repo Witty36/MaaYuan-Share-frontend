@@ -1,11 +1,4 @@
-import {
-  Button,
-  Card,
-  Classes,
-  Icon,
-  Menu,
-  MenuItem,
-} from '@blueprintjs/core'
+import { Button, Card, Classes, Icon, Menu, MenuItem } from '@blueprintjs/core'
 import { Popover2 } from '@blueprintjs/popover2'
 
 import clsx from 'clsx'
@@ -24,6 +17,11 @@ import { useWindowSize } from 'react-use'
 import { useBreakpoint } from '../../../utils/device'
 import { AppToaster } from '../../Toaster'
 import {
+  type RecorderMeta,
+  type RecorderMetaPatch,
+  parseRecorderMeta,
+} from './recorderMeta'
+import {
   RECORDER_SLOT_KEYS,
   RECORDER_TARGET_LABELS,
   appendRecorderToken,
@@ -31,6 +29,7 @@ import {
   formatRecorderRoundItem,
   getNextRecorderRound,
   getRecorderActiveTargetIndices,
+  getRecorderCurrentMainTargetIndex,
   getRecorderDeadTargetIndices,
   getRecorderRoundNumbers,
   getRecorderSpawnedTargetIndices,
@@ -42,6 +41,7 @@ import {
   groupRecorderRoundActions,
   isRecorderAttackToken,
   isRecorderAutomaticTargetSwitchMetadata,
+  parseRecorderTargetMetadata,
   rebuildRecorderTargetSwitches,
   removeRecorderToken,
   setRecorderTokenDeadTargetFallback,
@@ -69,7 +69,8 @@ interface RecorderActionButton {
 interface FloatingActionRecorderProps {
   roundActions: RoundActionsInput
   slotAssignments?: MappingOptions['slotAssignments']
-  onChange: (next: RoundActionsInput) => void
+  onChange: (next: RoundActionsInput, metaPatch?: RecorderMetaPatch) => void
+  recorderMeta?: RecorderMeta
 }
 
 interface RecorderEnemyEventSummary {
@@ -84,6 +85,22 @@ interface RecorderEnemyEventSummaryGroup {
   label: string
   events: RecorderEnemyEventSummary[]
 }
+
+type RecorderTargetFallbackDialog =
+  | {
+      kind: 'remove'
+      targetIndex: number
+      fallbackTargetIndex: number | null
+    }
+  | {
+      kind: 'death'
+      targetIndex: number
+      fallbackTargetIndex: number | null
+      round: number
+      index: number
+      replaceDeadTargetIndex?: number
+      removeSpawnTargetIndex?: number
+    }
 
 const HEADER_CLASS = 'action-recorder-header'
 const MIN_WIDTH = 320
@@ -271,31 +288,39 @@ export function FloatingActionRecorder({
   roundActions,
   slotAssignments,
   onChange,
+  recorderMeta: recorderMetaProp,
 }: FloatingActionRecorderProps) {
+  const parsedRecorderMeta = useMemo(
+    () => parseRecorderMeta(recorderMetaProp),
+    [recorderMetaProp],
+  )
   const [size, setSize] = useState(getInitialSize)
   const [position, setPosition] = useState(() => getInitialPosition(size))
   const [visible, setVisible] = useState(false)
-  const [enemyCount, setEnemyCount] = useState(5)
-  const [availableTargetIndices, setAvailableTargetIndices] = useState<number[]>(
-    () => getInitialRecorderTargetIndices(5),
+  const [initialEnemies, setInitialEnemies] = useState<number[]>(
+    () => parsedRecorderMeta.initialEnemies,
   )
-  const [selectedTargetIndex, setSelectedTargetIndex] = useState(() =>
-    RECORDER_CENTER_TARGET_INDEX,
+  const [initialMain, setInitialMain] = useState<number>(
+    () => parsedRecorderMeta.initialMain,
+  )
+  const [enemyCount, setEnemyCount] = useState(
+    () => parsedRecorderMeta.initialEnemies.length,
+  )
+  const [availableTargetIndices, setAvailableTargetIndices] = useState<
+    number[]
+  >(() => parsedRecorderMeta.initialEnemies)
+  const [selectedTargetIndex, setSelectedTargetIndex] = useState(
+    () => parsedRecorderMeta.initialMain,
   )
   const [targetSwitchPreviewIndex, setTargetSwitchPreviewIndex] = useState<
     number | null
   >(null)
   const [showTargetSwitches, setShowTargetSwitches] = useState(true)
   const [showEnemyEvents, setShowEnemyEvents] = useState(true)
-  const [targetRemovalDialogIndex, setTargetRemovalDialogIndex] = useState<
-    number | null
-  >(null)
-  const [targetRemovalFallbackIndex, setTargetRemovalFallbackIndex] = useState<
-    number | null
-  >(null)
-  const [targetRemovalDialogAnchorX, setTargetRemovalDialogAnchorX] = useState<
-    number | null
-  >(null)
+  const [targetFallbackDialog, setTargetFallbackDialog] =
+    useState<RecorderTargetFallbackDialog | null>(null)
+  const [targetFallbackDialogAnchorX, setTargetFallbackDialogAnchorX] =
+    useState<number | null>(null)
   const [currentRound, setCurrentRound] = useState(() =>
     getNextRecorderRound(roundActions),
   )
@@ -331,6 +356,17 @@ export function FloatingActionRecorder({
     },
     [cancelTargetSwitchAnimation],
   )
+
+  useEffect(() => {
+    const parsed = parseRecorderMeta(recorderMetaProp)
+    setInitialEnemies(parsed.initialEnemies)
+    setInitialMain(parsed.initialMain)
+    setEnemyCount(parsed.initialEnemies.length)
+    setAvailableTargetIndices(parsed.initialEnemies)
+    setSelectedTargetIndex((current) =>
+      parsed.initialEnemies.includes(current) ? current : parsed.initialMain,
+    )
+  }, [recorderMetaProp])
 
   useEffect(() => {
     setSize((current) => ({
@@ -462,20 +498,63 @@ export function FloatingActionRecorder({
       getRecorderActiveTargetIndices(
         roundActions,
         availableTargetIndices,
-        RECORDER_CENTER_TARGET_INDEX,
+        initialMain,
         { throughRound: currentRound },
       ),
-    [availableTargetIndices, currentRound, roundActions],
+    [availableTargetIndices, currentRound, initialMain, roundActions],
   )
-  const targetRemovalFallbackOptions = useMemo(
+  const currentMainTargetIndexForCurrentRound = useMemo(
     () =>
-      targetRemovalDialogIndex === null
-        ? []
-        : activeTargetIndicesForCurrentRound.filter(
-            (targetIndex) => targetIndex !== targetRemovalDialogIndex,
-          ),
-    [activeTargetIndicesForCurrentRound, targetRemovalDialogIndex],
+      getRecorderCurrentMainTargetIndex(
+        roundActions,
+        availableTargetIndices,
+        initialMain,
+        { throughRound: currentRound },
+      ),
+    [availableTargetIndices, currentRound, initialMain, roundActions],
   )
+  const targetFallbackOptions = useMemo(() => {
+    if (targetFallbackDialog === null) {
+      return []
+    }
+
+    if (targetFallbackDialog.kind === 'remove') {
+      return activeTargetIndicesForCurrentRound.filter(
+        (targetIndex) => targetIndex !== targetFallbackDialog.targetIndex,
+      )
+    }
+
+    const entry =
+      roundActions[String(targetFallbackDialog.round)]?.[
+        targetFallbackDialog.index
+      ]
+    const activeBeforeAction = getRecorderActiveTargetIndices(
+      roundActions,
+      availableTargetIndices,
+      initialMain,
+      {
+        throughRound: targetFallbackDialog.round,
+        beforeActionIndex: targetFallbackDialog.index,
+      },
+    )
+    const deadTargetIndices = new Set(
+      getRecorderDeadTargetIndices(entry?.slice(1) ?? []),
+    )
+    if (targetFallbackDialog.replaceDeadTargetIndex !== undefined) {
+      deadTargetIndices.delete(targetFallbackDialog.replaceDeadTargetIndex)
+    }
+    deadTargetIndices.add(targetFallbackDialog.targetIndex)
+
+    return activeBeforeAction.filter(
+      (targetIndex) => !deadTargetIndices.has(targetIndex),
+    )
+  }, [
+    activeTargetIndicesForCurrentRound,
+    availableTargetIndices,
+    initialMain,
+    roundActions,
+    targetFallbackDialog,
+  ])
   useEffect(() => {
     if (activeTargetIndicesForCurrentRound.includes(selectedTargetIndex)) {
       return
@@ -496,8 +575,8 @@ export function FloatingActionRecorder({
   ])
 
   useLayoutEffect(() => {
-    if (targetRemovalDialogIndex === null) {
-      setTargetRemovalDialogAnchorX(null)
+    if (targetFallbackDialog === null) {
+      setTargetFallbackDialogAnchorX(null)
       return
     }
 
@@ -509,14 +588,14 @@ export function FloatingActionRecorder({
     }
 
     const nextAnchorX = board.offsetLeft + board.offsetWidth / 2
-    setTargetRemovalDialogAnchorX((current) =>
+    setTargetFallbackDialogAnchorX((current) =>
       current === nextAnchorX ? current : nextAnchorX,
     )
   }, [
     isMobileRecorder,
     size.height,
     size.width,
-    targetRemovalDialogIndex,
+    targetFallbackDialog,
     windowHeight,
     windowWidth,
   ])
@@ -556,22 +635,24 @@ export function FloatingActionRecorder({
 
   const handleSelectTarget = useCallback(
     (targetIndex: number) => {
-      if (targetRemovalDialogIndex !== null) {
+      if (targetFallbackDialog !== null) {
         if (
-          targetIndex === targetRemovalDialogIndex ||
-          !activeTargetIndicesForCurrentRound.includes(targetIndex)
+          targetIndex === targetFallbackDialog.targetIndex ||
+          !targetFallbackOptions.includes(targetIndex)
         ) {
           return
         }
 
-        setTargetRemovalFallbackIndex(targetIndex)
+        setTargetFallbackDialog({
+          ...targetFallbackDialog,
+          fallbackTargetIndex: targetIndex,
+        })
         return
       }
 
       cancelTargetSwitchAnimation()
 
-      const currentTargetIndex =
-        targetSwitchPreviewIndex ?? selectedTargetIndex
+      const currentTargetIndex = targetSwitchPreviewIndex ?? selectedTargetIndex
       const path = getRecorderTargetSwitchPath(
         currentTargetIndex,
         targetIndex,
@@ -618,7 +699,8 @@ export function FloatingActionRecorder({
       activeTargetIndicesForCurrentRound,
       cancelTargetSwitchAnimation,
       selectedTargetIndex,
-      targetRemovalDialogIndex,
+      targetFallbackDialog,
+      targetFallbackOptions,
       targetSwitchPreviewIndex,
     ],
   )
@@ -641,7 +723,7 @@ export function FloatingActionRecorder({
         rebuildRecorderTargetSwitches(
           next,
           availableTargetIndices,
-          RECORDER_CENTER_TARGET_INDEX,
+          initialMain,
         ),
       )
     },
@@ -649,6 +731,7 @@ export function FloatingActionRecorder({
       activeTargetIndicesForCurrentRound,
       availableTargetIndices,
       currentRound,
+      initialMain,
       onChange,
       roundActions,
       selectedTargetIndex,
@@ -660,23 +743,34 @@ export function FloatingActionRecorder({
       cancelTargetSwitchAnimation()
       setTargetSwitchPreviewIndex(null)
       const nextTargetIndices = getInitialRecorderTargetIndices(count)
+      const fallbackMain = nextTargetIndices.includes(initialMain)
+        ? initialMain
+        : (nextTargetIndices[0] ?? initialMain)
       setEnemyCount(count)
+      setInitialEnemies(nextTargetIndices)
+      setInitialMain(fallbackMain)
       setAvailableTargetIndices(nextTargetIndices)
-      setSelectedTargetIndex(RECORDER_CENTER_TARGET_INDEX)
+      setSelectedTargetIndex(fallbackMain)
       onChange(
         rebuildRecorderTargetSwitches(
           roundActions,
           nextTargetIndices,
-          RECORDER_CENTER_TARGET_INDEX,
+          fallbackMain,
         ),
+        {
+          initialEnemies: nextTargetIndices,
+          ...(fallbackMain === initialMain
+            ? {}
+            : { initialMain: fallbackMain }),
+        },
       )
     },
-    [cancelTargetSwitchAnimation, onChange, roundActions],
+    [cancelTargetSwitchAnimation, initialMain, onChange, roundActions],
   )
 
   const handleAddTarget = useCallback(
     (targetIndex: number) => {
-      if (targetRemovalDialogIndex !== null) {
+      if (targetFallbackDialog !== null) {
         return
       }
 
@@ -686,13 +780,9 @@ export function FloatingActionRecorder({
 
       cancelTargetSwitchAnimation()
       setTargetSwitchPreviewIndex(null)
-      const anchor = getRecorderTargetEventAnchor(
-        roundActions,
-        currentRound,
-      )
+      const anchor = getRecorderTargetEventAnchor(roundActions, currentRound)
       if (anchor) {
-        const entry =
-          roundActions[String(anchor.round)]?.[anchor.index]
+        const entry = roundActions[String(anchor.round)]?.[anchor.index]
         const spawnedTargetIndices = getRecorderSpawnedTargetIndices(
           entry?.slice(1) ?? [],
         )
@@ -702,8 +792,7 @@ export function FloatingActionRecorder({
           anchor.index,
           [
             ...spawnedTargetIndices.filter(
-              (spawnedTargetIndex) =>
-                spawnedTargetIndex !== targetIndex,
+              (spawnedTargetIndex) => spawnedTargetIndex !== targetIndex,
             ),
             targetIndex,
           ],
@@ -712,23 +801,25 @@ export function FloatingActionRecorder({
           rebuildRecorderTargetSwitches(
             next,
             availableTargetIndices,
-            RECORDER_CENTER_TARGET_INDEX,
+            initialMain,
           ),
         )
         return
       }
 
-      const nextTargetIndices = [
-        ...availableTargetIndices,
-        targetIndex,
-      ].sort((a, b) => a - b)
+      const nextTargetIndices = [...availableTargetIndices, targetIndex].sort(
+        (a, b) => a - b,
+      )
       setAvailableTargetIndices(nextTargetIndices)
+      setInitialEnemies(nextTargetIndices)
+      setEnemyCount(nextTargetIndices.length)
       onChange(
         rebuildRecorderTargetSwitches(
           roundActions,
           nextTargetIndices,
-          RECORDER_CENTER_TARGET_INDEX,
+          initialMain,
         ),
+        { initialEnemies: nextTargetIndices },
       )
     },
     [
@@ -736,9 +827,10 @@ export function FloatingActionRecorder({
       availableTargetIndices,
       cancelTargetSwitchAnimation,
       currentRound,
+      initialMain,
       onChange,
       roundActions,
-      targetRemovalDialogIndex,
+      targetFallbackDialog,
     ],
   )
 
@@ -750,13 +842,9 @@ export function FloatingActionRecorder({
 
       cancelTargetSwitchAnimation()
       setTargetSwitchPreviewIndex(null)
-      const anchor = getRecorderTargetEventAnchor(
-        roundActions,
-        currentRound,
-      )
+      const anchor = getRecorderTargetEventAnchor(roundActions, currentRound)
       if (anchor) {
-        const entry =
-          roundActions[String(anchor.round)]?.[anchor.index]
+        const entry = roundActions[String(anchor.round)]?.[anchor.index]
         const deadTargetIndices = getRecorderDeadTargetIndices(
           entry?.slice(1) ?? [],
         )
@@ -785,7 +873,7 @@ export function FloatingActionRecorder({
           rebuildRecorderTargetSwitches(
             nextWithFallback,
             availableTargetIndices,
-            RECORDER_CENTER_TARGET_INDEX,
+            initialMain,
           ),
         )
         if (fallbackTargetIndex !== undefined) {
@@ -802,11 +890,18 @@ export function FloatingActionRecorder({
       }
 
       setAvailableTargetIndices(nextTargetIndices)
+      setInitialEnemies(nextTargetIndices)
+      setEnemyCount(nextTargetIndices.length)
+      const metaPatch: RecorderMetaPatch = {
+        initialEnemies: nextTargetIndices,
+      }
       if (
         fallbackTargetIndex !== undefined &&
         nextTargetIndices.includes(fallbackTargetIndex)
       ) {
         setSelectedTargetIndex(fallbackTargetIndex)
+        setInitialMain(fallbackTargetIndex)
+        metaPatch.initialMain = fallbackTargetIndex
       } else if (selectedTargetIndex === targetIndex) {
         setSelectedTargetIndex(
           getNearestRecorderTargetIndex(targetIndex, nextTargetIndices),
@@ -816,8 +911,9 @@ export function FloatingActionRecorder({
         rebuildRecorderTargetSwitches(
           roundActions,
           nextTargetIndices,
-          RECORDER_CENTER_TARGET_INDEX,
+          initialMain,
         ),
+        metaPatch,
       )
     },
     [
@@ -825,6 +921,7 @@ export function FloatingActionRecorder({
       availableTargetIndices,
       cancelTargetSwitchAnimation,
       currentRound,
+      initialMain,
       onChange,
       roundActions,
       selectedTargetIndex,
@@ -832,17 +929,23 @@ export function FloatingActionRecorder({
   )
 
   const handleRemoveTarget = useCallback(
-    (targetIndex: number, targetIsMain: boolean) => {
+    (targetIndex: number) => {
       cancelTargetSwitchAnimation()
 
       const fallbackTargetOptions = activeTargetIndicesForCurrentRound.filter(
         (currentTargetIndex) => currentTargetIndex !== targetIndex,
       )
 
-      if (targetIsMain && fallbackTargetOptions.length > 0) {
+      if (
+        targetIndex === currentMainTargetIndexForCurrentRound &&
+        fallbackTargetOptions.length > 0
+      ) {
         setTargetSwitchPreviewIndex(null)
-        setTargetRemovalFallbackIndex(null)
-        setTargetRemovalDialogIndex(targetIndex)
+        setTargetFallbackDialog({
+          kind: 'remove',
+          targetIndex,
+          fallbackTargetIndex: null,
+        })
         return
       }
 
@@ -851,32 +954,87 @@ export function FloatingActionRecorder({
     [
       activeTargetIndicesForCurrentRound,
       cancelTargetSwitchAnimation,
+      currentMainTargetIndexForCurrentRound,
       removeRecorderTarget,
     ],
   )
 
-  const closeTargetRemovalDialog = useCallback(() => {
-    setTargetRemovalDialogIndex(null)
-    setTargetRemovalFallbackIndex(null)
+  const closeTargetFallbackDialog = useCallback(() => {
+    setTargetFallbackDialog(null)
   }, [])
 
-  const handleConfirmTargetRemoval = useCallback(() => {
+  const handleConfirmTargetFallback = useCallback(() => {
     if (
-      targetRemovalDialogIndex === null ||
-      targetRemovalFallbackIndex === null
+      targetFallbackDialog === null ||
+      targetFallbackDialog.fallbackTargetIndex === null
     ) {
       return
     }
 
-    const targetIndex = targetRemovalDialogIndex
-    const fallbackTargetIndex = targetRemovalFallbackIndex
-    closeTargetRemovalDialog()
+    const { fallbackTargetIndex, targetIndex } = targetFallbackDialog
+    if (targetFallbackDialog.kind === 'death') {
+      const entry =
+        roundActions[String(targetFallbackDialog.round)]?.[
+          targetFallbackDialog.index
+        ]
+      const deadTargetIndices = getRecorderDeadTargetIndices(
+        entry?.slice(1) ?? [],
+      )
+      const base =
+        targetFallbackDialog.removeSpawnTargetIndex === undefined
+          ? roundActions
+          : setRecorderTokenSpawnedTargets(
+              roundActions,
+              targetFallbackDialog.round,
+              targetFallbackDialog.index,
+              getRecorderSpawnedTargetIndices(entry?.slice(1) ?? []).filter(
+                (spawnedTargetIndex) =>
+                  spawnedTargetIndex !==
+                  targetFallbackDialog.removeSpawnTargetIndex,
+              ),
+            )
+      const nextDeadTargetIndices = Array.from(
+        new Set([
+          ...deadTargetIndices.filter(
+            (deadTargetIndex) =>
+              deadTargetIndex !== targetFallbackDialog.replaceDeadTargetIndex,
+          ),
+          targetIndex,
+        ]),
+      ).sort((a, b) => a - b)
+      const next = setRecorderTokenDeadTargetFallback(
+        setRecorderTokenDeadTargets(
+          base,
+          targetFallbackDialog.round,
+          targetFallbackDialog.index,
+          nextDeadTargetIndices,
+        ),
+        targetFallbackDialog.round,
+        targetFallbackDialog.index,
+        targetIndex,
+        fallbackTargetIndex,
+      )
+      closeTargetFallbackDialog()
+      onChange(
+        rebuildRecorderTargetSwitches(
+          next,
+          availableTargetIndices,
+          initialMain,
+        ),
+      )
+      return
+    }
+
+    closeTargetFallbackDialog()
     removeRecorderTarget(targetIndex, fallbackTargetIndex)
   }, [
-    closeTargetRemovalDialog,
+    availableTargetIndices,
+    closeTargetFallbackDialog,
+    initialMain,
+    onChange,
     removeRecorderTarget,
-    targetRemovalDialogIndex,
-    targetRemovalFallbackIndex,
+    roundActions,
+    targetFallbackDialog,
   ])
 
   const handlePreviousRound = useCallback(() => {
@@ -902,7 +1060,7 @@ export function FloatingActionRecorder({
         rebuildRecorderTargetSwitches(
           copyRoundInRecorder(roundActions, round),
           availableTargetIndices,
-          RECORDER_CENTER_TARGET_INDEX,
+          initialMain,
         ),
       )
       setCurrentRound(nextRound)
@@ -913,7 +1071,7 @@ export function FloatingActionRecorder({
         intent: 'success',
       })
     },
-    [availableTargetIndices, onChange, roundActions],
+    [availableTargetIndices, initialMain, onChange, roundActions],
   )
 
   const handleCopySpecificRound = useCallback(
@@ -945,7 +1103,7 @@ export function FloatingActionRecorder({
         rebuildRecorderTargetSwitches(
           copyRoundInRecorder(roundActions, sourceRound, targetRound),
           availableTargetIndices,
-          RECORDER_CENTER_TARGET_INDEX,
+          initialMain,
         ),
       )
       setCurrentRound(nextRound)
@@ -959,6 +1117,7 @@ export function FloatingActionRecorder({
     [
       availableTargetIndices,
       copySourceRoundInput,
+      initialMain,
       onChange,
       roundActions,
     ],
@@ -969,7 +1128,7 @@ export function FloatingActionRecorder({
       const next = rebuildRecorderTargetSwitches(
         removeRoundInRecorder(roundActions, round),
         availableTargetIndices,
-        RECORDER_CENTER_TARGET_INDEX,
+        initialMain,
       )
       const remainingMax = Math.max(1, ...getRecorderRoundNumbers(next))
       onChange(next)
@@ -982,7 +1141,7 @@ export function FloatingActionRecorder({
         intent: 'success',
       })
     },
-    [availableTargetIndices, onChange, roundActions],
+    [availableTargetIndices, initialMain, onChange, roundActions],
   )
 
   const handleRemoveToken = useCallback(
@@ -991,11 +1150,11 @@ export function FloatingActionRecorder({
         rebuildRecorderTargetSwitches(
           removeRecorderToken(roundActions, round, index),
           availableTargetIndices,
-          RECORDER_CENTER_TARGET_INDEX,
+          initialMain,
         ),
       )
     },
-    [availableTargetIndices, onChange, roundActions],
+    [availableTargetIndices, initialMain, onChange, roundActions],
   )
 
   const handleConvertToken = useCallback(
@@ -1029,7 +1188,7 @@ export function FloatingActionRecorder({
         const activeTargetIndices = getRecorderActiveTargetIndices(
           roundActions,
           availableTargetIndices,
-          RECORDER_CENTER_TARGET_INDEX,
+          initialMain,
           {
             throughRound: round,
             beforeActionIndex: index,
@@ -1044,11 +1203,75 @@ export function FloatingActionRecorder({
         rebuildRecorderTargetSwitches(
           setRecorderTokenTarget(roundActions, round, index, targetIndex),
           availableTargetIndices,
-          RECORDER_CENTER_TARGET_INDEX,
+          initialMain,
         ),
       )
     },
-    [availableTargetIndices, onChange, roundActions],
+    [availableTargetIndices, initialMain, onChange, roundActions],
+  )
+
+  const openRecorderDeathFallbackDialog = useCallback(
+    (
+      round: number,
+      index: number,
+      targetIndex: number,
+      options: {
+        replaceDeadTargetIndex?: number
+        removeSpawnTargetIndex?: number
+      } = {},
+    ) => {
+      const entry = roundActions[String(round)]?.[index]
+      const actionTargetIndex = entry
+        ?.slice(1)
+        .map((value) => parseRecorderTargetMetadata(value))
+        .find((value) => value !== undefined)
+
+      if (actionTargetIndex !== targetIndex) {
+        return false
+      }
+
+      const activeBeforeAction = getRecorderActiveTargetIndices(
+        roundActions,
+        availableTargetIndices,
+        initialMain,
+        {
+          throughRound: round,
+          beforeActionIndex: index,
+        },
+      )
+      const deadSet = new Set(
+        getRecorderDeadTargetIndices(entry?.slice(1) ?? []),
+      )
+      if (options.replaceDeadTargetIndex !== undefined) {
+        deadSet.delete(options.replaceDeadTargetIndex)
+      }
+      deadSet.add(targetIndex)
+      const fallbackTargetOptions = activeBeforeAction.filter(
+        (candidate) => !deadSet.has(candidate),
+      )
+
+      if (fallbackTargetOptions.length === 0) {
+        return false
+      }
+
+      cancelTargetSwitchAnimation()
+      setTargetSwitchPreviewIndex(null)
+      setTargetFallbackDialog({
+        kind: 'death',
+        targetIndex,
+        fallbackTargetIndex: null,
+        round,
+        index,
+        ...options,
+      })
+      return true
+    },
+    [
+      availableTargetIndices,
+      cancelTargetSwitchAnimation,
+      initialMain,
+      roundActions,
+    ],
   )
 
   const handleToggleTokenDeath = useCallback(
@@ -1058,6 +1281,14 @@ export function FloatingActionRecorder({
         entry?.slice(1) ?? [],
       )
       const isMarked = deadTargetIndices.includes(targetIndex)
+
+      if (
+        !isMarked &&
+        openRecorderDeathFallbackDialog(round, index, targetIndex)
+      ) {
+        return
+      }
+
       const nextDeadTargetIndices = isMarked
         ? deadTargetIndices.filter(
             (deadTargetIndex) => deadTargetIndex !== targetIndex,
@@ -1073,11 +1304,18 @@ export function FloatingActionRecorder({
             nextDeadTargetIndices,
           ),
           availableTargetIndices,
-          RECORDER_CENTER_TARGET_INDEX,
+          initialMain,
         ),
       )
     },
-    [availableTargetIndices, onChange, roundActions],
+    [
+      availableTargetIndices,
+      cancelTargetSwitchAnimation,
+      initialMain,
+      onChange,
+      openRecorderDeathFallbackDialog,
+      roundActions,
+    ],
   )
 
   const handleToggleTokenSpawn = useCallback(
@@ -1089,8 +1327,7 @@ export function FloatingActionRecorder({
       const isMarked = spawnedTargetIndices.includes(targetIndex)
       const nextSpawnedTargetIndices = isMarked
         ? spawnedTargetIndices.filter(
-            (spawnedTargetIndex) =>
-              spawnedTargetIndex !== targetIndex,
+            (spawnedTargetIndex) => spawnedTargetIndex !== targetIndex,
           )
         : [...spawnedTargetIndices, targetIndex]
 
@@ -1103,11 +1340,11 @@ export function FloatingActionRecorder({
             nextSpawnedTargetIndices,
           ),
           availableTargetIndices,
-          RECORDER_CENTER_TARGET_INDEX,
+          initialMain,
         ),
       )
     },
-    [availableTargetIndices, onChange, roundActions],
+    [availableTargetIndices, initialMain, onChange, roundActions],
   )
 
   const handleChangeTokenDeathTarget = useCallback(
@@ -1129,25 +1366,34 @@ export function FloatingActionRecorder({
         return
       }
 
+      if (
+        openRecorderDeathFallbackDialog(round, index, toTargetIndex, {
+          replaceDeadTargetIndex: fromTargetIndex,
+        })
+      ) {
+        return
+      }
+
       onChange(
         rebuildRecorderTargetSwitches(
-          setRecorderTokenDeadTargets(
-            roundActions,
-            round,
-            index,
-            [
-              ...deadTargetIndices.filter(
-                (deadTargetIndex) => deadTargetIndex !== fromTargetIndex,
-              ),
-              toTargetIndex,
-            ],
-          ),
+          setRecorderTokenDeadTargets(roundActions, round, index, [
+            ...deadTargetIndices.filter(
+              (deadTargetIndex) => deadTargetIndex !== fromTargetIndex,
+            ),
+            toTargetIndex,
+          ]),
           availableTargetIndices,
-          RECORDER_CENTER_TARGET_INDEX,
+          initialMain,
         ),
       )
     },
-    [availableTargetIndices, onChange, roundActions],
+    [
+      availableTargetIndices,
+      initialMain,
+      onChange,
+      openRecorderDeathFallbackDialog,
+      roundActions,
+    ],
   )
 
   const handleChangeTokenSpawnTarget = useCallback(
@@ -1171,24 +1417,18 @@ export function FloatingActionRecorder({
 
       onChange(
         rebuildRecorderTargetSwitches(
-          setRecorderTokenSpawnedTargets(
-            roundActions,
-            round,
-            index,
-            [
-              ...spawnedTargetIndices.filter(
-                (spawnedTargetIndex) =>
-                  spawnedTargetIndex !== fromTargetIndex,
-              ),
-              toTargetIndex,
-            ],
-          ),
+          setRecorderTokenSpawnedTargets(roundActions, round, index, [
+            ...spawnedTargetIndices.filter(
+              (spawnedTargetIndex) => spawnedTargetIndex !== fromTargetIndex,
+            ),
+            toTargetIndex,
+          ]),
           availableTargetIndices,
-          RECORDER_CENTER_TARGET_INDEX,
+          initialMain,
         ),
       )
     },
-    [availableTargetIndices, onChange, roundActions],
+    [availableTargetIndices, initialMain, onChange, roundActions],
   )
 
   const handleChangeTokenMarkerType = useCallback(
@@ -1208,6 +1448,15 @@ export function FloatingActionRecorder({
         nextType === 'dead' && spawnedTargetIndices.includes(targetIndex)
 
       if (!isChangingFromDead && !isChangingFromSpawn) {
+        return
+      }
+
+      if (
+        isChangingFromSpawn &&
+        openRecorderDeathFallbackDialog(round, index, targetIndex, {
+          removeSpawnTargetIndex: targetIndex,
+        })
+      ) {
         return
       }
 
@@ -1250,17 +1499,23 @@ export function FloatingActionRecorder({
         rebuildRecorderTargetSwitches(
           next,
           availableTargetIndices,
-          RECORDER_CENTER_TARGET_INDEX,
+          initialMain,
         ),
       )
     },
-    [availableTargetIndices, onChange, roundActions],
+    [
+      availableTargetIndices,
+      initialMain,
+      onChange,
+      openRecorderDeathFallbackDialog,
+      roundActions,
+    ],
   )
 
   const handleHide = useCallback(() => {
     setVisible(false)
-    closeTargetRemovalDialog()
-  }, [closeTargetRemovalDialog])
+    closeTargetFallbackDialog()
+  }, [closeTargetFallbackDialog])
 
   if (!visible) {
     return createPortal(
@@ -1294,7 +1549,7 @@ export function FloatingActionRecorder({
     const activeTargetIndicesBeforeAction = getRecorderActiveTargetIndices(
       roundActions,
       availableTargetIndices,
-      RECORDER_CENTER_TARGET_INDEX,
+      initialMain,
       {
         throughRound: round,
         beforeActionIndex: item.index,
@@ -1332,8 +1587,7 @@ export function FloatingActionRecorder({
           onClick={
             slot === undefined
               ? undefined
-              : () =>
-                  handleConvertToken(round, item.index, slot, 'ultimate')
+              : () => handleConvertToken(round, item.index, slot, 'ultimate')
           }
         >
           {`↑`}
@@ -1408,30 +1662,36 @@ export function FloatingActionRecorder({
                     <span className="text-[10px] text-slate-500 dark:text-slate-400">
                       目标
                     </span>
-                    {actionTargetLegend.map(({ targetIndex: choiceIndex, label }) => {
-                      const isNeutralTarget = label === '0'
-                      return (
-                        <button
-                          key={choiceIndex}
-                          type="button"
-                          title={`将此动作标记为${label}`}
-                          aria-pressed={normalizedTargetIndex === choiceIndex}
-                          className={clsx(
-                            'inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
-                            isNeutralTarget
-                              ? TARGET_POSITION_NEUTRAL_CLASS
-                              : TARGET_POSITION_TONE_CLASS[label],
-                            normalizedTargetIndex === choiceIndex &&
-                              'ring-1 ring-slate-700 dark:ring-slate-100',
-                          )}
-                          onClick={() =>
-                            handleSetTokenTarget(round, item.index, choiceIndex)
-                          }
-                        >
-                          {label}
-                        </button>
-                      )
-                    })}
+                    {actionTargetLegend.map(
+                      ({ targetIndex: choiceIndex, label }) => {
+                        const isNeutralTarget = label === '0'
+                        return (
+                          <button
+                            key={choiceIndex}
+                            type="button"
+                            title={`将此动作标记为${label}`}
+                            aria-pressed={normalizedTargetIndex === choiceIndex}
+                            className={clsx(
+                              'inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
+                              isNeutralTarget
+                                ? TARGET_POSITION_NEUTRAL_CLASS
+                                : TARGET_POSITION_TONE_CLASS[label],
+                              normalizedTargetIndex === choiceIndex &&
+                                'ring-1 ring-slate-700 dark:ring-slate-100',
+                            )}
+                            onClick={() =>
+                              handleSetTokenTarget(
+                                round,
+                                item.index,
+                                choiceIndex,
+                              )
+                            }
+                          >
+                            {label}
+                          </button>
+                        )
+                      },
+                    )}
                   </div>
                   <div className="mt-0.5 space-y-0.5 border-t border-slate-200 px-0.5 pt-1 dark:border-slate-700">
                     <div className="flex items-center gap-1">
@@ -1452,6 +1712,7 @@ export function FloatingActionRecorder({
                               title={`${label} 号位在此动作后死亡`}
                               aria-pressed={marked}
                               className={clsx(
+                                Classes.POPOVER_DISMISS,
                                 'inline-flex h-5 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
                                 marked
                                   ? 'border-rose-400 bg-rose-100 text-rose-700 dark:border-rose-500 dark:bg-rose-500/20 dark:text-rose-200'
@@ -1468,7 +1729,8 @@ export function FloatingActionRecorder({
                               死{label}
                             </button>
                           )
-                        })}
+                        },
+                      )}
                     </div>
                     <div className="flex items-center gap-1">
                       <span className="w-8 shrink-0" />
@@ -1502,7 +1764,8 @@ export function FloatingActionRecorder({
                               加{label}
                             </button>
                           )
-                        })}
+                        },
+                      )}
                     </div>
                   </div>
                 </>
@@ -1538,193 +1801,195 @@ export function FloatingActionRecorder({
         {showEnemyEvents ? (
           <>
             {item.deadTargetIndices.map((deadTargetIndex) => {
-          const deadTargetLabel = getRecorderTargetLabel(deadTargetIndex)
-          return (
-            <Popover2
-              key={deadTargetIndex}
-              minimal
-              placement="top"
-              portalClassName="z-[1600]"
-              popoverClassName="[&>.bp4-popover2-content]:!p-0 overflow-hidden"
-              content={
-                <div className="flex items-center gap-0.5 p-0.5">
-                  <span className="px-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-200">
-                    死亡
-                  </span>
-                  {allTargetLegend.map(
-                    ({ targetIndex: choiceIndex, label }) => {
-                      const selected = choiceIndex === deadTargetIndex
-                      return (
-                        <button
-                          key={choiceIndex}
-                          type="button"
-                          title={`改为${label}号位死亡`}
-                          aria-pressed={selected}
-                          className={clsx(
-                            Classes.POPOVER_DISMISS,
-                            'inline-flex h-6 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
-                            selected
-                              ? 'border-rose-400 bg-rose-100 text-rose-700 dark:border-rose-500 dark:bg-rose-500/25 dark:text-rose-100'
-                              : 'border-slate-300 bg-white text-slate-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-rose-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-200',
-                          )}
-                          onClick={() =>
-                            handleChangeTokenDeathTarget(
-                              round,
-                              item.index,
-                              deadTargetIndex,
-                              choiceIndex,
-                            )
-                          }
-                        >
-                          死{label}
-                        </button>
-                      )
-                    })}
+              const deadTargetLabel = getRecorderTargetLabel(deadTargetIndex)
+              return (
+                <Popover2
+                  key={deadTargetIndex}
+                  minimal
+                  placement="top"
+                  portalClassName="z-[1600]"
+                  popoverClassName="[&>.bp4-popover2-content]:!p-0 overflow-hidden"
+                  content={
+                    <div className="flex items-center gap-0.5 p-0.5">
+                      <span className="px-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-200">
+                        死亡
+                      </span>
+                      {allTargetLegend.map(
+                        ({ targetIndex: choiceIndex, label }) => {
+                          const selected = choiceIndex === deadTargetIndex
+                          return (
+                            <button
+                              key={choiceIndex}
+                              type="button"
+                              title={`改为${label}号位死亡`}
+                              aria-pressed={selected}
+                              className={clsx(
+                                Classes.POPOVER_DISMISS,
+                                'inline-flex h-6 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
+                                selected
+                                  ? 'border-rose-400 bg-rose-100 text-rose-700 dark:border-rose-500 dark:bg-rose-500/25 dark:text-rose-100'
+                                  : 'border-slate-300 bg-white text-slate-600 hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-rose-500 dark:hover:bg-rose-500/10 dark:hover:text-rose-200',
+                              )}
+                              onClick={() =>
+                                handleChangeTokenDeathTarget(
+                                  round,
+                                  item.index,
+                                  deadTargetIndex,
+                                  choiceIndex,
+                                )
+                              }
+                            >
+                              死{label}
+                            </button>
+                          )
+                        },
+                      )}
+                      <button
+                        type="button"
+                        title="改为出现标记"
+                        className={clsx(
+                          Classes.POPOVER_DISMISS,
+                          'inline-flex h-6 min-w-10 items-center justify-center rounded-sm border border-cyan-300 bg-cyan-50 px-1 text-[10px] font-semibold text-cyan-700 transition hover:border-cyan-400 hover:bg-cyan-100 dark:border-cyan-500/70 dark:bg-cyan-500/15 dark:text-cyan-200 dark:hover:border-cyan-400 dark:hover:bg-cyan-500/25',
+                        )}
+                        onClick={() =>
+                          handleChangeTokenMarkerType(
+                            round,
+                            item.index,
+                            deadTargetIndex,
+                            'spawn',
+                          )
+                        }
+                      >
+                        改出现
+                      </button>
+                      <Button
+                        small
+                        minimal
+                        intent="danger"
+                        className={clsx(
+                          Classes.POPOVER_DISMISS,
+                          '!h-6 !min-h-6 !w-7 !min-w-7 !p-0 !text-[10px] !font-semibold',
+                        )}
+                        title="删除死亡标记"
+                        onClick={() =>
+                          handleToggleTokenDeath(
+                            round,
+                            item.index,
+                            deadTargetIndex,
+                          )
+                        }
+                      >
+                        删
+                      </Button>
+                    </div>
+                  }
+                >
                   <button
                     type="button"
-                    title="改为出现标记"
-                    className={clsx(
-                      Classes.POPOVER_DISMISS,
-                      'inline-flex h-6 min-w-10 items-center justify-center rounded-sm border border-cyan-300 bg-cyan-50 px-1 text-[10px] font-semibold text-cyan-700 transition hover:border-cyan-400 hover:bg-cyan-100 dark:border-cyan-500/70 dark:bg-cyan-500/15 dark:text-cyan-200 dark:hover:border-cyan-400 dark:hover:bg-cyan-500/25',
-                    )}
-                    onClick={() =>
-                      handleChangeTokenMarkerType(
-                        round,
-                        item.index,
-                        deadTargetIndex,
-                        'spawn',
-                      )
-                    }
+                    className="ml-0.5 inline-flex h-4 max-w-full shrink-0 cursor-pointer items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-sm border border-rose-300 bg-rose-50 px-1 text-[9px] font-semibold leading-none text-rose-700 transition hover:border-rose-500 hover:bg-rose-100 dark:border-rose-500/60 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:border-rose-400 dark:hover:bg-rose-500/25"
+                    title={`第 ${round} 回合第 ${item.order} 个动作后，${deadTargetLabel} 号位死亡；点击编辑`}
+                    aria-label={`编辑第 ${round} 回合第 ${item.order} 个动作后的 ${deadTargetLabel} 号位死亡标记`}
                   >
-                    改出现
+                    {deadTargetLabel}死亡
                   </button>
-                  <Button
-                    small
-                    minimal
-                    intent="danger"
-                    className={clsx(
-                      Classes.POPOVER_DISMISS,
-                      '!h-6 !min-h-6 !w-7 !min-w-7 !p-0 !text-[10px] !font-semibold',
-                    )}
-                    title="删除死亡标记"
-                    onClick={() =>
-                      handleToggleTokenDeath(
-                        round,
-                        item.index,
-                        deadTargetIndex,
-                      )
-                    }
-                  >
-                    删
-                  </Button>
-                </div>
-              }
-            >
-              <button
-                type="button"
-                className="ml-0.5 inline-flex h-4 max-w-full shrink-0 cursor-pointer items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-sm border border-rose-300 bg-rose-50 px-1 text-[9px] font-semibold leading-none text-rose-700 transition hover:border-rose-500 hover:bg-rose-100 dark:border-rose-500/60 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:border-rose-400 dark:hover:bg-rose-500/25"
-                title={`第 ${round} 回合第 ${item.order} 个动作后，${deadTargetLabel} 号位死亡；点击编辑`}
-                aria-label={`编辑第 ${round} 回合第 ${item.order} 个动作后的 ${deadTargetLabel} 号位死亡标记`}
-              >
-                {deadTargetLabel}死亡
-              </button>
-            </Popover2>
-          )
+                </Popover2>
+              )
             })}
             {item.spawnedTargetIndices.map((spawnedTargetIndex) => {
-          const spawnedTargetLabel =
-            getRecorderTargetLabel(spawnedTargetIndex)
-          return (
-            <Popover2
-              key={spawnedTargetIndex}
-              minimal
-              placement="top"
-              portalClassName="z-[1600]"
-              popoverClassName="[&>.bp4-popover2-content]:!p-0 overflow-hidden"
-              content={
-                <div className="flex items-center gap-0.5 p-0.5">
-                  <span className="px-0.5 text-[10px] font-medium text-cyan-700 dark:text-cyan-200">
-                    出现
-                  </span>
-                  {allTargetLegend.map(
-                    ({ targetIndex: choiceIndex, label }) => {
-                      const selected = choiceIndex === spawnedTargetIndex
-                      return (
-                        <button
-                          key={choiceIndex}
-                          type="button"
-                          title={`改为${label}号位出现`}
-                          aria-pressed={selected}
-                          className={clsx(
-                            Classes.POPOVER_DISMISS,
-                            'inline-flex h-6 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
-                            selected
-                              ? 'border-cyan-400 bg-cyan-100 text-cyan-700 dark:border-cyan-500 dark:bg-cyan-500/25 dark:text-cyan-100'
-                              : 'border-slate-300 bg-white text-slate-600 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-cyan-500 dark:hover:bg-cyan-500/10 dark:hover:text-cyan-200',
-                          )}
-                          onClick={() =>
-                            handleChangeTokenSpawnTarget(
-                              round,
-                              item.index,
-                              spawnedTargetIndex,
-                              choiceIndex,
-                            )
-                          }
-                        >
-                          加{label}
-                        </button>
-                      )
-                    })}
+              const spawnedTargetLabel =
+                getRecorderTargetLabel(spawnedTargetIndex)
+              return (
+                <Popover2
+                  key={spawnedTargetIndex}
+                  minimal
+                  placement="top"
+                  portalClassName="z-[1600]"
+                  popoverClassName="[&>.bp4-popover2-content]:!p-0 overflow-hidden"
+                  content={
+                    <div className="flex items-center gap-0.5 p-0.5">
+                      <span className="px-0.5 text-[10px] font-medium text-cyan-700 dark:text-cyan-200">
+                        出现
+                      </span>
+                      {allTargetLegend.map(
+                        ({ targetIndex: choiceIndex, label }) => {
+                          const selected = choiceIndex === spawnedTargetIndex
+                          return (
+                            <button
+                              key={choiceIndex}
+                              type="button"
+                              title={`改为${label}号位出现`}
+                              aria-pressed={selected}
+                              className={clsx(
+                                Classes.POPOVER_DISMISS,
+                                'inline-flex h-6 min-w-7 items-center justify-center rounded-sm border px-1 text-[10px] font-semibold transition',
+                                selected
+                                  ? 'border-cyan-400 bg-cyan-100 text-cyan-700 dark:border-cyan-500 dark:bg-cyan-500/25 dark:text-cyan-100'
+                                  : 'border-slate-300 bg-white text-slate-600 hover:border-cyan-300 hover:bg-cyan-50 hover:text-cyan-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-300 dark:hover:border-cyan-500 dark:hover:bg-cyan-500/10 dark:hover:text-cyan-200',
+                              )}
+                              onClick={() =>
+                                handleChangeTokenSpawnTarget(
+                                  round,
+                                  item.index,
+                                  spawnedTargetIndex,
+                                  choiceIndex,
+                                )
+                              }
+                            >
+                              加{label}
+                            </button>
+                          )
+                        },
+                      )}
+                      <button
+                        type="button"
+                        title="改为死亡标记"
+                        className={clsx(
+                          Classes.POPOVER_DISMISS,
+                          'inline-flex h-6 min-w-10 items-center justify-center rounded-sm border border-rose-300 bg-rose-50 px-1 text-[10px] font-semibold text-rose-700 transition hover:border-rose-400 hover:bg-rose-100 dark:border-rose-500/70 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:border-rose-400 dark:hover:bg-rose-500/25',
+                        )}
+                        onClick={() =>
+                          handleChangeTokenMarkerType(
+                            round,
+                            item.index,
+                            spawnedTargetIndex,
+                            'dead',
+                          )
+                        }
+                      >
+                        改死亡
+                      </button>
+                      <Button
+                        small
+                        minimal
+                        intent="danger"
+                        className={clsx(
+                          Classes.POPOVER_DISMISS,
+                          '!h-6 !min-h-6 !w-7 !min-w-7 !p-0 !text-[10px] !font-semibold',
+                        )}
+                        title="删除出现标记"
+                        onClick={() =>
+                          handleToggleTokenSpawn(
+                            round,
+                            item.index,
+                            spawnedTargetIndex,
+                          )
+                        }
+                      >
+                        删
+                      </Button>
+                    </div>
+                  }
+                >
                   <button
                     type="button"
-                    title="改为死亡标记"
-                    className={clsx(
-                      Classes.POPOVER_DISMISS,
-                      'inline-flex h-6 min-w-10 items-center justify-center rounded-sm border border-rose-300 bg-rose-50 px-1 text-[10px] font-semibold text-rose-700 transition hover:border-rose-400 hover:bg-rose-100 dark:border-rose-500/70 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:border-rose-400 dark:hover:bg-rose-500/25',
-                    )}
-                    onClick={() =>
-                      handleChangeTokenMarkerType(
-                        round,
-                        item.index,
-                        spawnedTargetIndex,
-                        'dead',
-                      )
-                    }
+                    className="ml-0.5 inline-flex h-4 max-w-full shrink-0 cursor-pointer items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-sm border border-cyan-300 bg-cyan-50 px-1 text-[9px] font-semibold leading-none text-cyan-700 transition hover:border-cyan-500 hover:bg-cyan-100 dark:border-cyan-500/60 dark:bg-cyan-500/15 dark:text-cyan-200 dark:hover:border-cyan-400 dark:hover:bg-cyan-500/25"
+                    title={`第 ${round} 回合第 ${item.order} 个动作后，${spawnedTargetLabel} 号位出现；点击编辑`}
+                    aria-label={`编辑第 ${round} 回合第 ${item.order} 个动作后的 ${spawnedTargetLabel} 号位出现标记`}
                   >
-                    改死亡
+                    {spawnedTargetLabel}出现
                   </button>
-                  <Button
-                    small
-                    minimal
-                    intent="danger"
-                    className={clsx(
-                      Classes.POPOVER_DISMISS,
-                      '!h-6 !min-h-6 !w-7 !min-w-7 !p-0 !text-[10px] !font-semibold',
-                    )}
-                    title="删除出现标记"
-                    onClick={() =>
-                      handleToggleTokenSpawn(
-                        round,
-                        item.index,
-                        spawnedTargetIndex,
-                      )
-                    }
-                  >
-                    删
-                  </Button>
-                </div>
-              }
-            >
-              <button
-                type="button"
-                className="ml-0.5 inline-flex h-4 max-w-full shrink-0 cursor-pointer items-center overflow-hidden text-ellipsis whitespace-nowrap rounded-sm border border-cyan-300 bg-cyan-50 px-1 text-[9px] font-semibold leading-none text-cyan-700 transition hover:border-cyan-500 hover:bg-cyan-100 dark:border-cyan-500/60 dark:bg-cyan-500/15 dark:text-cyan-200 dark:hover:border-cyan-400 dark:hover:bg-cyan-500/25"
-                title={`第 ${round} 回合第 ${item.order} 个动作后，${spawnedTargetLabel} 号位出现；点击编辑`}
-                aria-label={`编辑第 ${round} 回合第 ${item.order} 个动作后的 ${spawnedTargetLabel} 号位出现标记`}
-              >
-                {spawnedTargetLabel}出现
-              </button>
-            </Popover2>
-          )
+                </Popover2>
+              )
             })}
           </>
         ) : null}
@@ -1870,9 +2135,7 @@ export function FloatingActionRecorder({
                 <div
                   className={clsx(
                     'flex flex-wrap items-center gap-1.5 border-t border-slate-200 dark:border-slate-700',
-                    isMobileRecorder
-                      ? 'gap-y-0 pt-0.5'
-                      : 'pt-1.5',
+                    isMobileRecorder ? 'gap-y-0 pt-0.5' : 'pt-1.5',
                   )}
                 >
                   <span className="shrink-0 text-[10px] font-medium leading-none text-slate-500 dark:text-slate-400">
@@ -1891,11 +2154,10 @@ export function FloatingActionRecorder({
                   >
                     {rotatedAllTargetLegend.map(
                       ({ targetIndex, label, gridColumn, gridRow }) => {
-                        const positionStyle =
-                          getRecorderTargetPositionStyle(
-                            gridColumn,
-                            gridRow,
-                          )
+                        const positionStyle = getRecorderTargetPositionStyle(
+                          gridColumn,
+                          gridRow,
+                        )
                         const isAvailable =
                           activeTargetIndicesForCurrentRound.includes(
                             targetIndex,
@@ -1903,8 +2165,9 @@ export function FloatingActionRecorder({
                         const selected =
                           targetIndex === visualSelectedTargetIndex
                         const selectedForRemoval =
-                          targetRemovalDialogIndex !== null &&
-                          targetIndex === targetRemovalFallbackIndex
+                          targetFallbackDialog !== null &&
+                          targetIndex ===
+                            targetFallbackDialog.fallbackTargetIndex
                         const isNeutralTarget = label === '0'
 
                         if (!isAvailable) {
@@ -1914,7 +2177,7 @@ export function FloatingActionRecorder({
                               type="button"
                               title={`出现 ${label} 号位`}
                               aria-label={`出现 ${label} 号位`}
-                              disabled={targetRemovalDialogIndex !== null}
+                              disabled={targetFallbackDialog !== null}
                               style={positionStyle}
                               className={clsx(
                                 'absolute inline-flex items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-400 transition-colors hover:border-slate-500 hover:bg-slate-100 hover:text-slate-600 dark:border-slate-600 dark:text-slate-500 dark:hover:border-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-300',
@@ -1944,9 +2207,10 @@ export function FloatingActionRecorder({
                               type="button"
                               aria-pressed={selected || selectedForRemoval}
                               title={
-                                targetRemovalDialogIndex !== null
-                                  ? targetIndex === targetRemovalDialogIndex
-                                    ? `${label} 号位正在删除`
+                                targetFallbackDialog !== null
+                                  ? targetIndex ===
+                                    targetFallbackDialog.targetIndex
+                                    ? `${label} 号位正在处理`
                                     : `选择 ${label} 号位作为死亡后切换目标`
                                   : `接下来录制的攻击动作标记为${label}`
                               }
@@ -1971,7 +2235,7 @@ export function FloatingActionRecorder({
                               type="button"
                               title={`移除 ${label} 号位`}
                               aria-label={`移除 ${label} 号位`}
-                              disabled={targetRemovalDialogIndex !== null}
+                              disabled={targetFallbackDialog !== null}
                               className={clsx(
                                 'absolute inline-flex items-center justify-center rounded-full border-white bg-rose-500 text-white shadow-sm transition hover:bg-rose-600 dark:border-slate-800',
                                 'disabled:cursor-not-allowed disabled:opacity-40',
@@ -1981,7 +2245,7 @@ export function FloatingActionRecorder({
                               )}
                               onClick={(event) => {
                                 event.stopPropagation()
-                                handleRemoveTarget(targetIndex, selected)
+                                handleRemoveTarget(targetIndex)
                               }}
                             >
                               <Icon
@@ -2018,12 +2282,9 @@ export function FloatingActionRecorder({
                         RECORDER_CONTROL_BUTTON_CLASS,
                         RECORDER_CONTROL_BUTTON_TEXT_CLASS,
                         recorderControlButtonSizeClass,
-                        showEnemyEvents &&
-                          RECORDER_CONTROL_BUTTON_ACTIVE_CLASS,
+                        showEnemyEvents && RECORDER_CONTROL_BUTTON_ACTIVE_CLASS,
                       )}
-                      onClick={() =>
-                        setShowEnemyEvents((current) => !current)
-                      }
+                      onClick={() => setShowEnemyEvents((current) => !current)}
                     >
                       <span className="truncate">敌方存活状态</span>
                     </Button>
@@ -2371,32 +2632,45 @@ export function FloatingActionRecorder({
             </Button>
           </div>
         </Card>
-        {targetRemovalDialogIndex !== null ? (
+        {targetFallbackDialog !== null ? (
           <div
             role="dialog"
             aria-modal="false"
-            aria-label={`删除 ${getRecorderTargetLabel(targetRemovalDialogIndex)} 号位`}
+            aria-label={
+              targetFallbackDialog.kind === 'death'
+                ? `${getRecorderTargetLabel(targetFallbackDialog.targetIndex)} 号位死亡后切换`
+                : `删除 ${getRecorderTargetLabel(targetFallbackDialog.targetIndex)} 号位`
+            }
             className={clsx(
               'pointer-events-auto absolute z-30 -translate-x-1/2 overflow-hidden rounded-md border border-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_42%,var(--maayuan-surface,#faf5ff))] bg-[color-mix(in_srgb,var(--maayuan-surface,#fff)_97%,var(--maayuan-accent,#8b5cf6)_3%)] shadow-2xl dark:border-slate-600 dark:bg-slate-800',
               isMobileRecorder ? 'bottom-14' : 'top-[190px]',
             )}
             style={{
-              left: targetRemovalDialogAnchorX ?? '50%',
-              width: isMobileRecorder
-                ? 'min(calc(100% - 16px), 200px)'
-                : 200,
+              left: targetFallbackDialogAnchorX ?? '50%',
+              width: isMobileRecorder ? 'min(calc(100% - 16px), 200px)' : 200,
             }}
           >
             <div className="flex items-start gap-1.5 px-2.5 pb-1.5 pt-2">
               <span className="mt-0.5 inline-flex h-5 w-5 flex-none items-center justify-center rounded-full bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">
-                <Icon icon="trash" size={10} />
+                <Icon
+                  icon={
+                    targetFallbackDialog.kind === 'death'
+                      ? 'warning-sign'
+                      : 'trash'
+                  }
+                  size={10}
+                />
               </span>
               <div className="min-w-0 flex-1">
                 <div className="text-[11px] font-semibold leading-4 text-[var(--maayuan-text-strong,#4c1d95)] dark:text-slate-100">
-                  删除 {getRecorderTargetLabel(targetRemovalDialogIndex)} 号位
+                  {targetFallbackDialog.kind === 'death'
+                    ? `${getRecorderTargetLabel(targetFallbackDialog.targetIndex)} 号位死亡后切换`
+                    : `删除 ${getRecorderTargetLabel(targetFallbackDialog.targetIndex)} 号位`}
                 </div>
                 <div className="text-[9px] leading-3 text-slate-500 dark:text-slate-400">
-                  选择敌人死亡后自动切换到的位置
+                  {targetFallbackDialog.kind === 'death'
+                    ? '请选择该动作后自动切换到的位置'
+                    : '选择敌人死亡后自动切换到的位置'}
                 </div>
               </div>
             </div>
@@ -2405,10 +2679,10 @@ export function FloatingActionRecorder({
                 切换至
               </span>
               <div className="flex min-w-0 flex-1 items-center justify-around gap-1">
-                {targetRemovalFallbackOptions.map((targetIndex) => {
+                {targetFallbackOptions.map((targetIndex) => {
                   const label = getRecorderTargetLabel(targetIndex)
                   const selected =
-                    targetIndex === targetRemovalFallbackIndex
+                    targetIndex === targetFallbackDialog.fallbackTargetIndex
                   const isNeutralTarget = label === '0'
 
                   return (
@@ -2428,7 +2702,10 @@ export function FloatingActionRecorder({
                           'ring-2 ring-[var(--maayuan-accent,#8b5cf6)] ring-offset-1 ring-offset-white dark:ring-offset-slate-800',
                       )}
                       onClick={() =>
-                        setTargetRemovalFallbackIndex(targetIndex)
+                        setTargetFallbackDialog({
+                          ...targetFallbackDialog,
+                          fallbackTargetIndex: targetIndex,
+                        })
                       }
                     >
                       {label}
@@ -2439,14 +2716,16 @@ export function FloatingActionRecorder({
             </div>
             <div className="flex items-center justify-between gap-1.5 border-t border-slate-200/80 bg-slate-50/70 px-2.5 py-1 dark:border-slate-700 dark:bg-slate-900/30">
               <span className="text-[9px] text-slate-400 dark:text-slate-500">
-                也可直接点击上方站位
+                {targetFallbackDialog.kind === 'death'
+                  ? '选择后点击确认标记'
+                  : '也可直接点击上方站位'}
               </span>
               <div className="flex flex-none gap-1">
                 <Button
                   small
                   minimal
                   className="!h-6 !min-h-6 !px-1.5 !text-[10px]"
-                  onClick={closeTargetRemovalDialog}
+                  onClick={closeTargetFallbackDialog}
                 >
                   取消
                 </Button>
@@ -2454,10 +2733,12 @@ export function FloatingActionRecorder({
                   small
                   intent="danger"
                   className="!h-6 !min-h-6 !px-2 !text-[10px]"
-                  disabled={targetRemovalFallbackIndex === null}
-                  onClick={handleConfirmTargetRemoval}
+                  disabled={targetFallbackDialog.fallbackTargetIndex === null}
+                  onClick={handleConfirmTargetFallback}
                 >
-                  确认删除
+                  {targetFallbackDialog.kind === 'death'
+                    ? '确认标记'
+                    : '确认删除'}
                 </Button>
               </div>
             </div>

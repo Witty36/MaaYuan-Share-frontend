@@ -56,6 +56,7 @@ export interface OperationShareAction {
   raw: string
   order: number
   label: string
+  targetIndex?: number
 }
 
 export type OperationShareCellColumn = `slot-${number}`
@@ -797,6 +798,7 @@ export function buildOperationShareModel(
           raw: token.raw,
           order: token.order + 1,
           label: formatShareActionSummary(token.raw, language),
+          targetIndex: token.targetIndex,
         }))
     }
     return {
@@ -808,6 +810,7 @@ export function buildOperationShareModel(
           raw: token.raw,
           order: token.order + 1,
           label: formatShareActionSummary(token.raw, language),
+          targetIndex: token.targetIndex,
         })),
     }
   })

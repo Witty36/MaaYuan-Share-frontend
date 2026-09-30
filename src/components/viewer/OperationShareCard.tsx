@@ -27,6 +27,7 @@ import {
   ShareSectionTitle,
   shareCardPalette as palette,
 } from './shareCardComponents'
+import { getRecorderMetaTargetColor } from '../editor2/action/recorderMeta'
 
 const defaultCardConfig = createOperationShareCardConfig()
 const accessibleDarkTextColor = '#231f20'
@@ -296,7 +297,14 @@ function ActionList({
   return (
     <div className="text-center text-[22px] font-bold leading-[1.25]">
       {actions.map((action, index) => (
-        <span key={`${action.raw}-${index}`}>
+        <span
+          key={`${action.raw}-${index}`}
+          style={
+            getRecorderMetaTargetColor(action.targetIndex)
+              ? { color: getRecorderMetaTargetColor(action.targetIndex) }
+              : undefined
+          }
+        >
           {getOperationShareActionLabel(
             action,
             displayOrderByActionOrder.get(action.order),

@@ -28,6 +28,11 @@ import {
   resolveChipVariant,
 } from '../editor2/action/tokenUtils'
 import { simingActionsToRoundActions } from '../editor2/siming-export'
+import {
+  getRecorderAttackNumber,
+  getRecorderMetaTargetColor,
+  getRecorderMetaTargetIndex,
+} from '../editor2/action/recorderMeta'
 
 interface ActionSequenceViewerProps {
   operation: Operation
@@ -50,6 +55,7 @@ export interface DisplayToken {
   label: string
   key: string
   order: number
+  targetIndex?: number
 }
 
 type ViewMode = 'flow' | 'table' | 'share'
@@ -121,13 +127,18 @@ export const ActionSequenceViewer: FC<ActionSequenceViewerProps> = ({
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
-        {tokens.map(({ raw, label, key }) => (
+        {tokens.map(({ raw, label, key, targetIndex }) => (
           <Tag
             key={key}
             large
             intent="primary"
             minimal
             title={raw !== label ? raw : undefined}
+            style={
+              getRecorderMetaTargetColor(targetIndex)
+                ? { color: getRecorderMetaTargetColor(targetIndex) }
+                : undefined
+            }
           >
             {label}
           </Tag>
@@ -278,6 +289,10 @@ export const ActionSequenceViewer: FC<ActionSequenceViewerProps> = ({
                                     token.raw,
                                     language,
                                   )
+                                  const targetColor =
+                                    getRecorderMetaTargetColor(
+                                      token.targetIndex,
+                                    )
                                   return (
                                     <div
                                       key={token.key}
@@ -292,7 +307,14 @@ export const ActionSequenceViewer: FC<ActionSequenceViewerProps> = ({
                                         )}
                                         aria-hidden="true"
                                       />
-                                      <span className="truncate">
+                                      <span
+                                        className="truncate"
+                                        style={
+                                          targetColor
+                                            ? { color: targetColor }
+                                            : undefined
+                                        }
+                                      >
                                         {`${token.order + 1}${summary}`}
                                       </span>
                                     </div>
@@ -317,6 +339,10 @@ export const ActionSequenceViewer: FC<ActionSequenceViewerProps> = ({
                                   token.raw,
                                   language,
                                 )
+                                const targetColor =
+                                  getRecorderMetaTargetColor(
+                                    token.targetIndex,
+                                  )
                                 return (
                                   <div
                                     key={token.key}
@@ -331,7 +357,14 @@ export const ActionSequenceViewer: FC<ActionSequenceViewerProps> = ({
                                       )}
                                       aria-hidden="true"
                                     />
-                                    <span className="truncate">
+                                    <span
+                                      className="truncate"
+                                      style={
+                                        targetColor
+                                          ? { color: targetColor }
+                                          : undefined
+                                      }
+                                    >
                                       {`${token.order + 1}${summary}`}
                                     </span>
                                   </div>
@@ -410,7 +443,12 @@ function collectRoundsFromStandardActions(
   })) as unknown as EditorAction[]
 
   const roundActions = editorActionsToRoundActions(editorActions)
-  const rounds = buildDisplayRounds(roundActions, slotAssignments, language)
+  const rounds = buildDisplayRounds(
+    roundActions,
+    slotAssignments,
+    language,
+    operation.parsedContent.recorderMeta,
+  )
   if (!rounds.length) {
     return null
   }
@@ -427,7 +465,12 @@ function collectRoundsFromSimingActions(
     return null
   }
   const roundActions = simingActionsToRoundActions(actions)
-  const rounds = buildDisplayRounds(roundActions, slotAssignments, language)
+  const rounds = buildDisplayRounds(
+    roundActions,
+    slotAssignments,
+    language,
+    operation.parsedContent.recorderMeta,
+  )
   if (!rounds.length) {
     return null
   }
@@ -438,26 +481,38 @@ function buildDisplayRounds(
   roundActions: RoundActionsInput,
   slotAssignments: SlotAssignments,
   language: Language,
+  recorderMeta?: unknown,
 ): DisplayRound[] {
   return Object.entries(roundActions)
-    .map(([roundKey, entries]) => ({
-      round: Number(roundKey),
-      tokens:
-        entries
-          ?.map((entry) => entry?.[0]?.trim())
-          .filter((token): token is string => Boolean(token)) ?? [],
-    }))
+    .map(([roundKey, entries]) => {
+      const round = Number(roundKey)
+      const tokens: DisplayToken[] = []
+      let order = 0
+
+      ;(entries ?? []).forEach((entry, index) => {
+        const raw = entry?.[0]?.trim()
+        if (!raw) {
+          return
+        }
+
+        tokens.push({
+          raw,
+          label: formatTokenLabel(raw, slotAssignments, language),
+          key: `${round}-${order}-${raw}`,
+          order,
+          targetIndex: getRecorderMetaTargetIndex(
+            recorderMeta,
+            round,
+            getRecorderAttackNumber(roundActions, round, index),
+          ),
+        })
+        order += 1
+      })
+
+      return { round, tokens }
+    })
     .filter((entry) => entry.tokens.length > 0 && Number.isFinite(entry.round))
     .sort((a, b) => a.round - b.round)
-    .map(({ round, tokens }) => ({
-      round,
-      tokens: tokens.map((token, index) => ({
-        raw: token,
-        label: formatTokenLabel(token, slotAssignments, language),
-        key: `${round}-${index}-${token}`,
-        order: index,
-      })),
-    }))
 }
 
 export function buildOperationActionDisplay(

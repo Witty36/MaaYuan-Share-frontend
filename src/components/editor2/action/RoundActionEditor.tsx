@@ -27,6 +27,11 @@ import {
   editorActionsToRoundActions,
   roundActionsToEditorActions,
 } from "./roundMapping";
+import {
+  parseRecorderMeta,
+  syncRecorderMetaFromRoundActions,
+  type RecorderMetaPatch,
+} from "./recorderMeta";
 import type { BasicActionSymbol, ChipVariant } from "./tokenUtils";
 import {
   CHIP_VARIANT_DOT_CLASS,
@@ -364,6 +369,7 @@ function normalizeRoundActions(input: RoundActionsInput): RoundActionsInput {
 export const ActionEditor: FC<ActionEditorProps> = ({ className }) => {
   const actions = useAtomValue(editorAtoms.actions);
   const operation = useAtomValue(editorAtoms.operation);
+  const operationBase = useAtomValue(editorAtoms.operationBase);
   const edit = useEdit();
 
   const slotAssignments: MappingOptions["slotAssignments"] = useMemo(() => {
@@ -403,6 +409,10 @@ export const ActionEditor: FC<ActionEditorProps> = ({ className }) => {
     return initial;
   });
   const [viewMode, setViewMode] = useState<ActionViewMode>("round");
+  const recorderMeta = useMemo(
+    () => parseRecorderMeta(operationBase.recorderMeta),
+    [operationBase.recorderMeta],
+  );
 
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -433,6 +443,14 @@ export const ActionEditor: FC<ActionEditorProps> = ({ className }) => {
     // 若检测到存在跳号/重复号导致的重算，则回写到全局 actions，保证“首次打开/导入”后立即修正
     if (!isEqual(normalized, reindexed)) {
       edit((get, set) => {
+        const base = get(editorAtoms.operationBase);
+        set(editorAtoms.operationBase, {
+          ...base,
+          recorderMeta: syncRecorderMetaFromRoundActions(
+            parseRecorderMeta(base.recorderMeta),
+            reindexed,
+          ),
+        });
         set(editorAtoms.actions, roundActionsToEditorActions(reindexed, { slotAssignments }));
         return {
           action: "round-actions-reindex",
@@ -473,27 +491,53 @@ export const ActionEditor: FC<ActionEditorProps> = ({ className }) => {
   }, [hasRounds, maxRound, minRound]);
 
   const applyRoundActions = useCallback(
-    (updater: (current: RoundActionsInput) => RoundActionsInput) => {
+    (
+      updater: (current: RoundActionsInput) => RoundActionsInput,
+      metaPatch?: RecorderMetaPatch,
+    ) => {
       setRoundActions((prev) => {
         const cloned = cloneRoundActions(prev);
         const normalized = normalizeRoundActions(updater(cloned));
         const reindexed = reindexRoundActions(normalized);
-        if (isEqual(prev, reindexed)) {
+        const actionsChanged = !isEqual(prev, reindexed);
+
+        if (!actionsChanged && metaPatch === undefined) {
           return prev;
         }
         edit((get, set) => {
-          set(
-            editorAtoms.actions,
-            roundActionsToEditorActions(reindexed, {
-              slotAssignments,
-            }),
+          const base = get(editorAtoms.operationBase);
+          const currentRecorderMeta = parseRecorderMeta(base.recorderMeta);
+          const nextRecorderMeta = syncRecorderMetaFromRoundActions(
+            currentRecorderMeta,
+            reindexed,
+            metaPatch,
           );
+
+          if (!actionsChanged && isEqual(currentRecorderMeta, nextRecorderMeta)) {
+            return {
+              action: "skip",
+              desc: "Skip checkpoint",
+            };
+          }
+
+          set(editorAtoms.operationBase, {
+            ...base,
+            recorderMeta: nextRecorderMeta,
+          });
+          if (actionsChanged) {
+            set(
+              editorAtoms.actions,
+              roundActionsToEditorActions(reindexed, {
+                slotAssignments,
+              }),
+            );
+          }
           return {
             action: "round-actions-update",
             desc: "更新回合动作（含自动重算序号）",
           };
         });
-        return reindexed;
+        return actionsChanged ? reindexed : prev;
       });
     },
     [edit, slotAssignments],
@@ -638,8 +682,8 @@ export const ActionEditor: FC<ActionEditorProps> = ({ className }) => {
   );
 
   const handleRecorderChange = useCallback(
-    (next: RoundActionsInput) => {
-      applyRoundActions(() => next);
+    (next: RoundActionsInput, metaPatch?: RecorderMetaPatch) => {
+      applyRoundActions(() => next, metaPatch);
     },
     [applyRoundActions],
   );
@@ -1359,6 +1403,7 @@ export const ActionEditor: FC<ActionEditorProps> = ({ className }) => {
         roundActions={roundActions}
         slotAssignments={slotAssignments}
         onChange={handleRecorderChange}
+        recorderMeta={recorderMeta}
       />
     </div>
   );

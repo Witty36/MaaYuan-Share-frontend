@@ -7,6 +7,7 @@ import { Simplify } from "type-fest";
 import { CopilotDocV1 } from "../../models/copilot.schema";
 import { createHistoryAtom, useHistoryEdit } from "./history";
 import { toEditorOperation, toMaaOperation } from "./reconciliation";
+import { createDefaultRecorderMeta } from "./action/recorderMeta";
 import {
   EditorAction,
   EditorGroup,
@@ -71,6 +72,7 @@ const baseAtom = atom<EditorOperationBase>({
   version: defaultOperation.version,
   minimumRequired: defaultOperation.minimum_required,
   doc: defaultOperation.doc,
+  recorderMeta: createDefaultRecorderMeta(),
 });
 const operatorsAtom = atom<EditorOperator[]>([]);
 const baseGroupsAtom = atom<BaseEditorGroup[]>([]);

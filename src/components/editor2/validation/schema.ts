@@ -266,6 +266,31 @@ const actionStrict = z
   });
 
 const siming_actions = z.record(z.string(), z.record(z.string(), z.unknown())).optional();
+const recorder_meta = z
+  .object({
+    version: z.number().int().optional(),
+    initial_enemies: z.array(z.number().int()).optional(),
+    initial_main: z.number().int().optional(),
+    changes: z
+      .record(
+        z.string(),
+        z.record(
+          z.string(),
+          z
+            .object({
+              target: z.number().int().optional(),
+              left: z.number().int().min(0).optional(),
+              right: z.number().int().min(0).optional(),
+              dead: z.array(z.number().int()).optional(),
+              spawned: z.array(z.number().int()).optional(),
+              fallback: z.record(z.string(), z.number().int()).optional(),
+            })
+            .partial(),
+        ),
+      )
+      .optional(),
+  })
+  .optional();
 
 export type CopilotOperationLoose = z.infer<typeof operationLooseSchema>;
 export const operationLooseSchema = z.object({
@@ -282,6 +307,7 @@ export const operationLooseSchema = z.object({
   groups: z.array(group).default([]),
   actions: z.array(action).default([]),
   siming_actions,
+  recorder_meta,
 });
 
 const KNOWN_OPERATION_KEYS = new Set([
@@ -305,6 +331,8 @@ const KNOWN_OPERATION_KEYS = new Set([
   "actions",
   "siming_actions",
   "simingActions",
+  "recorder_meta",
+  "recorderMeta",
 ]);
 
 function isLikelySimingActionEntry(value: unknown): value is Record<string, unknown> {
@@ -357,6 +385,21 @@ function normalizeOperationLooseInput(raw: unknown): unknown {
   if (isRecord(camelLevelMeta)) {
     normalized["level_meta"] = camelLevelMeta;
     delete normalized["levelMeta"];
+  }
+  const camelRecorderMeta = normalized["recorderMeta"];
+  if (isRecord(camelRecorderMeta)) {
+    const recorderMetaRecord = { ...camelRecorderMeta };
+    if ("initialEnemies" in recorderMetaRecord) {
+      recorderMetaRecord["initial_enemies"] =
+        recorderMetaRecord["initialEnemies"];
+      delete recorderMetaRecord["initialEnemies"];
+    }
+    if ("initialMain" in recorderMetaRecord) {
+      recorderMetaRecord["initial_main"] = recorderMetaRecord["initialMain"];
+      delete recorderMetaRecord["initialMain"];
+    }
+    normalized["recorder_meta"] = recorderMetaRecord;
+    delete normalized["recorderMeta"];
   }
   if ("levelRecognitionName" in normalized) {
     normalized["level_recognition_name"] = normalized["levelRecognitionName"];
@@ -429,6 +472,7 @@ export const operationSchema = z
     opers: z.array(operator).min(1).default([]),
     groups: z.array(groupStrict).default([]),
     actions: z.array(actionStrict).default([]),
+    recorder_meta,
   })
   .superRefine((data, ctx) => {
     const activityCategory = data.level_meta?.cat_one ?? "";
