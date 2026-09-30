@@ -226,6 +226,23 @@ export function compareLevelsForDisplay(a: Level, b: Level) {
   return a.stageId.localeCompare(b.stageId);
 }
 
+export function compareLevelsByEndTime(a: Level, b: Level, now = Date.now()) {
+  const aEndTime = parseLevelTime(a.endTime) ?? undefined;
+  const bEndTime = parseLevelTime(b.endTime) ?? undefined;
+  // 未截止 → 无截止时间（含无效值）→ 已截止。
+  const aGroup = aEndTime === undefined ? 1 : aEndTime >= now ? 0 : 2;
+  const bGroup = bEndTime === undefined ? 1 : bEndTime >= now ? 0 : 2;
+  const groupDiff = aGroup - bGroup;
+  if (groupDiff !== 0) return groupDiff;
+
+  if (aEndTime !== undefined && bEndTime !== undefined && aEndTime !== bEndTime) {
+    // 未截止时越快结束越靠前；已截止时越近结束越靠前。
+    return aGroup === 0 ? aEndTime - bEndTime : bEndTime - aEndTime;
+  }
+
+  return compareLevelsForDisplay(a, b);
+}
+
 export function getPrtsMapUrl(stageId: string) {
   return `https://map.ark-nights.com/map/${stageId}?coord_override=maa`;
 }

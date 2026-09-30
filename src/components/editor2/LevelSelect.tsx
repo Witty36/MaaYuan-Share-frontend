@@ -17,6 +17,7 @@ import {
 import { useLevels } from '../../apis/level'
 import { i18n, useTranslation } from '../../i18n/i18n'
 import {
+  compareLevelsByEndTime,
   compareLevelsForDisplay,
   createCustomLevel,
   findLevelByStageName,
@@ -112,6 +113,7 @@ export const LevelSelect: FC<LevelSelectProps> = ({
   const [activeItem, setActiveItem] = useState<Level | 'createNewItem' | null>(
     null,
   )
+  const [sortNow, setSortNow] = useState(Date.now)
 
   // 标记：用户是否主动点击了 X 清除按钮，避免 fallback effect 立即恢复显示
   const clearedByUserRef = useRef(false)
@@ -258,13 +260,17 @@ export const LevelSelect: FC<LevelSelectProps> = ({
       )
     }
 
+    const sortedLevels = [...levels].sort((a, b) =>
+      compareLevelsByEndTime(a, b, sortNow),
+    )
+
     if (selectedLevel) {
       let similarLevels: Level[] = []
       let headerName = relatedLevelsLabel
 
       if (selectedLevel.catOne === '剿灭作战') {
         headerName = selectedLevel.catOne
-        similarLevels = levels.filter(
+        similarLevels = sortedLevels.filter(
           (level) => level.catOne === selectedLevel.catOne,
         )
       } else if (
@@ -272,13 +278,13 @@ export const LevelSelect: FC<LevelSelectProps> = ({
         selectedLevel.stageId.includes('crisis')
       ) {
         headerName = '危机合约'
-        similarLevels = levels.filter(
+        similarLevels = sortedLevels.filter(
           (level) =>
             level.stageId.includes('rune') || level.stageId.includes('crisis'),
         )
       } else if (selectedLevel.catTwo) {
         headerName = selectedLevel.catTwo
-        similarLevels = levels.filter(
+        similarLevels = sortedLevels.filter(
           (level) => level.catTwo === selectedLevel.catTwo,
         )
       } else {
@@ -287,7 +293,9 @@ export const LevelSelect: FC<LevelSelectProps> = ({
           .slice(0, -1)
           .join('/')
         similarLevels = levelIdPrefix
-          ? levels.filter((level) => level.levelId.startsWith(levelIdPrefix))
+          ? sortedLevels.filter((level) =>
+              level.levelId.startsWith(levelIdPrefix),
+            )
           : []
       }
 
@@ -309,8 +317,10 @@ export const LevelSelect: FC<LevelSelectProps> = ({
     }
 
     const levelsInCategory = selectedCategory
-      ? levels.filter((level) => getLevelCategory(level) === selectedCategory)
-      : levels
+      ? sortedLevels.filter(
+          (level) => getLevelCategory(level) === selectedCategory,
+        )
+      : sortedLevels
 
     return ensureIncludesSelected(levelsInCategory)
   }, [
@@ -322,6 +332,7 @@ export const LevelSelect: FC<LevelSelectProps> = ({
     relatedLevelsLabel,
     selectedCategory,
     selectedLevel,
+    sortNow,
   ])
 
   useEffect(() => {
@@ -530,6 +541,9 @@ export const LevelSelect: FC<LevelSelectProps> = ({
               minimal: true,
               captureDismiss: true,
               portalContainer: portalContainer ?? undefined,
+              onOpening() {
+                setSortNow(Date.now())
+              },
               onClosed() {
                 updateQuery('', false)
               },
