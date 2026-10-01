@@ -249,7 +249,10 @@ export const LevelSelect: FC<LevelSelectProps> = ({
     const trimmedQuery = debouncedQuery.trim()
 
     if (trimmedQuery) {
-      const searchResults = fuse.search(trimmedQuery).map((el) => el.item)
+      const searchResults = fuse
+        .search(trimmedQuery)
+        .map((el) => el.item)
+        .sort((a, b) => compareLevelsByEndTime(a, b, sortNow))
       const filteredResults = selectedCategory
         ? searchResults.filter(
             (level) => getLevelCategory(level) === selectedCategory,
