@@ -24,6 +24,8 @@ import { DeployedOperatorsShareCard } from './DeployedOperatorsShareCard'
 import {
   OperationShareCard,
   getOperationShareActionLabel,
+  getOperationShareActionColor,
+  getOperationShareActionTextColor,
   getOperationShareCellVisualStyle,
   getOperationShareRoundDisplay,
 } from './OperationShareCard'
@@ -40,6 +42,7 @@ import {
   type OperationShareCardKind,
   type OperationShareCellColorKey,
   type OperationShareCellColumn,
+  buildOperationShareActionKey,
   buildOperationShareCardConfigPayload,
   buildOperationShareCellKey,
   buildOperationShareDiscKey,
@@ -68,6 +71,7 @@ import {
 } from './operationShareTheme'
 
 type GenerationStatus = 'idle' | 'generating' | 'ready' | 'error'
+type ColorMode = 'action' | 'cell'
 
 export default function OperationShareDialog({
   operation,
@@ -115,9 +119,13 @@ export default function OperationShareDialog({
   >('loading')
   const [authorConfigError, setAuthorConfigError] = useState<string>()
   const [savingCardKind, setSavingCardKind] = useState<OperationShareCardKind>()
+  const [selectedActionKeys, setSelectedActionKeys] = useState<Set<string>>(
+    () => new Set(),
+  )
   const [selectedCellKeys, setSelectedCellKeys] = useState<Set<string>>(
     () => new Set(),
   )
+  const [colorMode, setColorMode] = useState<ColorMode>('action')
   const urlStoreRef = useRef(new ObjectUrlStore())
   const generationRef = useRef(0)
   const generatingRef = useRef(false)
@@ -229,6 +237,11 @@ export default function OperationShareDialog({
     () =>
       editableColumns.map((column) => ({
         ...column,
+        actionKeys: model.rounds.flatMap((round) =>
+          (round.slots[column.slot] ?? []).map((action) =>
+            buildOperationShareActionKey(round.round, action.order),
+          ),
+        ),
         cellKeys: model.rounds.map((round) =>
           buildOperationShareCellKey(round.round, column.key),
         ),
@@ -240,6 +253,11 @@ export default function OperationShareDialog({
       model.rounds.map((sourceRound) => ({
         round: sourceRound.round,
         sourceRound,
+        actionKeys: editableColumns.flatMap((column) =>
+          (sourceRound.slots[column.slot] ?? []).map((action) =>
+            buildOperationShareActionKey(sourceRound.round, action.order),
+          ),
+        ),
         cellKeys: editableColumns.map((column) =>
           buildOperationShareCellKey(sourceRound.round, column.key),
         ),
@@ -307,6 +325,7 @@ export default function OperationShareDialog({
   const changeCardKind = (nextKind: OperationShareCardKind) => {
     if (nextKind === cardKind) return
     invalidatePreview()
+    setSelectedActionKeys(new Set())
     setSelectedCellKeys(new Set())
     setCardKind(nextKind)
   }
@@ -330,6 +349,24 @@ export default function OperationShareDialog({
     }))
   }
 
+  const toggleActionSelection = (key: string, checked: boolean) => {
+    setSelectedActionKeys((current) => {
+      const next = new Set(current)
+      if (checked) next.add(key)
+      else next.delete(key)
+      return next
+    })
+  }
+
+  const toggleActionGroupSelection = (
+    actionKeys: readonly string[],
+    checked: boolean,
+  ) => {
+    setSelectedActionKeys((current) =>
+      updateOperationShareCellSelection(current, actionKeys, checked),
+    )
+  }
+
   const toggleCellSelection = (key: string, checked: boolean) => {
     setSelectedCellKeys((current) => {
       const next = new Set(current)
@@ -348,6 +385,19 @@ export default function OperationShareDialog({
     )
   }
 
+  const applyActionColor = (style: string) => {
+    if (selectedActionKeys.size === 0) return
+    invalidatePreview()
+    updateCardConfig((current) => {
+      const actionColors = { ...current.actionColors }
+      selectedActionKeys.forEach((key) => {
+        actionColors[key] = style
+      })
+      return { ...current, actionColors }
+    })
+    setSelectedActionKeys(new Set())
+  }
+
   const applyCellColor = (style: string) => {
     if (selectedCellKeys.size === 0) return
     invalidatePreview()
@@ -359,6 +409,19 @@ export default function OperationShareDialog({
       return { ...current, cellColors }
     })
     setSelectedCellKeys(new Set())
+  }
+
+  const clearActionColor = () => {
+    if (selectedActionKeys.size === 0) return
+    invalidatePreview()
+    updateCardConfig((current) => {
+      const actionColors = { ...current.actionColors }
+      selectedActionKeys.forEach((key) => {
+        delete actionColors[key]
+      })
+      return { ...current, actionColors }
+    })
+    setSelectedActionKeys(new Set())
   }
 
   const clearCellColor = () => {
@@ -377,12 +440,14 @@ export default function OperationShareDialog({
   const restoreDefaults = () => {
     const defaults = createOperationShareCardConfig()
     invalidatePreview()
+    setSelectedActionKeys(new Set())
     setSelectedCellKeys(new Set())
     updateCardConfig(() => defaults)
   }
 
   const restoreAuthorConfig = () => {
     invalidatePreview()
+    setSelectedActionKeys(new Set())
     setSelectedCellKeys(new Set())
     updateCardConfig((current) =>
       replaceOperationShareCardConfigKind(cardKind, current, authorCardConfig),
@@ -895,39 +960,80 @@ export default function OperationShareDialog({
 
             {model.rounds.length > 0 ? (
               <div className="mt-4 border-t border-slate-200 pt-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h4 className="text-sm font-semibold text-slate-700">
-                      {
-                        t.components.viewer.OperationViewer
-                          .share_cell_color_section_title
-                      }
-                    </h4>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-sm font-semibold text-slate-700">
+                        {
+                          t.components.viewer.OperationViewer
+                            .share_cell_color_section_title
+                        }
+                      </h4>
+                      <div
+                        aria-label={
+                          t.components.viewer.OperationViewer
+                            .share_cell_color_section_title
+                        }
+                        className="inline-flex overflow-hidden rounded border border-slate-200 bg-white p-0.5"
+                        role="group"
+                      >
+                        <Button
+                          active={colorMode === 'action'}
+                          className="!inline-flex !h-6 !min-h-0 !items-center !justify-center !px-2 !py-0 !text-xs !font-normal !leading-none"
+                          minimal
+                          onClick={() => setColorMode('action')}
+                          small
+                        >
+                          {
+                            t.components.viewer.OperationViewer
+                              .share_cell_color_mode_action
+                          }
+                        </Button>
+                        <Button
+                          active={colorMode === 'cell'}
+                          className="!inline-flex !h-6 !min-h-0 !items-center !justify-center !px-2 !py-0 !text-xs !font-normal !leading-none"
+                          minimal
+                          onClick={() => setColorMode('cell')}
+                          small
+                        >
+                          {
+                            t.components.viewer.OperationViewer
+                              .share_cell_color_mode_cell
+                          }
+                        </Button>
+                      </div>
+                    </div>
                     <p className="mt-1 text-xs text-slate-500">
-                      {
-                        t.components.viewer.OperationViewer
-                          .share_cell_color_section_hint
-                      }
+                      {colorMode === 'action'
+                        ? t.components.viewer.OperationViewer
+                            .share_cell_color_section_hint_action
+                        : t.components.viewer.OperationViewer
+                            .share_cell_color_section_hint_cell}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <Switch
-                      checked={cardConfig.showCellPattern}
-                      className="m-0 mr-1"
-                      label={
-                        t.components.viewer.OperationViewer.share_cell_pattern
-                      }
-                      onChange={(event) =>
-                        updateOption(
-                          'showCellPattern',
-                          event.currentTarget.checked,
-                        )
-                      }
-                    />
+                    {colorMode === 'cell' ? (
+                      <Switch
+                        checked={cardConfig.showCellPattern}
+                        className="m-0 mr-1"
+                        label={
+                          t.components.viewer.OperationViewer.share_cell_pattern
+                        }
+                        onChange={(event) =>
+                          updateOption(
+                            'showCellPattern',
+                            event.currentTarget.checked,
+                          )
+                        }
+                      />
+                    ) : null}
                     <div
                       aria-label={
-                        t.components.viewer.OperationViewer
-                          .share_cell_color_group
+                        colorMode === 'action'
+                          ? t.components.viewer.OperationViewer
+                              .share_cell_color_group_action
+                          : t.components.viewer.OperationViewer
+                              .share_cell_color_group_cell
                       }
                       className="flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 p-1"
                       role="group"
@@ -941,38 +1047,83 @@ export default function OperationShareDialog({
                           <button
                             key={colorKey}
                             aria-label={label}
-                            className="h-8 w-8 rounded border border-slate-300 transition-transform enabled:hover:scale-105 enabled:focus:outline-none enabled:focus:ring-2 enabled:focus:ring-sky-500 enabled:focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40"
-                            disabled={selectedCellKeys.size === 0}
-                            onClick={() => applyCellColor(colorKey)}
-                            style={getOperationShareCellVisualStyle(
-                              colorKey,
-                              cardConfig.showCellPattern,
-                            )}
+                            className={`h-8 w-8 rounded text-base font-bold transition-transform enabled:hover:scale-105 enabled:focus:outline-none enabled:focus:ring-2 enabled:focus:ring-sky-500 enabled:focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40 ${
+                              colorMode === 'cell'
+                                ? 'border border-slate-300'
+                                : 'bg-white'
+                            }`}
+                            disabled={
+                              (colorMode === 'action'
+                                ? selectedActionKeys.size
+                                : selectedCellKeys.size) === 0
+                            }
+                            onClick={() =>
+                              colorMode === 'action'
+                                ? applyActionColor(colorKey)
+                                : applyCellColor(colorKey)
+                            }
+                            style={
+                              colorMode === 'action'
+                                ? {
+                                    color:
+                                      getOperationShareActionTextColor(
+                                        colorKey,
+                                      ),
+                                  }
+                                : getOperationShareCellVisualStyle(
+                                    colorKey,
+                                    cardConfig.showCellPattern,
+                                  )
+                            }
                             title={label}
                             type="button"
-                          />
+                          >
+                            {colorMode === 'action' ? 'A' : null}
+                          </button>
                         )
                       })}
                     </div>
                     <Button
-                      disabled={selectedCellKeys.size === 0}
+                      disabled={
+                        (colorMode === 'action'
+                          ? selectedActionKeys.size
+                          : selectedCellKeys.size) === 0
+                      }
                       icon="eraser"
-                      onClick={clearCellColor}
+                      onClick={() =>
+                        colorMode === 'action'
+                          ? clearActionColor()
+                          : clearCellColor()
+                      }
                       small
                     >
-                      {
-                        t.components.viewer.OperationViewer
-                          .share_cell_color_clear
-                      }
+                      {colorMode === 'action'
+                        ? t.components.viewer.OperationViewer
+                            .share_cell_color_clear
+                        : t.components.viewer.OperationViewer
+                            .share_cell_color_clear_cell}
                     </Button>
                     <Button
-                      disabled={selectedCellKeys.size === 0}
+                      disabled={
+                        (colorMode === 'action'
+                          ? selectedActionKeys.size
+                          : selectedCellKeys.size) === 0
+                      }
                       minimal
-                      onClick={() => setSelectedCellKeys(new Set())}
+                      onClick={() =>
+                        colorMode === 'action'
+                          ? setSelectedActionKeys(new Set())
+                          : setSelectedCellKeys(new Set())
+                      }
                       small
                     >
                       {t.components.viewer.OperationViewer.share_cell_color_clear_selection(
-                        { count: selectedCellKeys.size },
+                        {
+                          count:
+                            colorMode === 'action'
+                              ? selectedActionKeys.size
+                              : selectedCellKeys.size,
+                        },
                       )}
                     </Button>
                   </div>
@@ -985,9 +1136,17 @@ export default function OperationShareDialog({
                           回合
                         </th>
                         {editableColumnGroups.map((column) => {
+                          const keySet =
+                            colorMode === 'action'
+                              ? selectedActionKeys
+                              : selectedCellKeys
+                          const keys =
+                            colorMode === 'action'
+                              ? column.actionKeys
+                              : column.cellKeys
                           const selection = getOperationShareCellSelectionState(
-                            selectedCellKeys,
-                            column.cellKeys,
+                            keySet,
+                            keys,
                           )
                           return (
                             <th
@@ -1001,10 +1160,15 @@ export default function OperationShareDialog({
                                 indeterminate={selection.indeterminate}
                                 label={column.label}
                                 onChange={(event) =>
-                                  toggleCellGroupSelection(
-                                    column.cellKeys,
-                                    event.currentTarget.checked,
-                                  )
+                                  colorMode === 'action'
+                                    ? toggleActionGroupSelection(
+                                        column.actionKeys,
+                                        event.currentTarget.checked,
+                                      )
+                                    : toggleCellGroupSelection(
+                                        column.cellKeys,
+                                        event.currentTarget.checked,
+                                      )
                                 }
                               />
                             </th>
@@ -1014,9 +1178,17 @@ export default function OperationShareDialog({
                     </thead>
                     <tbody>
                       {editableRoundGroups.map((round) => {
+                        const keySet =
+                          colorMode === 'action'
+                            ? selectedActionKeys
+                            : selectedCellKeys
+                        const keys =
+                          colorMode === 'action'
+                            ? round.actionKeys
+                            : round.cellKeys
                         const selection = getOperationShareCellSelectionState(
-                          selectedCellKeys,
-                          round.cellKeys,
+                          keySet,
+                          keys,
                         )
                         const { displayOrderByActionOrder } =
                           getOperationShareRoundDisplay(
@@ -1033,69 +1205,139 @@ export default function OperationShareDialog({
                                 indeterminate={selection.indeterminate}
                                 label={`${round.round}`}
                                 onChange={(event) =>
-                                  toggleCellGroupSelection(
-                                    round.cellKeys,
-                                    event.currentTarget.checked,
-                                  )
+                                  colorMode === 'action'
+                                    ? toggleActionGroupSelection(
+                                        round.actionKeys,
+                                        event.currentTarget.checked,
+                                      )
+                                    : toggleCellGroupSelection(
+                                        round.cellKeys,
+                                        event.currentTarget.checked,
+                                      )
                                 }
                               />
                             </th>
-                            {editableColumns.map((column, columnIndex) => {
-                              const key = round.cellKeys[columnIndex]
-                              if (!key) return null
-                              const actionLabels = (
+                            {editableColumns.map((column) => {
+                              const cellKey = buildOperationShareCellKey(
+                                round.round,
+                                column.key,
+                              )
+                              const actions =
                                 round.sourceRound.slots[column.slot] ?? []
-                              ).map((action) =>
+                              const actionLabels = actions.map((action) =>
                                 getOperationShareActionLabel(
                                   action,
                                   displayOrderByActionOrder.get(action.order),
                                 ),
                               )
-                              const selected = selectedCellKeys.has(key)
+                              const cellSelected =
+                                selectedCellKeys.has(cellKey)
                               return (
                                 <td
                                   key={column.key}
                                   className="border-b border-r border-slate-200 p-1 last:border-r-0"
                                   style={getOperationShareCellVisualStyle(
-                                    cardConfig.cellColors[key],
+                                    cardConfig.cellColors[cellKey],
                                     cardConfig.showCellPattern,
                                   )}
                                 >
-                                  <button
-                                    aria-label={`${round.round} 回合 ${column.label}${
-                                      actionLabels.length > 0
-                                        ? `：${actionLabels.join(' ')}`
-                                        : ''
-                                    }`}
-                                    aria-pressed={selected}
-                                    className={`flex min-h-8 w-full items-center justify-center gap-1.5 rounded-sm px-1.5 py-1 transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
-                                      selected
-                                        ? 'ring-2 ring-inset ring-sky-500'
-                                        : ''
-                                    }`}
-                                    onClick={() =>
-                                      toggleCellSelection(key, !selected)
-                                    }
-                                    type="button"
-                                  >
-                                    <span
-                                      aria-hidden="true"
-                                      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border ${
-                                        selected
-                                          ? 'border-sky-500 bg-sky-500 text-white'
-                                          : 'border-slate-400 bg-white/70'
+                                  {colorMode === 'action' ? (
+                                    <div className="flex min-h-8 flex-wrap items-center justify-center gap-1">
+                                      {actions.length > 0 ? (
+                                        actions.map((action) => {
+                                          const actionKey =
+                                            buildOperationShareActionKey(
+                                              round.round,
+                                              action.order,
+                                            )
+                                          const selected =
+                                            selectedActionKeys.has(actionKey)
+                                          const label =
+                                            getOperationShareActionLabel(
+                                              action,
+                                              displayOrderByActionOrder.get(
+                                                action.order,
+                                              ),
+                                            )
+                                          const actionColor =
+                                            getOperationShareActionColor(
+                                              action,
+                                              cardConfig.actionColors,
+                                              round.round,
+                                            )
+                                          return (
+                                            <button
+                                              key={actionKey}
+                                              aria-label={`${round.round} 回合 ${column.label}：${label}`}
+                                              aria-pressed={selected}
+                                              className={`rounded-sm px-1.5 py-1 font-medium leading-4 transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
+                                                selected
+                                                  ? 'bg-sky-50 ring-1 ring-inset ring-sky-500'
+                                                  : ''
+                                              }`}
+                                              onClick={() =>
+                                                toggleActionSelection(
+                                                  actionKey,
+                                                  !selected,
+                                                )
+                                              }
+                                              style={
+                                                actionColor
+                                                  ? { color: actionColor }
+                                                  : undefined
+                                              }
+                                              type="button"
+                                            >
+                                              {label}
+                                            </button>
+                                          )
+                                        })
+                                      ) : (
+                                        <span className="text-slate-400">
+                                          —
+                                        </span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <button
+                                      aria-label={`${round.round} 回合 ${column.label}${
+                                        actionLabels.length > 0
+                                          ? `：${actionLabels.join(' ')}`
+                                          : ''
                                       }`}
+                                      aria-pressed={cellSelected}
+                                      className={`flex min-h-8 w-full items-center justify-center gap-1.5 rounded-sm px-1.5 py-1 transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
+                                        cellSelected
+                                          ? 'ring-2 ring-inset ring-sky-500'
+                                          : ''
+                                      }`}
+                                      onClick={() =>
+                                        toggleCellSelection(
+                                          cellKey,
+                                          !cellSelected,
+                                        )
+                                      }
+                                      type="button"
                                     >
-                                      {selected ? (
-                                        <Icon icon="tick" size={10} />
-                                      ) : null}
-                                    </span>
-                                    <span className="min-w-0 break-words font-medium leading-4">
-                                      {actionLabels.length > 0
-                                        ? actionLabels.join(' ')
-                                        : '—'}
-                                    </span>
-                                  </button>
+                                      <span
+                                        aria-hidden="true"
+                                        className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border ${
+                                          cellSelected
+                                            ? 'border-sky-500 bg-sky-500 text-white'
+                                            : 'border-slate-400 bg-white/70'
+                                        }`}
+                                      >
+                                        {cellSelected ? (
+                                          <Icon icon="tick" size={10} />
+                                        ) : null}
+                                      </span>
+                                      <span className="min-w-0 break-words font-medium leading-4">
+                                        {actionLabels.length > 0
+                                          ? actionLabels.join(' ')
+                                          : '—'}
+                                      </span>
+                                    </button>
+                                  )}
                                 </td>
                               )
                             })}

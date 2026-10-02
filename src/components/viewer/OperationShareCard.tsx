@@ -7,10 +7,12 @@ import {
   OPERATION_SHARE_CELL_PALETTE,
   type OperationShareAction,
   type OperationShareCardConfig,
+  type OperationShareCellColorKey,
   type OperationShareCellPattern,
   type OperationShareModel,
   type OperationShareOperator,
   type OperationShareRound,
+  buildOperationShareActionKey,
   buildOperationShareCellKey,
   createOperationShareCardConfig,
   filterOperationShareActions,
@@ -31,6 +33,44 @@ import { getRecorderMetaTargetColor } from '../editor2/action/recorderMeta'
 
 const defaultCardConfig = createOperationShareCardConfig()
 const accessibleDarkTextColor = '#231f20'
+
+export const OPERATION_SHARE_ACTION_TEXT_COLORS: Record<
+  OperationShareCellColorKey,
+  string
+> = {
+  yellow: '#b45309',
+  pink: '#be185d',
+  blue: '#1d4ed8',
+  green: '#047857',
+  ice: '#475569',
+}
+
+export function getOperationShareActionTextColor(style?: string) {
+  if (!style) return undefined
+  if (
+    Object.prototype.hasOwnProperty.call(
+      OPERATION_SHARE_ACTION_TEXT_COLORS,
+      style,
+    )
+  ) {
+    return OPERATION_SHARE_ACTION_TEXT_COLORS[
+      style as OperationShareCellColorKey
+    ]
+  }
+  return /^#[0-9a-f]{3,8}$/i.test(style) ? style : undefined
+}
+
+export function getOperationShareActionColor(
+  action: OperationShareAction,
+  actionColors: OperationShareCardConfig['actionColors'],
+  round: number,
+) {
+  return (
+    getOperationShareActionTextColor(
+      actionColors[buildOperationShareActionKey(round, action.order)],
+    ) ?? getRecorderMetaTargetColor(action.targetIndex)
+  )
+}
 
 const shareCellPatternStyles: Record<OperationShareCellPattern, CSSProperties> =
   {
@@ -286,9 +326,13 @@ function SubstituteOperator({
 function ActionList({
   actions,
   displayOrderByActionOrder,
+  actionColors,
+  round,
 }: {
   actions: OperationShareAction[]
   displayOrderByActionOrder: ReadonlyMap<number, number>
+  actionColors: OperationShareCardConfig['actionColors']
+  round: number
 }) {
   if (actions.length === 0) {
     return <span className="text-lg opacity-70">—</span>
@@ -297,12 +341,16 @@ function ActionList({
   return (
     <div className="text-center text-[22px] font-bold leading-[1.25]">
       {actions.map((action, index) => {
-        const targetColor = getRecorderMetaTargetColor(action.targetIndex)
+        const actionColor = getOperationShareActionColor(
+          action,
+          actionColors,
+          round,
+        )
 
         return (
           <span
-            key={`${action.raw}-${index}`}
-            style={targetColor ? { color: targetColor } : undefined}
+            key={`${action.order}-${index}`}
+            style={actionColor ? { color: actionColor } : undefined}
           >
             {getOperationShareActionLabel(
               action,
@@ -490,8 +538,10 @@ export function OperationShareCard({
                         }}
                       >
                         <ActionList
+                          actionColors={config.actionColors}
                           actions={round.slots[slot] ?? []}
                           displayOrderByActionOrder={displayOrderByActionOrder}
+                          round={round.round}
                         />
                       </td>
                     ))}
@@ -504,8 +554,10 @@ export function OperationShareCard({
                         }}
                       >
                         <ActionList
+                          actionColors={config.actionColors}
                           actions={otherActions}
                           displayOrderByActionOrder={displayOrderByActionOrder}
+                          round={round.round}
                         />
                       </td>
                     ) : null}

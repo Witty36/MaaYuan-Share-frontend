@@ -70,6 +70,7 @@ export interface OperationShareCardConfig {
   tableColor?: string
   tableThemeOverrides?: OperationShareTableThemeOverrides
   notes: Record<number, string>
+  actionColors: Record<string, string>
   cellColors: Record<string, string>
   requiredDiscs: Record<string, boolean>
 }
@@ -159,6 +160,7 @@ const OPERATION_SHARE_CARD_CONFIG_STORAGE_PREFIX =
 // OperationShareCardConfig 的归一化与 schema 版本，因此单独存一个 key。
 const OPERATION_SHARE_SHORT_CODE_STORAGE_PREFIX =
   'maa-copilot-operation-share-short-code'
+const SHARE_ACTION_KEY_PATTERN = /^\d+:\d+$/
 const SHARE_CELL_KEY_PATTERN = /^\d+:slot-\d+$/
 const REQUIRED_DISC_KEY_PATTERN = /^\d+:[1-3]$/
 
@@ -217,6 +219,7 @@ export function createOperationShareCardConfig(): OperationShareCardConfig {
     tableColor: undefined,
     tableThemeOverrides: undefined,
     notes: {},
+    actionColors: {},
     cellColors: {},
     requiredDiscs: {},
   }
@@ -244,6 +247,18 @@ export function normalizeOperationShareCardConfig(
     Object.entries(value.notes).forEach(([round, note]) => {
       if (/^\d+$/.test(round) && typeof note === 'string') {
         notes[Number(round)] = note.slice(0, 160)
+      }
+    })
+  }
+
+  const actionColors: Record<string, string> = {}
+  if (isRecord(value.actionColors)) {
+    Object.entries(value.actionColors).forEach(([key, style]) => {
+      if (SHARE_ACTION_KEY_PATTERN.test(key) && typeof style === 'string') {
+        const normalizedStyle = style.trim().toLowerCase()
+        if (OPERATION_SHARE_CELL_COLOR_SET.has(normalizedStyle)) {
+          actionColors[key] = normalizedStyle
+        }
       }
     })
   }
@@ -293,6 +308,7 @@ export function normalizeOperationShareCardConfig(
     tableColor,
     tableThemeOverrides,
     notes,
+    actionColors,
     cellColors,
     requiredDiscs,
   }
@@ -315,6 +331,7 @@ export function buildOperationShareCardConfigPayload(
     tableColor: normalized.tableColor,
     tableThemeOverrides: normalized.tableThemeOverrides,
     notes: normalized.notes,
+    actionColors: normalized.actionColors,
     cellColors: normalized.cellColors,
   }
 }
@@ -395,11 +412,16 @@ export function resolveOperationShareCardConfig(
     local.tableColor !== undefined ||
     local.tableThemeOverrides !== undefined ||
     Object.keys(local.notes).length > 0 ||
+    Object.keys(local.actionColors).length > 0 ||
     Object.keys(local.cellColors).length > 0
   const hasLocalOperatorOverrides = Object.keys(local.requiredDiscs).length > 0
 
   return {
     ...(hasLocalActionOverrides ? local : authorConfig),
+    actionColors: {
+      ...authorConfig.actionColors,
+      ...local.actionColors,
+    },
     requiredDiscs: hasLocalOperatorOverrides
       ? local.requiredDiscs
       : authorConfig.requiredDiscs,
@@ -424,6 +446,7 @@ export function replaceOperationShareCardConfigKind(
     tableColor: replacement.tableColor,
     tableThemeOverrides: replacement.tableThemeOverrides,
     notes: replacement.notes,
+    actionColors: replacement.actionColors,
     cellColors: replacement.cellColors,
   }
 }
@@ -541,6 +564,10 @@ export function buildOperationShareCellKey(
   column: OperationShareCellColumn,
 ) {
   return `${round}:${column}`
+}
+
+export function buildOperationShareActionKey(round: number, order: number) {
+  return `${round}:${order}`
 }
 
 export function buildOperationShareDiscKey(
