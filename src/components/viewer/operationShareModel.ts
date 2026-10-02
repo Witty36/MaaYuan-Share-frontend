@@ -674,18 +674,19 @@ export function getOperationShareOtherActions(
     'showOtherActions' | 'showTargetSwitches' | 'hiddenOtherActionKeys'
   >,
 ) {
-  if (!config.showOtherActions) return []
-
   const hiddenOtherActionKeys = config.hiddenOtherActionKeys ?? {}
-  return filterOperationShareActions(
-    round.others,
-    config.showTargetSwitches,
-  ).filter(
-    (action) =>
+  return round.others.filter((action) => {
+    const shouldShow = isOperationShareTargetSwitchAction(action.raw)
+      ? config.showTargetSwitches
+      : config.showOtherActions
+
+    return (
+      shouldShow &&
       !hiddenOtherActionKeys[
         buildOperationShareActionKey(round.round, action.order)
-      ],
-  )
+      ]
+    )
+  })
 }
 
 function isHiddenShareAction(raw: string) {

@@ -2,6 +2,7 @@ import { Icon } from '@blueprintjs/core'
 
 import type { CSSProperties, Ref } from 'react'
 
+import { getRecorderMetaTargetColor } from '../editor2/action/recorderMeta'
 import {
   OPERATION_SHARE_CELL_COLOR_KEYS,
   OPERATION_SHARE_CELL_PALETTE,
@@ -30,7 +31,6 @@ import {
   ShareSectionTitle,
   shareCardPalette as palette,
 } from './shareCardComponents'
-import { getRecorderMetaTargetColor } from '../editor2/action/recorderMeta'
 
 const defaultCardConfig = createOperationShareCardConfig()
 const accessibleDarkTextColor = '#231f20'
@@ -294,22 +294,24 @@ export function getOperationShareRoundNoteText(
     round,
     config,
   )
-  const noteActionText = round.others
-    .filter(
-      (action) =>
-        !isOperationShareTargetSwitchAction(action.raw) &&
-        !config.hiddenOtherActionKeys?.[
-          buildOperationShareActionKey(round.round, action.order)
-        ],
-    )
-    .map((action) =>
-      getOperationShareNoteActionLabel(
-        round,
-        action,
-        displayOrderByActionOrder,
-      ),
-    )
-    .join(' ')
+  const noteActionText = config.showOtherActions
+    ? round.others
+        .filter(
+          (action) =>
+            !isOperationShareTargetSwitchAction(action.raw) &&
+            !config.hiddenOtherActionKeys?.[
+              buildOperationShareActionKey(round.round, action.order)
+            ],
+        )
+        .map((action) =>
+          getOperationShareNoteActionLabel(
+            round,
+            action,
+            displayOrderByActionOrder,
+          ),
+        )
+        .join(' ')
+    : ''
 
   return [noteActionText, config.notes[round.round]]
     .filter((text): text is string => Boolean(text))
@@ -508,8 +510,7 @@ export function OperationShareCard({
     config.tableColor,
     config.tableThemeOverrides,
   )
-  const showOtherActionsColumn =
-    config.showOtherActions && config.showTargetSwitches
+  const showOtherActionsColumn = config.showTargetSwitches
   const showNotesColumn = config.showNotes || config.showOtherActions
   const roundColumnWidthClassName = showNotesColumn ? 'w-[80px]' : 'w-[110px]'
   const notesColumnWidthClassName = showOtherActionsColumn

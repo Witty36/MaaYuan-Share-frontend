@@ -257,6 +257,40 @@ describe('operation share dialog short code switch', () => {
     })
   })
 
+  it('selects every action from the round header', async () => {
+    await renderDialog(
+      createOperation(
+        CopilotInfoStatusEnum.Public,
+        undefined,
+        singleRoundActions,
+      ),
+    )
+
+    await act(async () => {
+      findCheckbox('选择整个表格')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(
+      findButtonByAriaLabelPrefix('1 回合 1 号位')?.getAttribute(
+        'aria-pressed',
+      ),
+    ).toBe('true')
+    expect(document.body.textContent).toContain('取消选择（1）')
+
+    await act(async () => {
+      findCheckbox('选择整个表格')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(
+      findButtonByAriaLabelPrefix('1 回合 1 号位')?.getAttribute(
+        'aria-pressed',
+      ),
+    ).toBe('false')
+    expect(document.body.textContent).toContain('取消选择（0）')
+  })
+
   it('switches between color and note modes in the same table', async () => {
     await renderDialog(
       createOperation(
@@ -352,6 +386,32 @@ describe('operation share dialog short code switch', () => {
         ? colorNoteColumn.style.width
         : undefined,
     ).toBe('16%')
+  })
+
+  it('only shows annotation mode after the note column is hidden', async () => {
+    await renderDialog(
+      createOperation(
+        CopilotInfoStatusEnum.Public,
+        undefined,
+        singleRoundActions,
+      ),
+    )
+
+    expect(findButton('标注模式')).toBeDefined()
+    expect(findButton('备注模式')).toBeDefined()
+
+    await act(async () => {
+      findSwitch('显示其他动作与备注列')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(findButton('标注模式')).toBeDefined()
+    expect(findButton('备注模式')).toBeUndefined()
+    expect(
+      document
+        .querySelector('table[data-edit-mode="color"]')
+        ?.querySelector('textarea[placeholder="可直接修改本回合备注"]'),
+    ).toBeNull()
   })
 
   it('persists a custom table color', async () => {

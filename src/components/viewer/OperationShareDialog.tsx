@@ -96,6 +96,38 @@ function removeOperationShareNoteText(note: string, text: string) {
     .join('\n')
 }
 
+function OperationShareSelectionCheckbox({
+  ariaLabel,
+  checked,
+  indeterminate,
+  label,
+  onChange,
+}: {
+  ariaLabel: string
+  checked: boolean
+  indeterminate: boolean
+  label: string
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <label className="inline-flex h-6 cursor-pointer select-none items-center justify-center gap-1 whitespace-nowrap leading-none">
+      <input
+        aria-label={ariaLabel}
+        checked={checked}
+        className="m-0 h-3.5 w-3.5 shrink-0 cursor-pointer accent-sky-600"
+        onChange={(event) => onChange(event.currentTarget.checked)}
+        ref={(input) => {
+          if (input) {
+            input.indeterminate = indeterminate
+          }
+        }}
+        type="checkbox"
+      />
+      <span className="leading-none">{label}</span>
+    </label>
+  )
+}
+
 export default function OperationShareDialog({
   operation,
   canManageAuthorConfig,
@@ -150,6 +182,14 @@ export default function OperationShareDialog({
   )
   const [colorMode, setColorMode] = useState<ColorMode>('action')
   const [editMode, setEditMode] = useState<EditMode>('color')
+  const showRoundNoteColumn =
+    cardConfig.showNotes || cardConfig.showOtherActions
+  const effectiveEditMode: EditMode = showRoundNoteColumn ? editMode : 'color'
+
+  useEffect(() => {
+    if (!showRoundNoteColumn) setEditMode('color')
+  }, [showRoundNoteColumn])
+
   const urlStoreRef = useRef(new ObjectUrlStore())
   const generationRef = useRef(0)
   const generatingRef = useRef(false)
@@ -288,6 +328,21 @@ export default function OperationShareDialog({
       })),
     [editableColumns, model.rounds],
   )
+  const allActionKeys = useMemo(
+    () => editableRoundGroups.flatMap((round) => round.actionKeys),
+    [editableRoundGroups],
+  )
+  const allCellKeys = useMemo(
+    () => editableRoundGroups.flatMap((round) => round.cellKeys),
+    [editableRoundGroups],
+  )
+  const allTableKeys = colorMode === 'action' ? allActionKeys : allCellKeys
+  const selectedTableKeys =
+    colorMode === 'action' ? selectedActionKeys : selectedCellKeys
+  const allTableSelection = getOperationShareCellSelectionState(
+    selectedTableKeys,
+    allTableKeys,
+  )
 
   const invalidatePreview = useCallback(() => {
     generationRef.current += 1
@@ -312,6 +367,17 @@ export default function OperationShareDialog({
     updateCardConfig((current) => ({
       ...current,
       showNotes: checked,
+      showOtherActions: checked,
+    }))
+  }
+
+  const updateOtherActionsVisibility = (checked: boolean) => {
+    invalidatePreview()
+    updateCardConfig((current) => ({
+      ...current,
+      showNotes: checked
+        ? current.showNotes
+        : current.showNotes || current.showOtherActions,
       showOtherActions: checked,
     }))
   }
@@ -827,25 +893,29 @@ export default function OperationShareDialog({
                   配置会自动保存到当前作业。
                 </p>
               </div>
-              <div className="flex flex-wrap gap-x-5 gap-y-2">
-                <Checkbox
-                  checked={cardConfig.showNotes || cardConfig.showOtherActions}
-                  label="显示其他动作与备注列"
-                  onChange={(event) =>
-                    updateNotesColumnVisibility(event.currentTarget.checked)
-                  }
-                />
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
                 <Checkbox
                   checked={cardConfig.showTargetSwitches}
-                  disabled={
-                    !(cardConfig.showNotes || cardConfig.showOtherActions)
-                  }
                   label="显示左滑 / 右滑"
                   onChange={(event) =>
                     updateOption(
                       'showTargetSwitches',
                       event.currentTarget.checked,
                     )
+                  }
+                />
+                <Checkbox
+                  checked={cardConfig.showNotes || cardConfig.showOtherActions}
+                  label="显示备注与其他动作"
+                  onChange={(event) =>
+                    updateNotesColumnVisibility(event.currentTarget.checked)
+                  }
+                />
+                <Checkbox
+                  checked={cardConfig.showOtherActions}
+                  label="显示其他动作"
+                  onChange={(event) =>
+                    updateOtherActionsVisibility(event.currentTarget.checked)
                   }
                 />
               </div>
@@ -1012,7 +1082,7 @@ export default function OperationShareDialog({
                         role="group"
                       >
                         <Button
-                          active={editMode === 'color'}
+                          active={effectiveEditMode === 'color'}
                           className="!inline-flex !h-6 !min-h-0 !items-center !justify-center !px-2 !py-0 !text-xs !font-normal !leading-none"
                           minimal
                           onClick={() => setEditMode('color')}
@@ -1020,17 +1090,19 @@ export default function OperationShareDialog({
                         >
                           标注模式
                         </Button>
-                        <Button
-                          active={editMode === 'note'}
-                          className="!inline-flex !h-6 !min-h-0 !items-center !justify-center !px-2 !py-0 !text-xs !font-normal !leading-none"
-                          minimal
-                          onClick={() => setEditMode('note')}
-                          small
-                        >
-                          备注模式
-                        </Button>
+                        {showRoundNoteColumn ? (
+                          <Button
+                            active={effectiveEditMode === 'note'}
+                            className="!inline-flex !h-6 !min-h-0 !items-center !justify-center !px-2 !py-0 !text-xs !font-normal !leading-none"
+                            minimal
+                            onClick={() => setEditMode('note')}
+                            small
+                          >
+                            备注模式
+                          </Button>
+                        ) : null}
                       </div>
-                      {editMode === 'color' ? (
+                      {effectiveEditMode === 'color' ? (
                         <div
                           aria-label={
                             t.components.viewer.OperationViewer
@@ -1079,7 +1151,7 @@ export default function OperationShareDialog({
                       ) : null}
                     </div>
                     <p className="mt-1 text-xs text-slate-500">
-                      {editMode === 'note'
+                      {effectiveEditMode === 'note'
                         ? '当前编辑备注，动作仅供查看。'
                         : colorMode === 'action'
                           ? t.components.viewer.OperationViewer
@@ -1088,7 +1160,7 @@ export default function OperationShareDialog({
                               .share_cell_color_section_hint_cell}
                     </p>
                   </div>
-                  {editMode === 'color' ? (
+                  {effectiveEditMode === 'color' ? (
                     <div className="flex flex-wrap items-center gap-2">
                       {colorMode === 'cell' ? (
                         <Switch
@@ -1211,17 +1283,17 @@ export default function OperationShareDialog({
                 <div className="mt-3 max-h-56 overflow-auto rounded border border-slate-200">
                   <table
                     className="w-full table-fixed border-collapse bg-white text-center text-xs"
-                    data-edit-mode={editMode}
+                    data-edit-mode={effectiveEditMode}
                   >
                     <colgroup>
-                      <col style={{ width: '2.5rem' }} />
+                      <col style={{ width: '3.5rem' }} />
                       {editableColumns.map((column) => (
                         <col key={column.key} />
                       ))}
-                      {cardConfig.showNotes || cardConfig.showOtherActions ? (
+                      {showRoundNoteColumn ? (
                         <col
                           style={{
-                            width: editMode === 'note' ? '56%' : '16%',
+                            width: effectiveEditMode === 'note' ? '56%' : '16%',
                           }}
                         />
                       ) : null}
@@ -1229,7 +1301,27 @@ export default function OperationShareDialog({
                     <thead className="text-slate-600">
                       <tr>
                         <th className="sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 px-1 py-1.5 shadow-[0_1px_0_rgba(148,163,184,0.35)]">
-                          回合
+                          {effectiveEditMode === 'color' ? (
+                            <OperationShareSelectionCheckbox
+                              ariaLabel="选择整个表格"
+                              checked={allTableSelection.checked}
+                              indeterminate={allTableSelection.indeterminate}
+                              label="回合"
+                              onChange={(checked) =>
+                                colorMode === 'action'
+                                  ? toggleActionGroupSelection(
+                                      allActionKeys,
+                                      checked,
+                                    )
+                                  : toggleCellGroupSelection(
+                                      allCellKeys,
+                                      checked,
+                                    )
+                              }
+                            />
+                          ) : (
+                            '回合'
+                          )}
                         </th>
                         {editableColumnGroups.map((column) => {
                           const keySet =
@@ -1248,25 +1340,26 @@ export default function OperationShareDialog({
                             <th
                               key={column.key}
                               className={`sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 shadow-[0_1px_0_rgba(148,163,184,0.35)] last:border-r-0 ${
-                                editMode === 'note' ? 'px-1 py-1' : 'px-2 py-2'
+                                effectiveEditMode === 'note'
+                                  ? 'px-1 py-1'
+                                  : 'px-2 py-2'
                               }`}
                             >
-                              {editMode === 'color' ? (
-                                <Checkbox
-                                  aria-label={`选择${column.label}整列`}
+                              {effectiveEditMode === 'color' ? (
+                                <OperationShareSelectionCheckbox
+                                  ariaLabel={`选择${column.label}整列`}
                                   checked={selection.checked}
-                                  className="m-0 inline-flex"
                                   indeterminate={selection.indeterminate}
                                   label={column.label}
-                                  onChange={(event) =>
+                                  onChange={(checked) =>
                                     colorMode === 'action'
                                       ? toggleActionGroupSelection(
                                           column.actionKeys,
-                                          event.currentTarget.checked,
+                                          checked,
                                         )
                                       : toggleCellGroupSelection(
                                           column.cellKeys,
-                                          event.currentTarget.checked,
+                                          checked,
                                         )
                                   }
                                 />
@@ -1276,10 +1369,10 @@ export default function OperationShareDialog({
                             </th>
                           )
                         })}
-                        {cardConfig.showNotes || cardConfig.showOtherActions ? (
+                        {showRoundNoteColumn ? (
                           <th
                             className={`sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 text-left shadow-[0_1px_0_rgba(148,163,184,0.35)] last:border-r-0 ${
-                              editMode === 'note'
+                              effectiveEditMode === 'note'
                                 ? 'px-2 py-2'
                                 : 'px-1 py-1 text-[11px] text-slate-500'
                             }`}
@@ -1333,22 +1426,21 @@ export default function OperationShareDialog({
                         return (
                           <tr key={round.round}>
                             <th className="border-b border-r border-slate-200 px-1 py-1.5 font-medium text-slate-600">
-                              {editMode === 'color' ? (
-                                <Checkbox
-                                  aria-label={`选择第 ${round.round} 回合整行`}
+                              {effectiveEditMode === 'color' ? (
+                                <OperationShareSelectionCheckbox
+                                  ariaLabel={`选择第 ${round.round} 回合整行`}
                                   checked={selection.checked}
-                                  className="m-0 inline-flex"
                                   indeterminate={selection.indeterminate}
                                   label={`${round.round}`}
-                                  onChange={(event) =>
+                                  onChange={(checked) =>
                                     colorMode === 'action'
                                       ? toggleActionGroupSelection(
                                           round.actionKeys,
-                                          event.currentTarget.checked,
+                                          checked,
                                         )
                                       : toggleCellGroupSelection(
                                           round.cellKeys,
-                                          event.currentTarget.checked,
+                                          checked,
                                         )
                                   }
                                 />
@@ -1374,7 +1466,9 @@ export default function OperationShareDialog({
                                 <td
                                   key={column.key}
                                   className={`border-b border-r border-slate-200 last:border-r-0 ${
-                                    editMode === 'note' ? 'p-0.5' : 'p-1'
+                                    effectiveEditMode === 'note'
+                                      ? 'p-0.5'
+                                      : 'p-1'
                                   }`}
                                   style={getOperationShareCellVisualStyle(
                                     cardConfig.cellColors[cellKey],
@@ -1384,7 +1478,7 @@ export default function OperationShareDialog({
                                   {colorMode === 'action' ? (
                                     <div
                                       className={
-                                        editMode === 'note'
+                                        effectiveEditMode === 'note'
                                           ? 'flex min-h-6 flex-wrap items-center justify-center gap-0.5'
                                           : 'flex min-h-8 flex-wrap items-center justify-center gap-1'
                                       }
@@ -1411,7 +1505,8 @@ export default function OperationShareDialog({
                                               cardConfig.actionColors,
                                               round.round,
                                             )
-                                          return editMode === 'color' ? (
+                                          return effectiveEditMode ===
+                                            'color' ? (
                                             <button
                                               key={actionKey}
                                               aria-label={`${round.round} 回合 ${column.label}：${label}`}
@@ -1456,7 +1551,7 @@ export default function OperationShareDialog({
                                         </span>
                                       )}
                                     </div>
-                                  ) : editMode === 'color' ? (
+                                  ) : effectiveEditMode === 'color' ? (
                                     <button
                                       aria-label={`${round.round} 回合 ${column.label}${
                                         actionLabels.length > 0
@@ -1507,17 +1602,16 @@ export default function OperationShareDialog({
                                 </td>
                               )
                             })}
-                            {cardConfig.showNotes ||
-                            cardConfig.showOtherActions ? (
+                            {showRoundNoteColumn ? (
                               <td
                                 className={`border-b border-slate-200 text-left align-top ${
-                                  editMode === 'note' ? 'p-2' : 'p-1'
+                                  effectiveEditMode === 'note' ? 'p-2' : 'p-1'
                                 }`}
                               >
                                 <textarea
                                   aria-label={`${round.round} 回合备注`}
                                   className={`w-full resize-y rounded border border-slate-300 text-slate-800 outline-none focus:border-sky-500 ${
-                                    editMode === 'note'
+                                    effectiveEditMode === 'note'
                                       ? 'min-h-14 px-2 py-1.5 text-xs leading-5'
                                       : 'max-h-24 min-h-8 px-1 py-0.5 text-[11px] leading-4'
                                   }`}
@@ -1531,7 +1625,7 @@ export default function OperationShareDialog({
                                   placeholder="可直接修改本回合备注"
                                   value={note}
                                 />
-                                {editMode === 'note' &&
+                                {effectiveEditMode === 'note' &&
                                 noteActions.length > 0 ? (
                                   <div className="mt-1 flex flex-wrap items-center gap-0.5">
                                     <span className="mr-0.5 text-[10px] text-slate-400">
@@ -1593,7 +1687,7 @@ export default function OperationShareDialog({
                                       </Button>
                                     ) : null}
                                   </div>
-                                ) : editMode === 'note' &&
+                                ) : effectiveEditMode === 'note' &&
                                   (hasNoteOverride || hasHiddenOtherActions) ? (
                                   <Button
                                     className="!mt-1 !inline-flex !h-5 !min-h-0 !items-center !gap-0.5 !px-1 !py-0 !text-[10px] !font-normal !leading-none"

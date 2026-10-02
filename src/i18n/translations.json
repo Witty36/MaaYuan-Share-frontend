@@ -3491,8 +3491,8 @@
           "zh_tw": "二維碼指向站內地址，已隨神秘代碼一併隱藏。"
         },
         "share_cell_color_section_title": {
-          "cn": "标色方式",
-          "zh_tw": "標色方式"
+          "cn": "表格编辑",
+          "zh_tw": "表格編輯"
         },
         "share_cell_color_section_hint": {
           "cn": "可按动作文字标色，也可按整个单元格标色；两套设置会分别保存。",
