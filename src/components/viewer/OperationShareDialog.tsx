@@ -27,6 +27,7 @@ import {
   getOperationShareActionColor,
   getOperationShareActionTextColor,
   getOperationShareCellVisualStyle,
+  getOperationShareNoteActionLabel,
   getOperationShareRoundDisplay,
   getOperationShareRoundNoteText,
 } from './OperationShareCard'
@@ -1048,11 +1049,11 @@ export default function OperationShareDialog({
                                 快捷填入
                               </span>
                               {noteActions.map((action) => {
-                                const label =
-                                  getOperationShareActionLabel(
-                                    action,
-                                    displayOrderByActionOrder.get(action.order),
-                                  )
+                                const label = getOperationShareNoteActionLabel(
+                                  round,
+                                  action,
+                                  displayOrderByActionOrder,
+                                )
                                 const included = note.includes(label)
 
                                 return (

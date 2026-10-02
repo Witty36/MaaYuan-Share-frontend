@@ -7,6 +7,7 @@ import {
   getOperationShareActionCellBackground,
   getOperationShareActionLabel,
   getOperationShareCellVisualStyle,
+  getOperationShareNoteActionLabel,
   getOperationShareOperatorStarLabel,
   getOperationShareRoundDisplay,
   getOperationShareRoundNoteText,
@@ -414,13 +415,50 @@ describe('operation share card styles', () => {
     }
     const config = createOperationShareCardConfig()
     config.notes[1] = '手动备注'
+    const display = getOperationShareRoundDisplay(round, config)
 
     expect(getOperationShareRoundNoteText(round, config)).toBe(
       '无橙星重开 5A后检测1号位龙气\n手动备注',
     )
+    expect(
+      getOperationShareNoteActionLabel(
+        round,
+        dragonDetection,
+        display.displayOrderByActionOrder,
+      ),
+    ).toBe('5A后检测1号位龙气')
     expect(getOperationShareActionLabel(dragonDetection)).toBe(
       '24检测1号位龙气',
     )
+
+    const elevenOperatorActions = Array.from({ length: 11 }, (_, index) => ({
+      raw: '1普',
+      order: index + 2,
+      label: 'A',
+    }))
+    const elevenActionRound = {
+      round: 1,
+      slots: { 1: elevenOperatorActions },
+      others: [
+        {
+          raw: '重开:检测1号位退场',
+          order: 13,
+          label: '检测1号位退场',
+        },
+      ],
+    }
+    const elevenActionDisplay = getOperationShareRoundDisplay(
+      elevenActionRound,
+      config,
+    )
+
+    expect(
+      getOperationShareNoteActionLabel(
+        elevenActionRound,
+        elevenActionRound.others[0],
+        elevenActionDisplay.displayOrderByActionOrder,
+      ),
+    ).toBe('11A后检测1号位退场')
 
     config.roundNoteOverrides = {
       1: '21在某操作后，检测周泰退场',

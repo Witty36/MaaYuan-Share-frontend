@@ -213,12 +213,13 @@ function getOperationShareNoteActionDescription(action: OperationShareAction) {
   return action.label
 }
 
-function getOperationShareNoteActionLabel(
+export function getOperationShareNoteActionLabel(
+  round: OperationShareRound,
   action: OperationShareAction,
-  operatorActions: OperationShareAction[],
   displayOrderByActionOrder: ReadonlyMap<number, number>,
 ) {
   const description = getOperationShareNoteActionDescription(action)
+  const operatorActions = getOperationShareOperatorActions(round)
   const precedingOperator = [...operatorActions]
     .reverse()
     .find((operatorAction) => operatorAction.order <= action.order)
@@ -270,12 +271,11 @@ export function getOperationShareRoundNoteText(
 
   const { otherActions, displayOrderByActionOrder } =
     getOperationShareRoundDisplay(round, config)
-  const operatorActions = getOperationShareOperatorActions(round)
   const otherActionText = otherActions
     .map((action) =>
       getOperationShareNoteActionLabel(
+        round,
         action,
-        operatorActions,
         displayOrderByActionOrder,
       ),
     )
