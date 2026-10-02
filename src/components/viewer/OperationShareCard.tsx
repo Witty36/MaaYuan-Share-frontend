@@ -328,28 +328,45 @@ function ActionList({
   displayOrderByActionOrder,
   actionColors,
   round,
+  variant = 'default',
 }: {
   actions: OperationShareAction[]
   displayOrderByActionOrder: ReadonlyMap<number, number>
   actionColors: OperationShareCardConfig['actionColors']
   round: number
+  variant?: 'default' | 'other'
 }) {
+  const textClassName =
+    variant === 'other'
+      ? 'text-[18px] font-normal leading-[1.25]'
+      : 'text-[22px] font-bold leading-[1.25]'
+
   if (actions.length === 0) {
-    return <span className="text-lg opacity-70">—</span>
+    return (
+      <span
+        className={
+          variant === 'other'
+            ? 'text-[18px] font-normal opacity-70'
+            : 'text-lg opacity-70'
+        }
+      >
+        —
+      </span>
+    )
   }
 
   return (
-    <div className="text-center text-[22px] font-bold leading-[1.25]">
+    <div className={`text-center ${textClassName}`}>
       {actions.map((action, index) => {
-        const actionColor = getOperationShareActionColor(
-          action,
-          actionColors,
-          round,
-        )
+        const actionColor =
+          variant === 'other'
+            ? undefined
+            : getOperationShareActionColor(action, actionColors, round)
 
         return (
           <span
             key={`${action.order}-${index}`}
+            className={variant === 'other' ? 'mr-1 last:mr-0' : undefined}
             style={actionColor ? { color: actionColor } : undefined}
           >
             {getOperationShareActionLabel(
@@ -558,6 +575,7 @@ export function OperationShareCard({
                           actions={otherActions}
                           displayOrderByActionOrder={displayOrderByActionOrder}
                           round={round.round}
+                          variant="other"
                         />
                       </td>
                     ) : null}
