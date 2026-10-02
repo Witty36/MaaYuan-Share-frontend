@@ -511,6 +511,10 @@ export function OperationShareCard({
   const showOtherActionsColumn =
     config.showOtherActions && config.showTargetSwitches
   const showNotesColumn = config.showNotes || config.showOtherActions
+  const roundColumnWidthClassName = showNotesColumn ? 'w-[80px]' : 'w-[110px]'
+  const notesColumnWidthClassName = showOtherActionsColumn
+    ? 'w-[212px]'
+    : 'w-[302px]'
 
   return (
     <ShareCardFrame
@@ -534,7 +538,7 @@ export function OperationShareCard({
           <thead>
             <tr aria-label="密探头像">
               <td
-                className="w-[110px] border-2 p-0"
+                className={`${roundColumnWidthClassName} border-2 p-0`}
                 style={{
                   borderColor: tableTheme.border,
                   background: tableTheme.headerBackground,
@@ -558,7 +562,7 @@ export function OperationShareCard({
               ))}
               {showOtherActionsColumn ? (
                 <td
-                  className="w-[118px] border-2 p-0"
+                  className="w-[104px] border-2 p-0"
                   style={{
                     borderColor: tableTheme.border,
                     background: tableTheme.headerBackground,
@@ -567,7 +571,7 @@ export function OperationShareCard({
               ) : null}
               {showNotesColumn ? (
                 <td
-                  className="w-[168px] border-2 p-0"
+                  className={`${notesColumnWidthClassName} border-2 p-0`}
                   style={{
                     borderColor: tableTheme.border,
                     background: tableTheme.headerBackground,
@@ -643,7 +647,7 @@ export function OperationShareCard({
                         color: tableTheme.text,
                       }}
                     >
-                      <span className="block text-[28px] font-bold">
+                      <span className="block text-[24px] font-bold">
                         {round.round}
                       </span>
                     </th>
@@ -676,7 +680,7 @@ export function OperationShareCard({
                     ))}
                     {showOtherActionsColumn ? (
                       <td
-                        className="border-2 px-1.5 py-2 align-middle"
+                        className="border-2 px-1 py-2 align-middle"
                         style={{
                           borderColor: tableTheme.border,
                           background: rowBackground,
@@ -702,7 +706,11 @@ export function OperationShareCard({
                             : tableTheme.mutedText,
                         }}
                       >
-                        <div className="whitespace-pre-wrap break-words text-left text-[17px] font-medium leading-6">
+                        <div
+                          className={`whitespace-pre-wrap break-words text-[15px] font-medium leading-5 ${
+                            noteText ? 'text-left' : 'text-center'
+                          }`}
+                        >
                           {noteText || '—'}
                         </div>
                       </td>

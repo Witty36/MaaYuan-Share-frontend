@@ -450,6 +450,9 @@ describe('operation share card styles', () => {
 
     expect(markup).toContain('其他动作')
     expect(markup).toContain('备注')
+    expect(markup).toContain('w-[104px]')
+    expect(markup).toContain('w-[80px]')
+    expect(markup).toContain('w-[212px]')
     expect(markup).toContain('1左滑')
     expect(markup).toContain('2A')
 
@@ -463,6 +466,7 @@ describe('operation share card styles', () => {
 
     expect(hiddenSwitchMarkup).not.toContain('其他动作')
     expect(hiddenSwitchMarkup).not.toContain('1左滑')
+    expect(hiddenSwitchMarkup).toContain('w-[302px]')
     expect(hiddenSwitchMarkup).toContain('1A')
   })
 
