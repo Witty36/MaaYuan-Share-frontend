@@ -23,7 +23,9 @@ import { AppToaster } from '../Toaster'
 import { DeployedOperatorsShareCard } from './DeployedOperatorsShareCard'
 import {
   OperationShareCard,
+  getOperationShareActionLabel,
   getOperationShareCellVisualStyle,
+  getOperationShareRoundDisplay,
 } from './OperationShareCard'
 import {
   createOperationShareQrDataUrl,
@@ -213,14 +215,15 @@ export default function OperationShareDialog({
   }
 
   const editableColumns = useMemo<
-    Array<{ key: OperationShareCellColumn; label: string }>
+    Array<{ key: OperationShareCellColumn; slot: number; label: string }>
   >(
     () =>
       model.actionSlots.map((slot) => ({
         key: `slot-${slot}` as OperationShareCellColumn,
-        label: `${slot} 号位`,
+        slot,
+        label: model.operators[slot - 1]?.name || `${slot} 号位`,
       })),
-    [model.actionSlots],
+    [model.actionSlots, model.operators],
   )
   const editableColumnGroups = useMemo(
     () =>
@@ -234,10 +237,11 @@ export default function OperationShareDialog({
   )
   const editableRoundGroups = useMemo(
     () =>
-      model.rounds.map((round) => ({
-        round: round.round,
+      model.rounds.map((sourceRound) => ({
+        round: sourceRound.round,
+        sourceRound,
         cellKeys: editableColumns.map((column) =>
-          buildOperationShareCellKey(round.round, column.key),
+          buildOperationShareCellKey(sourceRound.round, column.key),
         ),
       })),
     [editableColumns, model.rounds],
@@ -1014,6 +1018,11 @@ export default function OperationShareDialog({
                           selectedCellKeys,
                           round.cellKeys,
                         )
+                        const { displayOrderByActionOrder } =
+                          getOperationShareRoundDisplay(
+                            round.sourceRound,
+                            cardConfig,
+                          )
                         return (
                           <tr key={round.round}>
                             <th className="border-b border-r border-slate-200 px-2 py-2 font-medium text-slate-600">
@@ -1034,26 +1043,59 @@ export default function OperationShareDialog({
                             {editableColumns.map((column, columnIndex) => {
                               const key = round.cellKeys[columnIndex]
                               if (!key) return null
+                              const actionLabels = (
+                                round.sourceRound.slots[column.slot] ?? []
+                              ).map((action) =>
+                                getOperationShareActionLabel(
+                                  action,
+                                  displayOrderByActionOrder.get(action.order),
+                                ),
+                              )
+                              const selected = selectedCellKeys.has(key)
                               return (
                                 <td
                                   key={column.key}
-                                  className="border-b border-r border-slate-200 px-2 py-2 last:border-r-0"
+                                  className="border-b border-r border-slate-200 p-1 last:border-r-0"
                                   style={getOperationShareCellVisualStyle(
                                     cardConfig.cellColors[key],
                                     cardConfig.showCellPattern,
                                   )}
                                 >
-                                  <Checkbox
-                                    aria-label={`${round.round} 回合 ${column.label}`}
-                                    checked={selectedCellKeys.has(key)}
-                                    className="m-0 inline-block"
-                                    onChange={(event) =>
-                                      toggleCellSelection(
-                                        key,
-                                        event.currentTarget.checked,
-                                      )
+                                  <button
+                                    aria-label={`${round.round} 回合 ${column.label}${
+                                      actionLabels.length > 0
+                                        ? `：${actionLabels.join(' ')}`
+                                        : ''
+                                    }`}
+                                    aria-pressed={selected}
+                                    className={`flex min-h-8 w-full items-center justify-center gap-1.5 rounded-sm px-1.5 py-1 transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
+                                      selected
+                                        ? 'ring-2 ring-inset ring-sky-500'
+                                        : ''
+                                    }`}
+                                    onClick={() =>
+                                      toggleCellSelection(key, !selected)
                                     }
-                                  />
+                                    type="button"
+                                  >
+                                    <span
+                                      aria-hidden="true"
+                                      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border ${
+                                        selected
+                                          ? 'border-sky-500 bg-sky-500 text-white'
+                                          : 'border-slate-400 bg-white/70'
+                                      }`}
+                                    >
+                                      {selected ? (
+                                        <Icon icon="tick" size={10} />
+                                      ) : null}
+                                    </span>
+                                    <span className="min-w-0 break-words font-medium leading-4">
+                                      {actionLabels.length > 0
+                                        ? actionLabels.join(' ')
+                                        : '—'}
+                                    </span>
+                                  </button>
                                 </td>
                               )
                             })}
