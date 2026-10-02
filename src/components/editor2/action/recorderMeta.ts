@@ -497,10 +497,10 @@ const getDerivedRecorderMetaTargetIndex = (
 }
 
 export const RECORDER_META_TARGET_COLORS: Record<number, string> = {
-  2: '#d946ef',
-  3: '#2563eb',
-  4: '#d97706',
-  5: '#059669',
+  2: '#a21caf',
+  3: '#1d4ed8',
+  4: '#92400e',
+  5: '#047857',
 }
 
 export function getRecorderMetaTargetColor(

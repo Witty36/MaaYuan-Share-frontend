@@ -30,7 +30,6 @@ import {
 import { simingActionsToRoundActions } from '../editor2/siming-export'
 import {
   getRecorderAttackNumber,
-  getRecorderMetaTargetColor,
   getRecorderMetaTargetIndex,
 } from '../editor2/action/recorderMeta'
 
@@ -127,18 +126,13 @@ export const ActionSequenceViewer: FC<ActionSequenceViewerProps> = ({
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
-        {tokens.map(({ raw, label, key, targetIndex }) => (
+        {tokens.map(({ raw, label, key }) => (
           <Tag
             key={key}
             large
             intent="primary"
             minimal
             title={raw !== label ? raw : undefined}
-            style={
-              getRecorderMetaTargetColor(targetIndex)
-                ? { color: getRecorderMetaTargetColor(targetIndex) }
-                : undefined
-            }
           >
             {label}
           </Tag>
@@ -289,10 +283,6 @@ export const ActionSequenceViewer: FC<ActionSequenceViewerProps> = ({
                                     token.raw,
                                     language,
                                   )
-                                  const targetColor =
-                                    getRecorderMetaTargetColor(
-                                      token.targetIndex,
-                                    )
                                   return (
                                     <div
                                       key={token.key}
@@ -307,14 +297,7 @@ export const ActionSequenceViewer: FC<ActionSequenceViewerProps> = ({
                                         )}
                                         aria-hidden="true"
                                       />
-                                      <span
-                                        className="truncate"
-                                        style={
-                                          targetColor
-                                            ? { color: targetColor }
-                                            : undefined
-                                        }
-                                      >
+                                      <span className="truncate">
                                         {`${token.order + 1}${summary}`}
                                       </span>
                                     </div>
@@ -339,10 +322,6 @@ export const ActionSequenceViewer: FC<ActionSequenceViewerProps> = ({
                                   token.raw,
                                   language,
                                 )
-                                const targetColor =
-                                  getRecorderMetaTargetColor(
-                                    token.targetIndex,
-                                  )
                                 return (
                                   <div
                                     key={token.key}
@@ -357,14 +336,7 @@ export const ActionSequenceViewer: FC<ActionSequenceViewerProps> = ({
                                       )}
                                       aria-hidden="true"
                                     />
-                                    <span
-                                      className="truncate"
-                                      style={
-                                        targetColor
-                                          ? { color: targetColor }
-                                          : undefined
-                                      }
-                                    >
+                                    <span className="truncate">
                                       {`${token.order + 1}${summary}`}
                                     </span>
                                   </div>
