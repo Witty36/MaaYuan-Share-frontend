@@ -3554,6 +3554,22 @@
           "cn": "无操作色",
           "zh_tw": "無操作色"
         },
+        "share_action_color_notes_title": {
+          "cn": "颜色说明",
+          "zh_tw": "顏色說明"
+        },
+        "share_action_color_notes_hint": {
+          "cn": "生成分享图时用灰色小字显示，只展示实际用到的颜色。",
+          "zh_tw": "生成分享圖時用灰色小字顯示，只展示實際用到的顏色。"
+        },
+        "share_action_color_note_label": {
+          "cn": "{{color}}颜色说明",
+          "zh_tw": "{{color}}顏色說明"
+        },
+        "share_action_color_note_placeholder": {
+          "cn": "例如：打火小兵 / 关键操作",
+          "zh_tw": "例如：打火小兵 / 關鍵操作"
+        },
         "share_cell_color_apply": {
           "cn": "应用{{label}}",
           "zh_tw": "套用{{label}}"

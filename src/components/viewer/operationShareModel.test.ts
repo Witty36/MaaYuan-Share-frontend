@@ -18,6 +18,7 @@ import {
   calculateSharePixelRatio,
   createOperationShareCardConfig,
   filterOperationShareActions,
+  getOperationShareActionColorNote,
   getOperationShareCellSelectionState,
   getRenderableOperationShareConfigs,
   isOperationShareTargetSwitchAction,
@@ -556,6 +557,7 @@ describe('share image utilities', () => {
     config.notes[2] = '第二回合先等待'
     config.roundNoteOverrides = { 2: '2在某操作后检测周泰退场' }
     config.hiddenOtherActionKeys = { '2:1': true }
+    config.actionColorNotes.green = '绿色打火小兵'
     config.cellColors['2:slot-3'] = 'blue'
     config.requiredDiscs['2:1'] = true
 
@@ -566,12 +568,20 @@ describe('share image utilities', () => {
     )
   })
 
+  it('uses enemy-target defaults and respects blank action color notes', () => {
+    expect(getOperationShareActionColorNote('pink', {})).toBe('打 1 号敌人')
+    expect(getOperationShareActionColorNote('blue', {})).toBe('打 2 号敌人')
+    expect(getOperationShareActionColorNote('pink', { pink: '' })).toBe('')
+    expect(getOperationShareActionColorNote('ice', {})).toBeUndefined()
+  })
+
   it('splits action and deployed operator payloads by card kind', () => {
     const config = createOperationShareCardConfig()
     config.showNotes = true
     config.notes[2] = '等待技能结束'
     config.roundNoteOverrides = { 2: '2在某操作后检测周泰退场' }
     config.hiddenOtherActionKeys = { '2:1': true }
+    config.actionColorNotes.pink = '粉色表示关键操作'
     config.cellColors['2:slot-1'] = 'pink'
     config.requiredDiscs['1:3'] = true
 
@@ -586,6 +596,7 @@ describe('share image utilities', () => {
       roundNoteOverrides: { 2: '2在某操作后检测周泰退场' },
       hiddenOtherActionKeys: { '2:1': true },
       actionColors: {},
+      actionColorNotes: { pink: '粉色表示关键操作' },
       cellColors: { '2:slot-1': 'pink' },
     })
     expect(buildOperationShareCardConfigPayload('operators', config)).toEqual({
@@ -600,7 +611,11 @@ describe('share image utilities', () => {
           cardKey: OPERATION_SHARE_CARD_KEYS.actions,
           schemaVersion: OPERATION_SHARE_CARD_CONFIG_SCHEMA_VERSION,
           revision: 2,
-          payload: { showNotes: true, notes: { 1: '作者备注' } },
+          payload: {
+            showNotes: true,
+            notes: { 1: '作者备注' },
+            actionColorNotes: { blue: '作者蓝色说明' },
+          },
         },
         {
           cardKey: OPERATION_SHARE_CARD_KEYS.operators,
@@ -618,6 +633,7 @@ describe('share image utilities', () => {
       tableThemeOverrides: undefined,
       notes: { 1: '作者备注' },
       actionColors: {},
+      actionColorNotes: { blue: '作者蓝色说明' },
       cellColors: {},
       requiredDiscs: { '2:1': true },
     })
@@ -640,6 +656,7 @@ describe('share image utilities', () => {
     ])
     const local = createOperationShareCardConfig()
     local.showOtherActions = false
+    local.actionColorNotes.blue = '本地蓝色说明'
 
     expect(resolveOperationShareCardConfig(local, author)).toEqual({
       showTargetSwitches: false,
@@ -650,6 +667,7 @@ describe('share image utilities', () => {
       tableThemeOverrides: undefined,
       notes: {},
       actionColors: {},
+      actionColorNotes: { blue: '本地蓝色说明' },
       cellColors: {},
       requiredDiscs: { '1:1': true },
     })
@@ -672,6 +690,11 @@ describe('share image utilities', () => {
           showNotes: true,
           tableColor: '#369',
           notes: { 1: 'x'.repeat(200), invalid: 3 },
+          actionColorNotes: {
+            pink: '  粉色   关键操作  ',
+            invalid: '无效颜色',
+            blue: 3,
+          },
           cellColors: {
             '1:others': '#F4D9D1',
             '2:notes': '#f2dfb9',
@@ -700,6 +723,7 @@ describe('share image utilities', () => {
       tableThemeOverrides: undefined,
       notes: { 1: 'x'.repeat(160) },
       actionColors: {},
+      actionColorNotes: { pink: '粉色 关键操作' },
       cellColors: {
         '3:slot-1': 'green',
         '4:slot-2': 'blue',

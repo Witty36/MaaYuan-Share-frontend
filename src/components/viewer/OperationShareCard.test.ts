@@ -194,6 +194,45 @@ describe('operation share card styles', () => {
     expect(markup).toContain('10圈</span><wbr/>')
   })
 
+  it('renders editable notes for every action color used in the image', () => {
+    const config = createOperationShareCardConfig()
+    config.actionColors['1:1'] = 'pink'
+    config.actionColorNotes.pink = '粉色表示关键操作'
+    const cardModel: OperationShareModel = {
+      ...model,
+      actionSlots: [1],
+      rounds: [
+        {
+          round: 1,
+          slots: {
+            1: [
+              { raw: '10圈', order: 1, label: '0圈' },
+              {
+                raw: '20圈',
+                order: 2,
+                label: '0圈',
+                targetIndex: 3,
+              },
+            ],
+          },
+          others: [],
+        },
+      ],
+    }
+
+    const markup = renderToStaticMarkup(
+      createElement(OperationShareCard, {
+        config,
+        model: cardModel,
+        qrDataUrl: 'data:image/png;base64,qr-code',
+      }),
+    )
+
+    expect(markup).toContain('粉色表示关键操作')
+    expect(markup).toContain('打 2 号敌人')
+    expect(markup).not.toContain('打 1 号敌人')
+  })
+
   it('derives alternating table colors from a custom base color', () => {
     const tableTheme = getOperationShareTableTheme('#336699')
 

@@ -73,6 +73,7 @@ export interface OperationShareCardConfig {
   roundNoteOverrides?: Record<number, string>
   hiddenOtherActionKeys?: Record<string, boolean>
   actionColors: Record<string, string>
+  actionColorNotes: Partial<Record<OperationShareCellColorKey, string>>
   cellColors: Record<string, string>
   requiredDiscs: Record<string, boolean>
 }
@@ -95,6 +96,18 @@ export const OPERATION_SHARE_CELL_COLOR_KEYS = [
 
 export type OperationShareCellColorKey =
   (typeof OPERATION_SHARE_CELL_COLOR_KEYS)[number]
+
+export const OPERATION_SHARE_ACTION_COLOR_ORDER: OperationShareCellColorKey[] =
+  ['ice', 'pink', 'blue', 'yellow', 'green']
+
+export const OPERATION_SHARE_ACTION_COLOR_DEFAULT_NOTES: Partial<
+  Record<OperationShareCellColorKey, string>
+> = {
+  pink: '打 1 号敌人',
+  blue: '打 2 号敌人',
+  yellow: '打 3 号敌人',
+  green: '打 4 号敌人',
+}
 
 /** 各颜色的基础色，以及「增加底纹」时使用的纹样。 */
 export const OPERATION_SHARE_CELL_PALETTE: Record<
@@ -212,6 +225,15 @@ export interface OperationShareRemoteConfig {
   payload: unknown
 }
 
+export function getOperationShareActionColorNote(
+  colorKey: OperationShareCellColorKey,
+  notes: Partial<Record<OperationShareCellColorKey, string>>,
+) {
+  return Object.prototype.hasOwnProperty.call(notes, colorKey)
+    ? notes[colorKey]
+    : OPERATION_SHARE_ACTION_COLOR_DEFAULT_NOTES[colorKey]
+}
+
 export function createOperationShareCardConfig(): OperationShareCardConfig {
   return {
     showTargetSwitches: false,
@@ -222,6 +244,7 @@ export function createOperationShareCardConfig(): OperationShareCardConfig {
     tableThemeOverrides: undefined,
     notes: {},
     actionColors: {},
+    actionColorNotes: {},
     cellColors: {},
     requiredDiscs: {},
   }
@@ -283,6 +306,22 @@ export function normalizeOperationShareCardConfig(
     })
   }
 
+  const actionColorNotes: Partial<Record<OperationShareCellColorKey, string>> =
+    {}
+  if (isRecord(value.actionColorNotes)) {
+    Object.entries(value.actionColorNotes).forEach(([colorKey, note]) => {
+      if (
+        OPERATION_SHARE_CELL_COLOR_SET.has(colorKey) &&
+        typeof note === 'string'
+      ) {
+        actionColorNotes[colorKey as OperationShareCellColorKey] = note
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 80)
+      }
+    })
+  }
+
   const cellColors: Record<string, string> = {}
   if (isRecord(value.cellColors)) {
     Object.entries(value.cellColors).forEach(([key, style]) => {
@@ -335,6 +374,7 @@ export function normalizeOperationShareCardConfig(
       ? { hiddenOtherActionKeys }
       : {}),
     actionColors,
+    actionColorNotes,
     cellColors,
     requiredDiscs,
   }
@@ -366,6 +406,7 @@ export function buildOperationShareCardConfigPayload(
       ? { hiddenOtherActionKeys: normalized.hiddenOtherActionKeys }
       : {}),
     actionColors: normalized.actionColors,
+    actionColorNotes: normalized.actionColorNotes,
     cellColors: normalized.cellColors,
   }
 }
@@ -449,6 +490,7 @@ export function resolveOperationShareCardConfig(
     Object.keys(local.roundNoteOverrides ?? {}).length > 0 ||
     Object.keys(local.hiddenOtherActionKeys ?? {}).length > 0 ||
     Object.keys(local.actionColors).length > 0 ||
+    Object.keys(local.actionColorNotes).length > 0 ||
     Object.keys(local.cellColors).length > 0
   const hasLocalOperatorOverrides = Object.keys(local.requiredDiscs).length > 0
 
@@ -457,6 +499,10 @@ export function resolveOperationShareCardConfig(
     actionColors: {
       ...authorConfig.actionColors,
       ...local.actionColors,
+    },
+    actionColorNotes: {
+      ...authorConfig.actionColorNotes,
+      ...local.actionColorNotes,
     },
     requiredDiscs: hasLocalOperatorOverrides
       ? local.requiredDiscs
@@ -485,6 +531,7 @@ export function replaceOperationShareCardConfigKind(
     roundNoteOverrides: replacement.roundNoteOverrides,
     hiddenOtherActionKeys: replacement.hiddenOtherActionKeys,
     actionColors: replacement.actionColors,
+    actionColorNotes: replacement.actionColorNotes,
     cellColors: replacement.cellColors,
   }
 }

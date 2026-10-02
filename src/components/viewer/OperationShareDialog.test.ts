@@ -238,6 +238,37 @@ describe('operation share dialog short code switch', () => {
     expect(findSwitch('增加底纹')?.checked).toBe(true)
   })
 
+  it('edits the action color notes used by the generated share image', async () => {
+    await renderDialog(
+      createOperation(
+        CopilotInfoStatusEnum.Public,
+        undefined,
+        singleRoundActions,
+      ),
+    )
+
+    const pinkNoteInput = document.querySelector(
+      'input[aria-label="粉色颜色说明"]',
+    ) as HTMLInputElement | null
+
+    expect(pinkNoteInput).not.toBeNull()
+    expect(pinkNoteInput?.value).toBe('打 1 号敌人')
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      )?.set
+      valueSetter?.call(pinkNoteInput, '粉色表示关键操作')
+      pinkNoteInput?.dispatchEvent(new Event('input', { bubbles: true }))
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(readOperationShareCardConfig(100)?.actionColorNotes).toEqual({
+      pink: '粉色表示关键操作',
+    })
+  })
+
   it('applies the chosen color to the selected cell', async () => {
     await renderDialog(
       createOperation(

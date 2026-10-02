@@ -31,12 +31,14 @@ import {
   getOperationShareNoteActionLabel,
   getOperationShareRoundDisplay,
   getOperationShareRoundNoteText,
+  getOperationShareUsedActionColorKeys,
 } from './OperationShareCard'
 import {
   createOperationShareQrDataUrl,
   renderOperationShareCardBlob,
 } from './operationShareImage'
 import {
+  OPERATION_SHARE_ACTION_COLOR_ORDER,
   OPERATION_SHARE_CARD_CONFIG_SCHEMA_VERSION,
   OPERATION_SHARE_CARD_KEYS,
   OPERATION_SHARE_CELL_COLOR_KEYS,
@@ -54,6 +56,7 @@ import {
   buildOperationShareModel,
   buildOperationShareUrl,
   createOperationShareCardConfig,
+  getOperationShareActionColorNote,
   getOperationShareCellSelectionState,
   getOperationShareOtherActions,
   getOperationShareRemoteConfigByKind,
@@ -80,13 +83,6 @@ type GenerationStatus = 'idle' | 'generating' | 'ready' | 'error'
 type ColorMode = 'action' | 'cell'
 type EditMode = 'color' | 'note'
 
-const OPERATION_SHARE_ACTION_COLOR_ORDER: OperationShareCellColorKey[] = [
-  'ice',
-  'pink',
-  'blue',
-  'yellow',
-  'green',
-]
 function appendOperationShareNoteText(note: string, text: string) {
   const trimmed = note.trim()
   if (!trimmed) return text
@@ -297,6 +293,19 @@ export default function OperationShareDialog({
     ...cellColorNames,
     ice: t.components.viewer.OperationViewer.share_cell_color_none,
   }
+  const usedActionColorKeys = getOperationShareUsedActionColorKeys(
+    model,
+    cardConfig,
+  )
+  const actionColorNoteKeys = OPERATION_SHARE_ACTION_COLOR_ORDER.filter(
+    (colorKey) =>
+      colorKey !== 'ice' ||
+      usedActionColorKeys.includes(colorKey) ||
+      Object.prototype.hasOwnProperty.call(
+        cardConfig.actionColorNotes,
+        colorKey,
+      ),
+  )
 
   const editableColumns = useMemo<
     Array<{ key: OperationShareCellColumn; slot: number; label: string }>
@@ -551,6 +560,20 @@ export default function OperationShareDialog({
       return { ...current, actionColors }
     })
     setSelectedActionKeys(new Set())
+  }
+
+  const updateActionColorNote = (
+    colorKey: OperationShareCellColorKey,
+    note: string,
+  ) => {
+    invalidatePreview()
+    updateCardConfig((current) => ({
+      ...current,
+      actionColorNotes: {
+        ...current.actionColorNotes,
+        [colorKey]: note,
+      },
+    }))
   }
 
   const applyCellColor = (style: string) => {
@@ -1304,6 +1327,73 @@ export default function OperationShareDialog({
                     </div>
                   ) : null}
                 </div>
+                {effectiveEditMode === 'color' && colorMode === 'action' ? (
+                  <div className="mt-3 rounded border border-slate-200 bg-slate-50 px-2.5 py-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="shrink-0 text-xs font-medium text-slate-600">
+                        {
+                          t.components.viewer.OperationViewer
+                            .share_action_color_notes_title
+                        }
+                      </span>
+                      <span className="min-w-0 truncate text-[11px] leading-4 text-slate-400">
+                        {
+                          t.components.viewer.OperationViewer
+                            .share_action_color_notes_hint
+                        }
+                      </span>
+                    </div>
+                    <div className="mt-1.5 grid gap-1.5 md:grid-cols-4">
+                      {actionColorNoteKeys.map((colorKey) => (
+                        <label
+                          key={colorKey}
+                          className="flex min-w-0 items-center gap-1"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-xs font-bold"
+                            style={{
+                              backgroundColor:
+                                getOperationShareActionFillColor(colorKey),
+                              color: getOperationShareActionTextColor(colorKey),
+                            }}
+                          >
+                            A
+                          </span>
+                          <span className="w-7 shrink-0 text-[11px] text-slate-500">
+                            {actionColorNames[colorKey]}
+                          </span>
+                          <input
+                            aria-label={t.components.viewer.OperationViewer.share_action_color_note_label(
+                              {
+                                color: actionColorNames[colorKey],
+                              },
+                            )}
+                            className="h-7 min-w-0 flex-1 rounded border border-slate-300 bg-white px-1.5 text-xs text-slate-700 outline-none transition focus:border-sky-400 focus:ring-1 focus:ring-sky-200"
+                            maxLength={80}
+                            onChange={(event) =>
+                              updateActionColorNote(
+                                colorKey,
+                                event.currentTarget.value,
+                              )
+                            }
+                            placeholder={
+                              t.components.viewer.OperationViewer
+                                .share_action_color_note_placeholder
+                            }
+                            type="text"
+                            value={
+                              getOperationShareActionColorNote(
+                                colorKey,
+                                cardConfig.actionColorNotes,
+                              ) ?? ''
+                            }
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
                 <div className="mt-3 max-h-56 overflow-auto rounded border border-slate-200">
                   <table
                     className="w-full table-fixed border-collapse bg-white text-center text-xs"

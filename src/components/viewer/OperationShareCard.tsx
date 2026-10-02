@@ -4,6 +4,7 @@ import { type CSSProperties, Fragment, type Ref } from 'react'
 
 import { getRecorderMetaTargetColor } from '../editor2/action/recorderMeta'
 import {
+  OPERATION_SHARE_ACTION_COLOR_ORDER,
   OPERATION_SHARE_CELL_COLOR_KEYS,
   OPERATION_SHARE_CELL_PALETTE,
   type OperationShareAction,
@@ -16,6 +17,7 @@ import {
   buildOperationShareActionKey,
   buildOperationShareCellKey,
   createOperationShareCardConfig,
+  getOperationShareActionColorNote,
   getOperationShareOtherActions,
   isOperationShareTargetSwitchAction,
 } from './operationShareModel'
@@ -55,6 +57,15 @@ export const OPERATION_SHARE_ACTION_FILL_COLORS: Record<
   blue: '#dbeafe',
   green: '#d1fae5',
   ice: '#e2e8f0',
+}
+
+const OPERATION_SHARE_TARGET_ACTION_COLOR_KEYS: Partial<
+  Record<number, OperationShareCellColorKey>
+> = {
+  2: 'pink',
+  3: 'blue',
+  4: 'yellow',
+  5: 'green',
 }
 
 const OPERATION_SHARE_TARGET_FILL_COLORS: Record<string, string> = {
@@ -113,6 +124,51 @@ export function getOperationShareActionColor(
     getOperationShareActionTextColor(
       actionColors[buildOperationShareActionKey(round, action.order)],
     ) ?? getRecorderMetaTargetColor(action.targetIndex)
+  )
+}
+
+export function getOperationShareActionColorKey(
+  action: OperationShareAction,
+  actionColors: OperationShareCardConfig['actionColors'],
+  round: number,
+) {
+  const explicitColor =
+    actionColors[buildOperationShareActionKey(round, action.order)]
+  if (
+    explicitColor &&
+    (OPERATION_SHARE_CELL_COLOR_KEYS as readonly string[]).includes(
+      explicitColor,
+    )
+  ) {
+    return explicitColor as OperationShareCellColorKey
+  }
+
+  return action.targetIndex === undefined
+    ? undefined
+    : OPERATION_SHARE_TARGET_ACTION_COLOR_KEYS[action.targetIndex]
+}
+
+export function getOperationShareUsedActionColorKeys(
+  model: OperationShareModel,
+  config: OperationShareCardConfig,
+) {
+  const usedColors = new Set<OperationShareCellColorKey>()
+
+  model.rounds.forEach((round) => {
+    model.actionSlots.forEach((slot) => {
+      ;(round.slots[slot] ?? []).forEach((action) => {
+        const colorKey = getOperationShareActionColorKey(
+          action,
+          config.actionColors,
+          round.round,
+        )
+        if (colorKey) usedColors.add(colorKey)
+      })
+    })
+  })
+
+  return OPERATION_SHARE_ACTION_COLOR_ORDER.filter((colorKey) =>
+    usedColors.has(colorKey),
   )
 }
 
@@ -582,6 +638,18 @@ export function OperationShareCard({
   const notesColumnWidthClassName = showOtherActionsColumn
     ? 'w-[212px]'
     : 'w-[302px]'
+  const actionColorLegendItems = getOperationShareUsedActionColorKeys(
+    model,
+    config,
+  )
+    .map((colorKey) => ({
+      colorKey,
+      note: getOperationShareActionColorNote(colorKey, config.actionColorNotes),
+    }))
+    .filter(
+      (item): item is { colorKey: OperationShareCellColorKey; note: string } =>
+        Boolean(item.note),
+    )
 
   return (
     <ShareCardFrame
@@ -806,6 +874,29 @@ export function OperationShareCard({
             )}
           </tbody>
         </table>
+        {actionColorLegendItems.length > 0 ? (
+          <div
+            className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] leading-4"
+            style={{ color: palette.muted }}
+          >
+            {actionColorLegendItems.map(({ colorKey, note }) => (
+              <span
+                key={colorKey}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap"
+              >
+                <span
+                  aria-hidden="true"
+                  className="inline-block h-4 w-4 shrink-0 rounded-[3px]"
+                  style={{
+                    backgroundColor: getOperationShareActionFillColor(colorKey),
+                    border: `1px solid ${getOperationShareActionTextColor(colorKey)}`,
+                  }}
+                />
+                <span>{note}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       {model.groups.length > 0 ? (
