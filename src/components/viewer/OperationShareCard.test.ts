@@ -357,14 +357,19 @@ describe('operation share card styles', () => {
     ).toBe('1A')
   })
 
-  it('does not count other actions in operator action numbering', () => {
+  it('counts visible target switches in operation numbering', () => {
     const firstAttack = { raw: '1普', order: 2, label: 'A' }
     const secondAttack = { raw: '2普', order: 4, label: 'A' }
+    const targetSwitch = {
+      raw: '额外:右侧目标',
+      order: 1,
+      label: '左滑',
+    }
     const round = {
       round: 1,
       slots: { 1: [firstAttack], 2: [secondAttack] },
       others: [
-        { raw: '额外:右侧目标', order: 1, label: '左滑' },
+        targetSwitch,
         { raw: '重开:检测1号位阵亡', order: 3, label: '检测1号位阵亡' },
       ],
     }
@@ -374,22 +379,91 @@ describe('operation share card styles', () => {
       showTargetSwitches: true,
     })
 
-    expect(display.otherActions).toEqual([
-      { raw: '额外:右侧目标', order: 1, label: '左滑' },
-      { raw: '重开:检测1号位阵亡', order: 3, label: '检测1号位阵亡' },
-    ])
+    expect(display.otherActions).toEqual([targetSwitch])
+    expect(
+      getOperationShareActionLabel(
+        targetSwitch,
+        display.displayOrderByActionOrder.get(targetSwitch.order),
+      ),
+    ).toBe('1左滑')
     expect(
       getOperationShareActionLabel(
         firstAttack,
         display.displayOrderByActionOrder.get(firstAttack.order),
       ),
-    ).toBe('1A')
+    ).toBe('2A')
     expect(
       getOperationShareActionLabel(
         secondAttack,
         display.displayOrderByActionOrder.get(secondAttack.order),
       ),
-    ).toBe('2A')
+    ).toBe('3A')
+  })
+
+  it('keeps target switches out of notes while using their action numbering', () => {
+    const attack = { raw: '1普', order: 2, label: 'A' }
+    const targetSwitch = {
+      raw: '额外:右侧目标',
+      order: 1,
+      label: '左滑',
+    }
+    const round = {
+      round: 1,
+      slots: { 1: [attack] },
+      others: [
+        targetSwitch,
+        { raw: '重开:检测1号位阵亡', order: 3, label: '检测1号位阵亡' },
+      ],
+    }
+
+    const config = createOperationShareCardConfig()
+    config.showTargetSwitches = true
+
+    expect(getOperationShareRoundNoteText(round, config)).toBe(
+      '2A后1号位阵亡就重开',
+    )
+  })
+
+  it('renders target switches in a separate other-actions column', () => {
+    const config = createOperationShareCardConfig()
+    config.showNotes = true
+    config.showTargetSwitches = true
+    const cardModel: OperationShareModel = {
+      ...model,
+      actionSlots: [1],
+      rounds: [
+        {
+          round: 1,
+          slots: { 1: [{ raw: '1普', order: 2, label: 'A' }] },
+          others: [{ raw: '额外:右侧目标', order: 1, label: '左滑' }],
+        },
+      ],
+    }
+
+    const markup = renderToStaticMarkup(
+      createElement(OperationShareCard, {
+        config,
+        model: cardModel,
+        qrDataUrl: 'data:image/png;base64,qr-code',
+      }),
+    )
+
+    expect(markup).toContain('其他动作')
+    expect(markup).toContain('备注')
+    expect(markup).toContain('1左滑')
+    expect(markup).toContain('2A')
+
+    const hiddenSwitchMarkup = renderToStaticMarkup(
+      createElement(OperationShareCard, {
+        config: { ...config, showTargetSwitches: false },
+        model: cardModel,
+        qrDataUrl: 'data:image/png;base64,qr-code',
+      }),
+    )
+
+    expect(hiddenSwitchMarkup).not.toContain('其他动作')
+    expect(hiddenSwitchMarkup).not.toContain('1左滑')
+    expect(hiddenSwitchMarkup).toContain('1A')
   })
 
   it('uses contextual operation labels in editable round notes', () => {

@@ -16,6 +16,7 @@ import {
   buildOperationShareCellKey,
   createOperationShareCardConfig,
   getOperationShareOtherActions,
+  isOperationShareTargetSwitchAction,
 } from './operationShareModel'
 import {
   DEFAULT_OPERATION_SHARE_TABLE_THEME,
@@ -200,6 +201,18 @@ function getOperationShareOperatorActions(round: OperationShareRound) {
   return operatorActions.sort((left, right) => left.order - right.order)
 }
 
+function getOperationShareCountedActions(round: OperationShareRound) {
+  const countedActions = getOperationShareOperatorActions(round)
+
+  round.others.forEach((action) => {
+    if (isOperationShareTargetSwitchAction(action.raw)) {
+      countedActions.push(action)
+    }
+  })
+
+  return countedActions.sort((left, right) => left.order - right.order)
+}
+
 function getOperationShareNoteActionDescription(action: OperationShareAction) {
   const starColor = action.raw.match(/^重开:无(.+)星$/)?.[1]
   if (starColor) return `无${starColor}星重开`
@@ -219,20 +232,23 @@ export function getOperationShareNoteActionLabel(
   displayOrderByActionOrder: ReadonlyMap<number, number>,
 ) {
   const description = getOperationShareNoteActionDescription(action)
-  const operatorActions = getOperationShareOperatorActions(round)
-  const precedingOperator = [...operatorActions]
+  const precedingAction = [...getOperationShareCountedActions(round)]
     .reverse()
-    .find((operatorAction) => operatorAction.order <= action.order)
+    .find(
+      (countedAction) =>
+        countedAction.order <= action.order &&
+        displayOrderByActionOrder.has(countedAction.order),
+    )
 
-  if (!precedingOperator) return description
+  if (!precedingAction) return description
 
   const precedingDisplayOrder = displayOrderByActionOrder.get(
-    precedingOperator.order,
+    precedingAction.order,
   )
   if (precedingDisplayOrder === undefined) return description
 
   return `${getOperationShareActionLabel(
-    precedingOperator,
+    precedingAction,
     precedingDisplayOrder,
   )}后${description}`
 }
@@ -244,13 +260,18 @@ export function getOperationShareRoundDisplay(
     'showOtherActions' | 'showTargetSwitches' | 'hiddenOtherActionKeys'
   >,
 ) {
-  const otherActions = getOperationShareOtherActions(round, config)
-  const operatorActions = getOperationShareOperatorActions(round)
+  const otherActions = getOperationShareOtherActions(round, config).filter(
+    (action) => isOperationShareTargetSwitchAction(action.raw),
+  )
+  const countedActions = [
+    ...getOperationShareOperatorActions(round),
+    ...otherActions,
+  ].sort((left, right) => left.order - right.order)
 
   return {
     otherActions,
     displayOrderByActionOrder: new Map(
-      operatorActions.map((action, index) => [action.order, index + 1]),
+      countedActions.map((action, index) => [action.order, index + 1]),
     ),
   }
 }
@@ -269,9 +290,18 @@ export function getOperationShareRoundNoteText(
   const override = config.roundNoteOverrides?.[round.round]
   if (override !== undefined) return override
 
-  const { otherActions, displayOrderByActionOrder } =
-    getOperationShareRoundDisplay(round, config)
-  const otherActionText = otherActions
+  const { displayOrderByActionOrder } = getOperationShareRoundDisplay(
+    round,
+    config,
+  )
+  const noteActionText = round.others
+    .filter(
+      (action) =>
+        !isOperationShareTargetSwitchAction(action.raw) &&
+        !config.hiddenOtherActionKeys?.[
+          buildOperationShareActionKey(round.round, action.order)
+        ],
+    )
     .map((action) =>
       getOperationShareNoteActionLabel(
         round,
@@ -281,7 +311,7 @@ export function getOperationShareRoundNoteText(
     )
     .join(' ')
 
-  return [otherActionText, config.notes[round.round]]
+  return [noteActionText, config.notes[round.round]]
     .filter((text): text is string => Boolean(text))
     .join('\n')
 }
@@ -409,7 +439,7 @@ function ActionList({
 }) {
   const textClassName =
     variant === 'other'
-      ? 'text-[18px] font-normal leading-[1.25]'
+      ? 'grid grid-cols-2 gap-x-1 gap-y-0.5 text-[14px] font-normal leading-[1.25]'
       : 'text-[22px] font-bold leading-[1.25]'
   const alignClassName = variant === 'other' ? 'text-left' : 'text-center'
 
@@ -418,7 +448,7 @@ function ActionList({
       <span
         className={
           variant === 'other'
-            ? 'text-[18px] font-normal opacity-70'
+            ? 'text-[14px] font-normal opacity-70'
             : 'text-lg opacity-70'
         }
       >
@@ -434,18 +464,24 @@ function ActionList({
           variant === 'other'
             ? undefined
             : getOperationShareActionColor(action, actionColors, round)
+        const actionStyle =
+          variant === 'other'
+            ? { whiteSpace: 'nowrap' as const }
+            : actionColor
+              ? { color: actionColor }
+              : undefined
 
         return (
           <span
             key={`${action.order}-${index}`}
-            className={variant === 'other' ? 'mr-1 last:mr-0' : undefined}
-            style={actionColor ? { color: actionColor } : undefined}
+            className={variant === 'other' ? 'whitespace-nowrap' : undefined}
+            style={actionStyle}
           >
             {getOperationShareActionLabel(
               action,
               displayOrderByActionOrder.get(action.order),
             )}
-            <wbr />
+            {variant === 'other' ? null : <wbr />}
           </span>
         )
       })}
@@ -472,6 +508,8 @@ export function OperationShareCard({
     config.tableColor,
     config.tableThemeOverrides,
   )
+  const showOtherActionsColumn =
+    config.showOtherActions && config.showTargetSwitches
   const showNotesColumn = config.showNotes || config.showOtherActions
 
   return (
@@ -518,6 +556,15 @@ export function OperationShareCard({
                   />
                 </td>
               ))}
+              {showOtherActionsColumn ? (
+                <td
+                  className="w-[118px] border-2 p-0"
+                  style={{
+                    borderColor: tableTheme.border,
+                    background: tableTheme.headerBackground,
+                  }}
+                />
+              ) : null}
               {showNotesColumn ? (
                 <td
                   className="w-[168px] border-2 p-0"
@@ -555,6 +602,15 @@ export function OperationShareCard({
                   />
                 </th>
               ))}
+              {showOtherActionsColumn ? (
+                <th
+                  className="border-2 px-3 py-3 text-lg font-bold"
+                  scope="col"
+                  style={{ borderColor: tableTheme.border }}
+                >
+                  其他动作
+                </th>
+              ) : null}
               {showNotesColumn ? (
                 <th
                   className="border-2 px-3 py-3 text-lg font-bold"
@@ -569,7 +625,7 @@ export function OperationShareCard({
           <tbody>
             {model.rounds.length > 0 ? (
               model.rounds.map((round) => {
-                const { displayOrderByActionOrder } =
+                const { otherActions, displayOrderByActionOrder } =
                   getOperationShareRoundDisplay(round, config)
                 const noteText = getOperationShareRoundNoteText(round, config)
                 const rowBackground = getOperationShareRoundBackground(
@@ -618,6 +674,23 @@ export function OperationShareCard({
                         />
                       </td>
                     ))}
+                    {showOtherActionsColumn ? (
+                      <td
+                        className="border-2 px-1.5 py-2 align-middle"
+                        style={{
+                          borderColor: tableTheme.border,
+                          background: rowBackground,
+                        }}
+                      >
+                        <ActionList
+                          actionColors={config.actionColors}
+                          actions={otherActions}
+                          displayOrderByActionOrder={displayOrderByActionOrder}
+                          round={round.round}
+                          variant="other"
+                        />
+                      </td>
+                    ) : null}
                     {showNotesColumn ? (
                       <td
                         className="border-2 px-3 py-3 align-middle"
@@ -644,6 +717,7 @@ export function OperationShareCard({
                   colSpan={
                     model.actionSlots.length +
                     1 +
+                    (showOtherActionsColumn ? 1 : 0) +
                     (showNotesColumn ? 1 : 0)
                   }
                   style={{

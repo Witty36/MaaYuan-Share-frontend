@@ -55,6 +55,7 @@ import {
   createOperationShareCardConfig,
   getOperationShareCellSelectionState,
   getOperationShareOtherActions,
+  isOperationShareTargetSwitchAction,
   getOperationShareRemoteConfigByKind,
   mergeOperationShareRemoteConfigs,
   readOperationShareCardConfig,
@@ -830,7 +831,7 @@ export default function OperationShareDialog({
               <div className="flex flex-wrap gap-x-5 gap-y-2">
                 <Checkbox
                   checked={cardConfig.showNotes || cardConfig.showOtherActions}
-                  label="显示备注列（含其他动作）"
+                  label="显示其他动作与备注列"
                   onChange={(event) =>
                     updateNotesColumnVisibility(event.currentTarget.checked)
                   }
@@ -999,7 +1000,7 @@ export default function OperationShareDialog({
             model.rounds.length > 0 ? (
               <div className="mt-4 border-t border-slate-200 pt-4">
                 <h4 className="text-sm font-semibold text-slate-700">
-                  回合备注（含其他动作，可直接编辑）
+                  回合备注（可直接编辑）
                 </h4>
                 <div className="mt-2 grid gap-2 md:grid-cols-2">
                   {model.rounds.map((round) => {
@@ -1012,7 +1013,10 @@ export default function OperationShareDialog({
                     const noteActions = getOperationShareOtherActions(round, {
                       ...cardConfig,
                       hiddenOtherActionKeys: {},
-                    })
+                    }).filter(
+                      (action) =>
+                        !isOperationShareTargetSwitchAction(action.raw),
+                    )
                     const hasNoteOverride = Object.prototype.hasOwnProperty.call(
                       cardConfig.roundNoteOverrides ?? {},
                       round.round,
@@ -1042,7 +1046,8 @@ export default function OperationShareDialog({
                             placeholder="可直接修改本回合备注"
                             value={note}
                           />
-                          {cardConfig.showOtherActions &&
+                          {(cardConfig.showNotes ||
+                            cardConfig.showOtherActions) &&
                           noteActions.length > 0 ? (
                             <div className="mt-1.5 flex flex-wrap items-center gap-1">
                               <span className="mr-0.5 text-[11px] text-slate-400">

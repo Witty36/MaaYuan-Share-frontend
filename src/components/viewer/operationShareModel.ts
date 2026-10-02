@@ -214,7 +214,7 @@ export interface OperationShareRemoteConfig {
 
 export function createOperationShareCardConfig(): OperationShareCardConfig {
   return {
-    showTargetSwitches: true,
+    showTargetSwitches: false,
     showOtherActions: true,
     showNotes: false,
     showCellPattern: true,
@@ -643,13 +643,13 @@ export function updateOperationShareCellSelection(
   return next
 }
 
-function isTargetSwitchAction(raw: string) {
+export function isOperationShareTargetSwitchAction(raw: string) {
   return raw === '额外:左侧目标' || raw === '额外:右侧目标'
 }
 
 function belongsToOtherShareColumn(raw: string) {
   return (
-    isTargetSwitchAction(raw) ||
+    isOperationShareTargetSwitchAction(raw) ||
     /^重开:检测[1-5]号位(阵亡|退场|鹦鹉|龙气)$/.test(raw) ||
     raw === '重开:无蓝星' ||
     raw === '重开:无紫星'
@@ -662,7 +662,9 @@ export function filterOperationShareActions(
 ) {
   return showTargetSwitches
     ? actions
-    : actions.filter((action) => !isTargetSwitchAction(action.raw))
+    : actions.filter(
+        (action) => !isOperationShareTargetSwitchAction(action.raw),
+      )
 }
 
 export function getOperationShareOtherActions(

@@ -20,6 +20,7 @@ import {
   filterOperationShareActions,
   getOperationShareCellSelectionState,
   getRenderableOperationShareConfigs,
+  isOperationShareTargetSwitchAction,
   loadOperationShareCardConfig,
   mergeOperationShareRemoteConfigs,
   readOperationShareShortCode,
@@ -430,7 +431,7 @@ describe('share image utilities', () => {
     first.notes[1] = '第一回合备注'
 
     expect(first).toMatchObject({
-      showTargetSwitches: true,
+      showTargetSwitches: false,
       showOtherActions: true,
       showNotes: false,
     })
@@ -448,6 +449,9 @@ describe('share image utilities', () => {
       { raw: '额外:开大', order: 2, label: '大' },
     ])
     expect(filterOperationShareActions(actions, true)).toBe(actions)
+    expect(isOperationShareTargetSwitchAction('额外:左侧目标')).toBe(true)
+    expect(isOperationShareTargetSwitchAction('额外:右侧目标')).toBe(true)
+    expect(isOperationShareTargetSwitchAction('额外:开大')).toBe(false)
   })
 
   it('builds stable deployed operator disc keys', () => {
@@ -572,7 +576,7 @@ describe('share image utilities', () => {
     config.requiredDiscs['1:3'] = true
 
     expect(buildOperationShareCardConfigPayload('actions', config)).toEqual({
-      showTargetSwitches: true,
+      showTargetSwitches: false,
       showOtherActions: true,
       showNotes: true,
       showCellPattern: true,
@@ -606,7 +610,7 @@ describe('share image utilities', () => {
         },
       ]),
     ).toEqual({
-      showTargetSwitches: true,
+      showTargetSwitches: false,
       showOtherActions: true,
       showNotes: true,
       showCellPattern: true,
@@ -638,7 +642,7 @@ describe('share image utilities', () => {
     local.showOtherActions = false
 
     expect(resolveOperationShareCardConfig(local, author)).toEqual({
-      showTargetSwitches: true,
+      showTargetSwitches: false,
       showOtherActions: false,
       showNotes: false,
       showCellPattern: true,
