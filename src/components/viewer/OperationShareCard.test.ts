@@ -9,6 +9,7 @@ import {
   getOperationShareCellVisualStyle,
   getOperationShareOperatorStarLabel,
   getOperationShareRoundDisplay,
+  getOperationShareRoundNoteText,
 } from './OperationShareCard'
 import {
   OPERATION_SHARE_CELL_COLOR_KEYS,
@@ -353,6 +354,81 @@ describe('operation share card styles', () => {
         display.displayOrderByActionOrder.get(attack.order),
       ),
     ).toBe('1A')
+  })
+
+  it('does not count other actions in operator action numbering', () => {
+    const firstAttack = { raw: '1普', order: 2, label: 'A' }
+    const secondAttack = { raw: '2普', order: 4, label: 'A' }
+    const round = {
+      round: 1,
+      slots: { 1: [firstAttack], 2: [secondAttack] },
+      others: [
+        { raw: '额外:右侧目标', order: 1, label: '左滑' },
+        { raw: '重开:检测1号位阵亡', order: 3, label: '检测1号位阵亡' },
+      ],
+    }
+
+    const display = getOperationShareRoundDisplay(round, {
+      showOtherActions: true,
+      showTargetSwitches: true,
+    })
+
+    expect(display.otherActions).toEqual([
+      { raw: '额外:右侧目标', order: 1, label: '左滑' },
+      { raw: '重开:检测1号位阵亡', order: 3, label: '检测1号位阵亡' },
+    ])
+    expect(
+      getOperationShareActionLabel(
+        firstAttack,
+        display.displayOrderByActionOrder.get(firstAttack.order),
+      ),
+    ).toBe('1A')
+    expect(
+      getOperationShareActionLabel(
+        secondAttack,
+        display.displayOrderByActionOrder.get(secondAttack.order),
+      ),
+    ).toBe('2A')
+  })
+
+  it('uses contextual operation labels in editable round notes', () => {
+    const operatorActions = ['1普', '1普', '1普', '1普', '1普'].map(
+      (raw, index) => ({
+        raw,
+        order: index + 2,
+        label: 'A',
+      }),
+    )
+    const dragonDetection = {
+      raw: '重开:检测1号位龙气',
+      order: 24,
+      label: '检测1号位龙气',
+    }
+    const round = {
+      round: 1,
+      slots: { 1: operatorActions },
+      others: [
+        { raw: '重开:无橙星', order: 1, label: '无橙星' },
+        dragonDetection,
+      ],
+    }
+    const config = createOperationShareCardConfig()
+    config.notes[1] = '手动备注'
+
+    expect(getOperationShareRoundNoteText(round, config)).toBe(
+      '无橙星重开 5A后检测1号位龙气\n手动备注',
+    )
+    expect(getOperationShareActionLabel(dragonDetection)).toBe(
+      '24检测1号位龙气',
+    )
+
+    config.roundNoteOverrides = {
+      1: '21在某操作后，检测周泰退场',
+    }
+
+    expect(getOperationShareRoundNoteText(round, config)).toBe(
+      '21在某操作后，检测周泰退场',
+    )
   })
 
   it('renumbers actions when an earlier waiting action is absent', () => {

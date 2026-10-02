@@ -28,6 +28,7 @@ import {
   getOperationShareActionTextColor,
   getOperationShareCellVisualStyle,
   getOperationShareRoundDisplay,
+  getOperationShareRoundNoteText,
 } from './OperationShareCard'
 import {
   createOperationShareQrDataUrl,
@@ -42,6 +43,7 @@ import {
   type OperationShareCardKind,
   type OperationShareCellColorKey,
   type OperationShareCellColumn,
+  type OperationShareRound,
   buildOperationShareActionKey,
   buildOperationShareCardConfigPayload,
   buildOperationShareCellKey,
@@ -51,6 +53,7 @@ import {
   buildOperationShareUrl,
   createOperationShareCardConfig,
   getOperationShareCellSelectionState,
+  getOperationShareOtherActions,
   getOperationShareRemoteConfigByKind,
   mergeOperationShareRemoteConfigs,
   readOperationShareCardConfig,
@@ -72,6 +75,23 @@ import {
 
 type GenerationStatus = 'idle' | 'generating' | 'ready' | 'error'
 type ColorMode = 'action' | 'cell'
+
+function appendOperationShareNoteText(note: string, text: string) {
+  const trimmed = note.trim()
+  if (!trimmed) return text
+  if (trimmed.includes(text)) return trimmed
+  return `${trimmed}\n${text}`
+}
+
+function removeOperationShareNoteText(note: string, text: string) {
+  return note
+    .split(text)
+    .join('')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n')
+}
 
 export default function OperationShareDialog({
   operation,
@@ -278,13 +298,21 @@ export default function OperationShareDialog({
   const updateOption = (
     option:
       | 'showTargetSwitches'
-      | 'showOtherActions'
       | 'showNotes'
       | 'showCellPattern',
     checked: boolean,
   ) => {
     invalidatePreview()
     updateCardConfig((current) => ({ ...current, [option]: checked }))
+  }
+
+  const updateNotesColumnVisibility = (checked: boolean) => {
+    invalidatePreview()
+    updateCardConfig((current) => ({
+      ...current,
+      showNotes: checked,
+      showOtherActions: checked,
+    }))
   }
 
   const updateTableColor = (color?: string) => {
@@ -345,8 +373,56 @@ export default function OperationShareDialog({
     invalidatePreview()
     updateCardConfig((current) => ({
       ...current,
-      notes: { ...current.notes, [round]: note },
+      roundNoteOverrides: {
+        ...current.roundNoteOverrides,
+        [round]: note,
+      },
     }))
+  }
+
+  const toggleOtherActionInNote = (
+    round: OperationShareRound,
+    label: string,
+  ) => {
+    invalidatePreview()
+    updateCardConfig((current) => {
+      const note = getOperationShareRoundNoteText(round, current)
+      const included = note.includes(label)
+      return {
+        ...current,
+        roundNoteOverrides: {
+          ...current.roundNoteOverrides,
+          [round.round]: included
+            ? removeOperationShareNoteText(note, label)
+            : appendOperationShareNoteText(note, label),
+        },
+      }
+    })
+  }
+
+  const restoreRoundNote = (round: number) => {
+    invalidatePreview()
+    updateCardConfig((current) => {
+      const roundNoteOverrides = { ...current.roundNoteOverrides }
+      delete roundNoteOverrides[round]
+
+      const hiddenOtherActionKeys = { ...current.hiddenOtherActionKeys }
+      Object.keys(hiddenOtherActionKeys).forEach((key) => {
+        if (key.startsWith(`${round}:`)) delete hiddenOtherActionKeys[key]
+      })
+
+      return {
+        ...current,
+        roundNoteOverrides:
+          Object.keys(roundNoteOverrides).length > 0
+            ? roundNoteOverrides
+            : undefined,
+        hiddenOtherActionKeys:
+          Object.keys(hiddenOtherActionKeys).length > 0
+            ? hiddenOtherActionKeys
+            : undefined,
+      }
+    })
   }
 
   const toggleActionSelection = (key: string, checked: boolean) => {
@@ -752,31 +828,23 @@ export default function OperationShareDialog({
               </div>
               <div className="flex flex-wrap gap-x-5 gap-y-2">
                 <Checkbox
-                  checked={cardConfig.showOtherActions}
-                  label="显示其他动作列"
+                  checked={cardConfig.showNotes || cardConfig.showOtherActions}
+                  label="显示备注列（含其他动作）"
                   onChange={(event) =>
-                    updateOption(
-                      'showOtherActions',
-                      event.currentTarget.checked,
-                    )
+                    updateNotesColumnVisibility(event.currentTarget.checked)
                   }
                 />
                 <Checkbox
                   checked={cardConfig.showTargetSwitches}
-                  disabled={!cardConfig.showOtherActions}
+                  disabled={
+                    !(cardConfig.showNotes || cardConfig.showOtherActions)
+                  }
                   label="显示左滑 / 右滑"
                   onChange={(event) =>
                     updateOption(
                       'showTargetSwitches',
                       event.currentTarget.checked,
                     )
-                  }
-                />
-                <Checkbox
-                  checked={cardConfig.showNotes}
-                  label="增加备注列"
-                  onChange={(event) =>
-                    updateOption('showNotes', event.currentTarget.checked)
                   }
                 />
               </div>
@@ -926,34 +994,118 @@ export default function OperationShareDialog({
               </div>
             ) : null}
 
-            {cardConfig.showNotes && model.rounds.length > 0 ? (
+            {(cardConfig.showNotes || cardConfig.showOtherActions) &&
+            model.rounds.length > 0 ? (
               <div className="mt-4 border-t border-slate-200 pt-4">
                 <h4 className="text-sm font-semibold text-slate-700">
-                  回合备注
+                  回合备注（含其他动作，可直接编辑）
                 </h4>
                 <div className="mt-2 grid gap-2 md:grid-cols-2">
-                  {model.rounds.map((round) => (
-                    <label
-                      key={round.round}
-                      className="flex items-start gap-2 text-sm text-slate-600"
-                    >
-                      <span className="w-16 shrink-0 pt-2 font-medium">
-                        {round.round} 回合
-                      </span>
-                      <textarea
-                        className="min-h-16 flex-1 resize-y rounded border border-slate-300 px-2.5 py-2 text-slate-800 outline-none focus:border-sky-500"
-                        maxLength={160}
-                        onChange={(event) =>
-                          updateRoundNote(
-                            round.round,
-                            event.currentTarget.value,
-                          )
-                        }
-                        placeholder="输入本回合备注（可选）"
-                        value={cardConfig.notes[round.round] ?? ''}
-                      />
-                    </label>
-                  ))}
+                  {model.rounds.map((round) => {
+                    const { displayOrderByActionOrder } =
+                      getOperationShareRoundDisplay(round, cardConfig)
+                    const note = getOperationShareRoundNoteText(
+                      round,
+                      cardConfig,
+                    )
+                    const noteActions = getOperationShareOtherActions(round, {
+                      ...cardConfig,
+                      hiddenOtherActionKeys: {},
+                    })
+                    const hasNoteOverride = Object.prototype.hasOwnProperty.call(
+                      cardConfig.roundNoteOverrides ?? {},
+                      round.round,
+                    )
+                    const hasHiddenOtherActions = Object.keys(
+                      cardConfig.hiddenOtherActionKeys ?? {},
+                    ).some((key) => key.startsWith(`${round.round}:`))
+
+                    return (
+                      <div
+                        key={round.round}
+                        className="flex items-start gap-2 text-sm text-slate-600"
+                      >
+                        <span className="w-16 shrink-0 pt-2 font-medium">
+                          {round.round} 回合
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <textarea
+                            className="min-h-16 w-full resize-y rounded border border-slate-300 px-2.5 py-2 text-slate-800 outline-none focus:border-sky-500"
+                            maxLength={500}
+                            onChange={(event) =>
+                              updateRoundNote(
+                                round.round,
+                                event.currentTarget.value,
+                              )
+                            }
+                            placeholder="可直接修改本回合备注"
+                            value={note}
+                          />
+                          {cardConfig.showOtherActions &&
+                          noteActions.length > 0 ? (
+                            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                              <span className="mr-0.5 text-[11px] text-slate-400">
+                                快捷填入
+                              </span>
+                              {noteActions.map((action) => {
+                                const label =
+                                  getOperationShareActionLabel(
+                                    action,
+                                    displayOrderByActionOrder.get(action.order),
+                                  )
+                                const included = note.includes(label)
+
+                                return (
+                                  <Button
+                                    key={`${action.order}-${action.raw}`}
+                                    aria-label={
+                                      included
+                                        ? `从备注移除${label}`
+                                        : `填入备注${label}`
+                                    }
+                                    className={`!h-6 !min-h-0 !px-1.5 !py-0 !text-xs !font-normal ${
+                                      included
+                                        ? '!bg-slate-100 !text-slate-700'
+                                        : '!text-slate-400'
+                                    }`}
+                                    icon={included ? 'cross' : 'plus'}
+                                    minimal
+                                    onClick={() =>
+                                      toggleOtherActionInNote(round, label)
+                                    }
+                                    small
+                                  >
+                                    {label}
+                                  </Button>
+                                )
+                              })}
+                              {hasNoteOverride || hasHiddenOtherActions ? (
+                                <Button
+                                  className="!h-6 !min-h-0 !px-1.5 !py-0 !text-xs !font-normal"
+                                  icon="reset"
+                                  minimal
+                                  onClick={() => restoreRoundNote(round.round)}
+                                  small
+                                >
+                                  恢复自动内容
+                                </Button>
+                              ) : null}
+                            </div>
+                          ) : hasNoteOverride || hasHiddenOtherActions ? (
+                            <Button
+                              className="!mt-1 !h-6 !min-h-0 !px-1.5 !py-0 !text-xs !font-normal"
+                              icon="reset"
+                              minimal
+                              onClick={() => restoreRoundNote(round.round)}
+                              small
+                            >
+                              恢复自动内容
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
             ) : null}

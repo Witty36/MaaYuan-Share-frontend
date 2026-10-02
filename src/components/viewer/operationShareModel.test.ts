@@ -550,6 +550,8 @@ describe('share image utilities', () => {
       pageBackground: '#fefefd',
     }
     config.notes[2] = '第二回合先等待'
+    config.roundNoteOverrides = { 2: '2在某操作后检测周泰退场' }
+    config.hiddenOtherActionKeys = { '2:1': true }
     config.cellColors['2:slot-3'] = 'blue'
     config.requiredDiscs['2:1'] = true
 
@@ -564,6 +566,8 @@ describe('share image utilities', () => {
     const config = createOperationShareCardConfig()
     config.showNotes = true
     config.notes[2] = '等待技能结束'
+    config.roundNoteOverrides = { 2: '2在某操作后检测周泰退场' }
+    config.hiddenOtherActionKeys = { '2:1': true }
     config.cellColors['2:slot-1'] = 'pink'
     config.requiredDiscs['1:3'] = true
 
@@ -575,6 +579,9 @@ describe('share image utilities', () => {
       tableColor: undefined,
       tableThemeOverrides: undefined,
       notes: { 2: '等待技能结束' },
+      roundNoteOverrides: { 2: '2在某操作后检测周泰退场' },
+      hiddenOtherActionKeys: { '2:1': true },
+      actionColors: {},
       cellColors: { '2:slot-1': 'pink' },
     })
     expect(buildOperationShareCardConfigPayload('operators', config)).toEqual({
@@ -606,6 +613,7 @@ describe('share image utilities', () => {
       tableColor: undefined,
       tableThemeOverrides: undefined,
       notes: { 1: '作者备注' },
+      actionColors: {},
       cellColors: {},
       requiredDiscs: { '2:1': true },
     })
@@ -637,6 +645,7 @@ describe('share image utilities', () => {
       tableColor: undefined,
       tableThemeOverrides: undefined,
       notes: {},
+      actionColors: {},
       cellColors: {},
       requiredDiscs: { '1:1': true },
     })
@@ -686,6 +695,7 @@ describe('share image utilities', () => {
       tableColor: '#336699',
       tableThemeOverrides: undefined,
       notes: { 1: 'x'.repeat(160) },
+      actionColors: {},
       cellColors: {
         '3:slot-1': 'green',
         '4:slot-2': 'blue',

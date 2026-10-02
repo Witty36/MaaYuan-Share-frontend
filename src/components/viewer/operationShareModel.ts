@@ -70,6 +70,8 @@ export interface OperationShareCardConfig {
   tableColor?: string
   tableThemeOverrides?: OperationShareTableThemeOverrides
   notes: Record<number, string>
+  roundNoteOverrides?: Record<number, string>
+  hiddenOtherActionKeys?: Record<string, boolean>
   actionColors: Record<string, string>
   cellColors: Record<string, string>
   requiredDiscs: Record<string, boolean>
@@ -251,6 +253,24 @@ export function normalizeOperationShareCardConfig(
     })
   }
 
+  const roundNoteOverrides: Record<number, string> = {}
+  if (isRecord(value.roundNoteOverrides)) {
+    Object.entries(value.roundNoteOverrides).forEach(([round, note]) => {
+      if (/^\d+$/.test(round) && typeof note === 'string') {
+        roundNoteOverrides[Number(round)] = note.slice(0, 500)
+      }
+    })
+  }
+
+  const hiddenOtherActionKeys: Record<string, boolean> = {}
+  if (isRecord(value.hiddenOtherActionKeys)) {
+    Object.entries(value.hiddenOtherActionKeys).forEach(([key, hidden]) => {
+      if (SHARE_ACTION_KEY_PATTERN.test(key) && hidden === true) {
+        hiddenOtherActionKeys[key] = true
+      }
+    })
+  }
+
   const actionColors: Record<string, string> = {}
   if (isRecord(value.actionColors)) {
     Object.entries(value.actionColors).forEach(([key, style]) => {
@@ -308,6 +328,12 @@ export function normalizeOperationShareCardConfig(
     tableColor,
     tableThemeOverrides,
     notes,
+    ...(Object.keys(roundNoteOverrides).length > 0
+      ? { roundNoteOverrides }
+      : {}),
+    ...(Object.keys(hiddenOtherActionKeys).length > 0
+      ? { hiddenOtherActionKeys }
+      : {}),
     actionColors,
     cellColors,
     requiredDiscs,
@@ -331,6 +357,14 @@ export function buildOperationShareCardConfigPayload(
     tableColor: normalized.tableColor,
     tableThemeOverrides: normalized.tableThemeOverrides,
     notes: normalized.notes,
+    ...(normalized.roundNoteOverrides &&
+    Object.keys(normalized.roundNoteOverrides).length > 0
+      ? { roundNoteOverrides: normalized.roundNoteOverrides }
+      : {}),
+    ...(normalized.hiddenOtherActionKeys &&
+    Object.keys(normalized.hiddenOtherActionKeys).length > 0
+      ? { hiddenOtherActionKeys: normalized.hiddenOtherActionKeys }
+      : {}),
     actionColors: normalized.actionColors,
     cellColors: normalized.cellColors,
   }
@@ -412,6 +446,8 @@ export function resolveOperationShareCardConfig(
     local.tableColor !== undefined ||
     local.tableThemeOverrides !== undefined ||
     Object.keys(local.notes).length > 0 ||
+    Object.keys(local.roundNoteOverrides ?? {}).length > 0 ||
+    Object.keys(local.hiddenOtherActionKeys ?? {}).length > 0 ||
     Object.keys(local.actionColors).length > 0 ||
     Object.keys(local.cellColors).length > 0
   const hasLocalOperatorOverrides = Object.keys(local.requiredDiscs).length > 0
@@ -446,6 +482,8 @@ export function replaceOperationShareCardConfigKind(
     tableColor: replacement.tableColor,
     tableThemeOverrides: replacement.tableThemeOverrides,
     notes: replacement.notes,
+    roundNoteOverrides: replacement.roundNoteOverrides,
+    hiddenOtherActionKeys: replacement.hiddenOtherActionKeys,
     actionColors: replacement.actionColors,
     cellColors: replacement.cellColors,
   }
@@ -625,6 +663,27 @@ export function filterOperationShareActions(
   return showTargetSwitches
     ? actions
     : actions.filter((action) => !isTargetSwitchAction(action.raw))
+}
+
+export function getOperationShareOtherActions(
+  round: OperationShareRound,
+  config: Pick<
+    OperationShareCardConfig,
+    'showOtherActions' | 'showTargetSwitches' | 'hiddenOtherActionKeys'
+  >,
+) {
+  if (!config.showOtherActions) return []
+
+  const hiddenOtherActionKeys = config.hiddenOtherActionKeys ?? {}
+  return filterOperationShareActions(
+    round.others,
+    config.showTargetSwitches,
+  ).filter(
+    (action) =>
+      !hiddenOtherActionKeys[
+        buildOperationShareActionKey(round.round, action.order)
+      ],
+  )
 }
 
 function isHiddenShareAction(raw: string) {
