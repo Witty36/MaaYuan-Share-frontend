@@ -28,6 +28,7 @@ import {
   roundActionsToEditorActions,
 } from "./roundMapping";
 import {
+  hydrateRoundActionsWithRecorderMeta,
   parseRecorderMeta,
   syncRecorderMetaFromRoundActions,
   type RecorderMetaPatch,
@@ -384,8 +385,15 @@ export const ActionEditor: FC<ActionEditorProps> = ({ className }) => {
     return result;
   }, [operation.opers]);
 
+  const recorderMeta = useMemo(
+    () => parseRecorderMeta(operationBase.recorderMeta),
+    [operationBase.recorderMeta],
+  );
   const [roundActions, setRoundActions] = useState<RoundActionsInput>(() =>
-    editorActionsToRoundActions(actions),
+    hydrateRoundActionsWithRecorderMeta(
+      editorActionsToRoundActions(actions),
+      recorderMeta,
+    ),
   );
   const roundKeys = useMemo(
     () => Object.keys(roundActions).sort((a, b) => Number(a) - Number(b)),
@@ -409,10 +417,6 @@ export const ActionEditor: FC<ActionEditorProps> = ({ className }) => {
     return initial;
   });
   const [viewMode, setViewMode] = useState<ActionViewMode>("round");
-  const recorderMeta = useMemo(
-    () => parseRecorderMeta(operationBase.recorderMeta),
-    [operationBase.recorderMeta],
-  );
 
   const sensors = useSensors(
     useSensor(MouseSensor, {
@@ -425,7 +429,10 @@ export const ActionEditor: FC<ActionEditorProps> = ({ className }) => {
 
   useEffect(() => {
     // 从 EditorAction 同步到回合视图时，先清洗与重算，确保回合序号始终为 1..N 连续编号
-    const original = editorActionsToRoundActions(actions);
+    const original = hydrateRoundActionsWithRecorderMeta(
+      editorActionsToRoundActions(actions),
+      recorderMeta,
+    );
     const normalized = normalizeRoundActions(original);
     const reindexed = reindexRoundActions(normalized);
 
@@ -458,7 +465,7 @@ export const ActionEditor: FC<ActionEditorProps> = ({ className }) => {
         };
       });
     }
-  }, [actions, edit, slotAssignments]);
+  }, [actions, edit, recorderMeta, slotAssignments]);
 
   useEffect(() => {
     setRoundForms((prev) => {

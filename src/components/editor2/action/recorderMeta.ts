@@ -5,6 +5,10 @@ import {
   isRecorderTargetSwitchToken,
   isRecorderAttackToken,
   parseRecorderTargetMetadata,
+  setRecorderTokenDeadTargetFallback,
+  setRecorderTokenDeadTargets,
+  setRecorderTokenSpawnedTargets,
+  setRecorderTokenTarget,
 } from './recordingUtils'
 import type { RoundActionsInput } from './roundMapping'
 
@@ -505,4 +509,126 @@ export function getRecorderMetaTargetColor(
   return targetIndex === undefined
     ? undefined
     : RECORDER_META_TARGET_COLORS[targetIndex]
+}
+
+export function hydrateRoundActionsWithRecorderMeta(
+  input: RoundActionsInput,
+  value?: unknown,
+): RoundActionsInput {
+  const meta = parseRecorderMeta(value)
+  if (Object.keys(meta.changes).length === 0) {
+    return input
+  }
+
+  let result = input
+
+  Object.entries(input)
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .forEach(([roundKey, entries]) => {
+      const round = Number(roundKey)
+      let attackNumber = 0
+
+      entries.forEach((entry, index) => {
+        const token = entry[0]?.trim() ?? ''
+        if (!isRecorderAttackToken(token)) {
+          return
+        }
+
+        attackNumber += 1
+        const change = meta.changes[roundKey]?.[String(attackNumber)]
+        if (!change) {
+          return
+        }
+
+        let currentEntry = result[roundKey]?.[index] ?? entry
+        const metadata = currentEntry.slice(1)
+        const existingTargetIndex = metadata
+          .map((value) => parseRecorderTargetMetadata(value))
+          .find((value) => value !== undefined)
+        const targetIndex =
+          change.target ??
+          getRecorderMetaTargetIndex(meta, round, attackNumber)
+
+        if (existingTargetIndex === undefined && targetIndex !== undefined) {
+          result = setRecorderTokenTarget(result, round, index, targetIndex)
+          currentEntry = result[roundKey]?.[index] ?? currentEntry
+        }
+
+        const currentMetadata = currentEntry.slice(1)
+        const existingDeadTargetIndices =
+          getRecorderDeadTargetIndices(currentMetadata)
+        const nextDeadTargetIndices = Array.from(
+          new Set([...existingDeadTargetIndices, ...(change.dead ?? [])]),
+        ).sort((a, b) => a - b)
+        if (
+          nextDeadTargetIndices.length !== existingDeadTargetIndices.length ||
+          nextDeadTargetIndices.some(
+            (targetIndex, index) =>
+              targetIndex !== existingDeadTargetIndices[index],
+          )
+        ) {
+          result = setRecorderTokenDeadTargets(
+            result,
+            round,
+            index,
+            nextDeadTargetIndices,
+          )
+          currentEntry = result[roundKey]?.[index] ?? currentEntry
+        }
+
+        const currentSpawnedTargetIndices = getRecorderSpawnedTargetIndices(
+          currentEntry.slice(1),
+        )
+        const nextSpawnedTargetIndices = Array.from(
+          new Set([
+            ...currentSpawnedTargetIndices,
+            ...(change.spawned ?? []),
+          ]),
+        ).sort((a, b) => a - b)
+        if (
+          nextSpawnedTargetIndices.length !==
+            currentSpawnedTargetIndices.length ||
+          nextSpawnedTargetIndices.some(
+            (targetIndex, index) =>
+              targetIndex !== currentSpawnedTargetIndices[index],
+          )
+        ) {
+          result = setRecorderTokenSpawnedTargets(
+            result,
+            round,
+            index,
+            nextSpawnedTargetIndices,
+          )
+          currentEntry = result[roundKey]?.[index] ?? currentEntry
+        }
+
+        const existingFallbacks = getRecorderDeadTargetFallbacks(
+          currentEntry.slice(1),
+        )
+        Object.entries(change.fallback ?? {}).forEach(
+          ([deadTargetIndexValue, fallbackTargetIndexValue]) => {
+            const deadTargetIndex = Number(deadTargetIndexValue)
+            const fallbackTargetIndex = Number(fallbackTargetIndexValue)
+            if (
+              !Number.isFinite(deadTargetIndex) ||
+              !Number.isFinite(fallbackTargetIndex) ||
+              existingFallbacks.has(deadTargetIndex)
+            ) {
+              return
+            }
+
+            result = setRecorderTokenDeadTargetFallback(
+              result,
+              round,
+              index,
+              deadTargetIndex,
+              fallbackTargetIndex,
+            )
+            existingFallbacks.set(deadTargetIndex, fallbackTargetIndex)
+          },
+        )
+      })
+    })
+
+  return result
 }
