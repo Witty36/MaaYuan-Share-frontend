@@ -3550,6 +3550,10 @@
           "cn": "冰灰",
           "zh_tw": "冰灰"
         },
+        "share_cell_color_none": {
+          "cn": "无操作色",
+          "zh_tw": "無操作色"
+        },
         "share_cell_color_apply": {
           "cn": "应用{{label}}",
           "zh_tw": "套用{{label}}"

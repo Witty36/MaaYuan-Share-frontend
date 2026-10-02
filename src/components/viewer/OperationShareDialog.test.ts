@@ -218,8 +218,15 @@ describe('operation share dialog short code switch', () => {
     expect(findSwatch('应用粉色')).toBeDefined()
     expect(findSwatch('应用蓝色')).toBeDefined()
     expect(findSwatch('应用绿色')).toBeDefined()
-    expect(findSwatch('应用冰灰')).toBeDefined()
+    expect(findSwatch('应用无操作色')).toBeDefined()
     expect(findSwatch('应用黄色（有底纹）')).toBeUndefined()
+    expect(
+      Array.from(
+        document.querySelectorAll(
+          '[role="group"][aria-label="动作文字颜色"] button',
+        ),
+      ).map((button) => button.getAttribute('aria-label')),
+    ).toEqual(['应用无操作色', '应用粉色', '应用蓝色', '应用黄色', '应用绿色'])
 
     await act(async () => {
       findButtonByAriaLabelPrefix('按单元格标色')?.click()
@@ -401,7 +408,7 @@ describe('operation share dialog short code switch', () => {
     expect(findButton('备注模式')).toBeDefined()
 
     await act(async () => {
-      findSwitch('显示其他动作与备注列')?.click()
+      findSwitch('显示备注与其他动作')?.click()
       await new Promise((resolve) => window.setTimeout(resolve, 0))
     })
 

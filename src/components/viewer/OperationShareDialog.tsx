@@ -79,6 +79,14 @@ type GenerationStatus = 'idle' | 'generating' | 'ready' | 'error'
 type ColorMode = 'action' | 'cell'
 type EditMode = 'color' | 'note'
 
+const OPERATION_SHARE_ACTION_COLOR_ORDER: OperationShareCellColorKey[] = [
+  'ice',
+  'pink',
+  'blue',
+  'yellow',
+  'green',
+]
+
 function appendOperationShareNoteText(note: string, text: string) {
   const trimmed = note.trim()
   if (!trimmed) return text
@@ -284,6 +292,10 @@ export default function OperationShareDialog({
     blue: t.components.viewer.OperationViewer.share_cell_color_blue,
     green: t.components.viewer.OperationViewer.share_cell_color_green,
     ice: t.components.viewer.OperationViewer.share_cell_color_ice,
+  }
+  const actionColorNames: Record<OperationShareCellColorKey, string> = {
+    ...cellColorNames,
+    ice: t.components.viewer.OperationViewer.share_cell_color_none,
   }
 
   const editableColumns = useMemo<
@@ -1189,10 +1201,18 @@ export default function OperationShareDialog({
                         className="flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 p-1"
                         role="group"
                       >
-                        {OPERATION_SHARE_CELL_COLOR_KEYS.map((colorKey) => {
+                        {(colorMode === 'action'
+                          ? OPERATION_SHARE_ACTION_COLOR_ORDER
+                          : OPERATION_SHARE_CELL_COLOR_KEYS
+                        ).map((colorKey) => {
                           const label =
                             t.components.viewer.OperationViewer.share_cell_color_apply(
-                              { label: cellColorNames[colorKey] },
+                              {
+                                label:
+                                  colorMode === 'action'
+                                    ? actionColorNames[colorKey]
+                                    : cellColorNames[colorKey],
+                              },
                             )
                           return (
                             <button
