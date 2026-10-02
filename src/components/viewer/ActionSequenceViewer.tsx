@@ -22,7 +22,6 @@ import {
 } from '../editor2/action/roundMapping'
 import type { BasicActionSymbol, SlotKey } from '../editor2/action/tokenUtils'
 import {
-  CHIP_VARIANT_DOT_CLASS,
   SLOT_KEYS,
   groupTokensBySlotWithExtraAttribution,
   resolveChipVariant,
@@ -290,13 +289,6 @@ export const ActionSequenceViewer: FC<ActionSequenceViewerProps> = ({
                                       data-variant={variant}
                                       title={token.label}
                                     >
-                                      <span
-                                        className={clsx(
-                                          'inline-flex h-2.5 w-2.5 flex-none rounded-full',
-                                          CHIP_VARIANT_DOT_CLASS[variant],
-                                        )}
-                                        aria-hidden="true"
-                                      />
                                       <span className="truncate">
                                         {`${token.order + 1}${summary}`}
                                       </span>
@@ -329,13 +321,6 @@ export const ActionSequenceViewer: FC<ActionSequenceViewerProps> = ({
                                     data-variant={variant}
                                     title={token.label}
                                   >
-                                    <span
-                                      className={clsx(
-                                        'inline-flex h-2.5 w-2.5 flex-none rounded-full',
-                                        CHIP_VARIANT_DOT_CLASS[variant],
-                                      )}
-                                      aria-hidden="true"
-                                    />
                                     <span className="truncate">
                                       {`${token.order + 1}${summary}`}
                                     </span>

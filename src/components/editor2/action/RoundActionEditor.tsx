@@ -35,7 +35,6 @@ import {
 } from "./recorderMeta";
 import type { BasicActionSymbol, ChipVariant } from "./tokenUtils";
 import {
-  CHIP_VARIANT_DOT_CLASS,
   SLOT_KEYS,
   groupTokensBySlotWithExtraAttribution,
   resolveChipVariant,
@@ -287,13 +286,6 @@ const RoundChip: FC<RoundChipProps> = ({
       {...(draggableAttributes ?? {})}
       {...(draggableListeners ?? {})}
     >
-      <span
-        className={clsx(
-          "inline-flex h-2.5 w-2.5 flex-none rounded-full",
-          CHIP_VARIANT_DOT_CLASS[variant],
-        )}
-        aria-hidden="true"
-      />
       <span className="truncate">{label}</span>
       {onRemove ? (
         <button
