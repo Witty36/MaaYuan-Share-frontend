@@ -24,6 +24,7 @@ import { DeployedOperatorsShareCard } from './DeployedOperatorsShareCard'
 import {
   OperationShareCard,
   getOperationShareActionColor,
+  getOperationShareActionFillColor,
   getOperationShareActionLabel,
   getOperationShareActionTextColor,
   getOperationShareCellVisualStyle,
@@ -86,7 +87,6 @@ const OPERATION_SHARE_ACTION_COLOR_ORDER: OperationShareCellColorKey[] = [
   'yellow',
   'green',
 ]
-
 function appendOperationShareNoteText(note: string, text: string) {
   const trimmed = note.trim()
   if (!trimmed) return text
@@ -1236,6 +1236,10 @@ export default function OperationShareDialog({
                               style={
                                 colorMode === 'action'
                                   ? {
+                                      backgroundColor:
+                                        getOperationShareActionFillColor(
+                                          colorKey,
+                                        ),
                                       color:
                                         getOperationShareActionTextColor(
                                           colorKey,
@@ -1525,13 +1529,20 @@ export default function OperationShareDialog({
                                               cardConfig.actionColors,
                                               round.round,
                                             )
+                                          const actionFill =
+                                            getOperationShareActionFillColor(
+                                              cardConfig.actionColors[
+                                                actionKey
+                                              ],
+                                              action.targetIndex,
+                                            )
                                           return effectiveEditMode ===
                                             'color' ? (
                                             <button
                                               key={actionKey}
                                               aria-label={`${round.round} 回合 ${column.label}：${label}`}
                                               aria-pressed={selected}
-                                              className={`rounded-sm px-1.5 py-1 font-medium leading-4 transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
+                                              className={`whitespace-nowrap rounded-sm px-1.5 py-1 font-medium leading-4 transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
                                                 selected
                                                   ? 'bg-sky-50 ring-1 ring-inset ring-sky-500'
                                                   : ''
@@ -1544,7 +1555,17 @@ export default function OperationShareDialog({
                                               }
                                               style={
                                                 actionColor
-                                                  ? { color: actionColor }
+                                                  ? {
+                                                      color: actionColor,
+                                                      ...(actionFill
+                                                        ? {
+                                                            backgroundColor:
+                                                              actionFill,
+                                                            paddingInline:
+                                                              '6px',
+                                                          }
+                                                        : {}),
+                                                    }
                                                   : undefined
                                               }
                                               type="button"
@@ -1554,7 +1575,7 @@ export default function OperationShareDialog({
                                           ) : (
                                             <span
                                               key={actionKey}
-                                              className="rounded-sm px-0.5 py-0.5 text-[11px] font-medium leading-4"
+                                              className="whitespace-nowrap rounded-sm px-0.5 py-0.5 text-[11px] font-medium leading-4"
                                               style={
                                                 actionColor
                                                   ? { color: actionColor }

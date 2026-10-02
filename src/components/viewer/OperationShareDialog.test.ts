@@ -219,6 +219,7 @@ describe('operation share dialog short code switch', () => {
     expect(findSwatch('应用蓝色')).toBeDefined()
     expect(findSwatch('应用绿色')).toBeDefined()
     expect(findSwatch('应用无操作色')).toBeDefined()
+    expect(findSwatch('应用无操作色')?.style.backgroundColor).not.toBe('')
     expect(findSwatch('应用黄色（有底纹）')).toBeUndefined()
     expect(
       Array.from(

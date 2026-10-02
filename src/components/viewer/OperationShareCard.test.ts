@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest'
 import {
   OperationShareCard,
   getOperationShareActionCellBackground,
+  getOperationShareActionFillColor,
   getOperationShareActionLabel,
   getOperationShareCellVisualStyle,
   getOperationShareNoteActionLabel,
@@ -159,6 +160,38 @@ describe('operation share card styles', () => {
     expect(
       getOperationShareActionCellBackground({ '2:slot-1': 'blue' }, 2, 1),
     ).toBe('blue')
+  })
+
+  it('fills action labels in the generated image without changing their text color', () => {
+    const config = createOperationShareCardConfig()
+    config.actionColors['1:1'] = 'pink'
+    const cardModel: OperationShareModel = {
+      ...model,
+      actionSlots: [1],
+      rounds: [
+        {
+          round: 1,
+          slots: { 1: [{ raw: '10圈', order: 1, label: '0圈' }] },
+          others: [],
+        },
+      ],
+    }
+
+    const markup = renderToStaticMarkup(
+      createElement(OperationShareCard, {
+        config,
+        model: cardModel,
+        qrDataUrl: 'data:image/png;base64,qr-code',
+      }),
+    )
+
+    expect(getOperationShareActionFillColor('pink')).toBe('#fce7f3')
+    expect(getOperationShareActionFillColor(undefined, 2)).toBe('#fae8ff')
+    expect(markup).toContain('color:#be185d')
+    expect(markup).toContain('background-color:#fce7f3')
+    expect(markup).toContain('border-radius:4px')
+    expect(markup).toContain('white-space:nowrap')
+    expect(markup).toContain('10圈</span><wbr/>')
   })
 
   it('derives alternating table colors from a custom base color', () => {

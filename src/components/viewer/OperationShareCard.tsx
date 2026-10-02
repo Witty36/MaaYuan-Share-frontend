@@ -1,6 +1,6 @@
 import { Icon } from '@blueprintjs/core'
 
-import type { CSSProperties, Ref } from 'react'
+import { type CSSProperties, Fragment, type Ref } from 'react'
 
 import { getRecorderMetaTargetColor } from '../editor2/action/recorderMeta'
 import {
@@ -46,6 +46,24 @@ export const OPERATION_SHARE_ACTION_TEXT_COLORS: Record<
   ice: '#475569',
 }
 
+export const OPERATION_SHARE_ACTION_FILL_COLORS: Record<
+  OperationShareCellColorKey,
+  string
+> = {
+  yellow: '#fef3c7',
+  pink: '#fce7f3',
+  blue: '#dbeafe',
+  green: '#d1fae5',
+  ice: '#e2e8f0',
+}
+
+const OPERATION_SHARE_TARGET_FILL_COLORS: Record<string, string> = {
+  '#a21caf': '#fae8ff',
+  '#1d4ed8': '#dbeafe',
+  '#92400e': '#fef3c7',
+  '#047857': '#d1fae5',
+}
+
 export function getOperationShareActionTextColor(style?: string) {
   if (!style) return undefined
   if (
@@ -59,6 +77,31 @@ export function getOperationShareActionTextColor(style?: string) {
     ]
   }
   return /^#[0-9a-f]{3,8}$/i.test(style) ? style : undefined
+}
+
+export function getOperationShareActionFillColor(
+  style?: string,
+  targetIndex?: number,
+) {
+  if (
+    style &&
+    Object.prototype.hasOwnProperty.call(
+      OPERATION_SHARE_ACTION_FILL_COLORS,
+      style,
+    )
+  ) {
+    return OPERATION_SHARE_ACTION_FILL_COLORS[
+      style as OperationShareCellColorKey
+    ]
+  }
+
+  const actionTextColor =
+    getOperationShareActionTextColor(style) ??
+    getRecorderMetaTargetColor(targetIndex)
+
+  return actionTextColor
+    ? OPERATION_SHARE_TARGET_FILL_COLORS[actionTextColor.toLowerCase()]
+    : undefined
 }
 
 export function getOperationShareActionColor(
@@ -462,29 +505,52 @@ function ActionList({
   return (
     <div className={`${alignClassName} ${textClassName}`}>
       {actions.map((action, index) => {
+        const actionKey = buildOperationShareActionKey(round, action.order)
         const actionColor =
           variant === 'other'
             ? undefined
             : getOperationShareActionColor(action, actionColors, round)
+        const actionFill =
+          variant === 'other'
+            ? undefined
+            : getOperationShareActionFillColor(
+                actionColors[actionKey],
+                action.targetIndex,
+              )
         const actionStyle =
           variant === 'other'
             ? { whiteSpace: 'nowrap' as const }
-            : actionColor
-              ? { color: actionColor }
-              : undefined
+            : {
+                whiteSpace: 'nowrap' as const,
+                ...(actionColor
+                  ? {
+                      color: actionColor,
+                      ...(actionFill
+                        ? {
+                            backgroundColor: actionFill,
+                            borderRadius: '4px',
+                            display: 'inline-block',
+                            lineHeight: 1.25,
+                            padding: '0 4px',
+                          }
+                        : {}),
+                    }
+                  : {}),
+              }
 
         return (
-          <span
-            key={`${action.order}-${index}`}
-            className={variant === 'other' ? 'whitespace-nowrap' : undefined}
-            style={actionStyle}
-          >
-            {getOperationShareActionLabel(
-              action,
-              displayOrderByActionOrder.get(action.order),
-            )}
+          <Fragment key={`${action.order}-${index}`}>
+            <span
+              className={variant === 'other' ? 'whitespace-nowrap' : undefined}
+              style={actionStyle}
+            >
+              {getOperationShareActionLabel(
+                action,
+                displayOrderByActionOrder.get(action.order),
+              )}
+            </span>
             {variant === 'other' ? null : <wbr />}
-          </span>
+          </Fragment>
         )
       })}
     </div>
