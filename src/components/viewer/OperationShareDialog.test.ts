@@ -93,6 +93,18 @@ function findSwatch(labelText: string) {
   ) as HTMLButtonElement | undefined
 }
 
+function findButton(labelText: string) {
+  return Array.from(document.querySelectorAll('button')).find(
+    (button) => button.textContent?.trim() === labelText,
+  ) as HTMLButtonElement | undefined
+}
+
+function findButtonByAriaLabelPrefix(labelText: string) {
+  return Array.from(document.querySelectorAll('button')).find((button) =>
+    button.getAttribute('aria-label')?.startsWith(labelText),
+  ) as HTMLButtonElement | undefined
+}
+
 /** 配色网格里的单元格勾选框：Blueprint Checkbox 只有 aria-label，没有可见文案。 */
 function findCheckbox(ariaLabel: string) {
   return Array.from(document.querySelectorAll('input[type="checkbox"]')).find(
@@ -209,6 +221,11 @@ describe('operation share dialog short code switch', () => {
     expect(findSwatch('应用冰灰')).toBeDefined()
     expect(findSwatch('应用黄色（有底纹）')).toBeUndefined()
 
+    await act(async () => {
+      findButtonByAriaLabelPrefix('按单元格标色')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
     // 底纹是全局开关，默认打开
     expect(findSwitch('增加底纹')?.checked).toBe(true)
   })
@@ -223,7 +240,11 @@ describe('operation share dialog short code switch', () => {
     )
 
     await act(async () => {
-      findCheckbox('1 回合 1 号位')?.click()
+      findButtonByAriaLabelPrefix('按单元格标色')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+    await act(async () => {
+      findButtonByAriaLabelPrefix('1 回合 1 号位')?.click()
       await new Promise((resolve) => window.setTimeout(resolve, 0))
     })
     await act(async () => {
@@ -234,6 +255,103 @@ describe('operation share dialog short code switch', () => {
     expect(readOperationShareCardConfig(100)?.cellColors).toEqual({
       '1:slot-1': 'yellow',
     })
+  })
+
+  it('switches between color and note modes in the same table', async () => {
+    await renderDialog(
+      createOperation(
+        CopilotInfoStatusEnum.Public,
+        undefined,
+        singleRoundActions,
+      ),
+    )
+
+    const colorNoteInput = document.querySelector(
+      'textarea[placeholder="可直接修改本回合备注"]',
+    ) as HTMLTextAreaElement | null
+
+    expect(colorNoteInput).not.toBeNull()
+    expect(findSwatch('应用黄色')).toBeDefined()
+    expect(findButtonByAriaLabelPrefix('填入备注')).toBeUndefined()
+    expect(findButtonByAriaLabelPrefix('从备注移除')).toBeUndefined()
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype,
+        'value',
+      )?.set
+      valueSetter?.call(colorNoteInput, '标注模式下编辑备注')
+      colorNoteInput?.dispatchEvent(new Event('input', { bubbles: true }))
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(readOperationShareCardConfig(100)?.roundNoteOverrides).toEqual({
+      1: '标注模式下编辑备注',
+    })
+
+    await act(async () => {
+      findButton('备注模式')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    const noteInput = document.querySelector(
+      'textarea[placeholder="可直接修改本回合备注"]',
+    ) as HTMLTextAreaElement | null
+    const noteCell = noteInput?.closest('td')
+    const noteTable = noteCell?.closest('table')
+    const noteColumn = noteTable?.querySelector('colgroup col:last-child')
+
+    expect(noteInput).not.toBeNull()
+    expect(noteTable).not.toBeNull()
+    expect(noteTable?.getAttribute('data-edit-mode')).toBe('note')
+    expect(
+      noteColumn instanceof HTMLElement ? noteColumn.style.width : undefined,
+    ).toBe('56%')
+    expect(noteCell).toBe(noteCell?.parentElement?.lastElementChild)
+    expect(document.body.textContent).not.toContain('回合备注（可直接编辑）')
+    expect(findSwatch('应用黄色')).toBeUndefined()
+    expect(findButtonByAriaLabelPrefix('按操作标色')).toBeUndefined()
+    expect(findButtonByAriaLabelPrefix('按单元格标色')).toBeUndefined()
+
+    await act(async () => {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        window.HTMLTextAreaElement.prototype,
+        'value',
+      )?.set
+      valueSetter?.call(noteInput, '3A 后检测退场')
+      noteInput?.dispatchEvent(new Event('input', { bubbles: true }))
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(readOperationShareCardConfig(100)?.roundNoteOverrides).toEqual({
+      1: '3A 后检测退场',
+    })
+
+    await act(async () => {
+      findButton('标注模式')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    const colorNoteInputAfterSwitch = document.querySelector(
+      'textarea[placeholder="可直接修改本回合备注"]',
+    ) as HTMLTextAreaElement | null
+
+    expect(colorNoteInputAfterSwitch).not.toBeNull()
+    expect(colorNoteInputAfterSwitch?.value).toBe('3A 后检测退场')
+    expect(findSwatch('应用黄色')).toBeDefined()
+    expect(findButtonByAriaLabelPrefix('按操作标色')).toBeDefined()
+    expect(findButtonByAriaLabelPrefix('按单元格标色')).toBeDefined()
+    expect(findButtonByAriaLabelPrefix('填入备注')).toBeUndefined()
+    expect(findButtonByAriaLabelPrefix('从备注移除')).toBeUndefined()
+
+    const colorTable = document.querySelector('table[data-edit-mode="color"]')
+    const colorNoteColumn = colorTable?.querySelector('colgroup col:last-child')
+    expect(colorTable).not.toBeNull()
+    expect(
+      colorNoteColumn instanceof HTMLElement
+        ? colorNoteColumn.style.width
+        : undefined,
+    ).toBe('16%')
   })
 
   it('persists a custom table color', async () => {
@@ -424,6 +542,10 @@ describe('operation share dialog short code switch', () => {
       ),
     )
 
+    await act(async () => {
+      findButtonByAriaLabelPrefix('按单元格标色')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
     await act(async () => {
       findSwitch('增加底纹')?.click()
       await new Promise((resolve) => window.setTimeout(resolve, 0))
