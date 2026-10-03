@@ -78,6 +78,8 @@ export interface OperationShareCardConfig {
   requiredDiscs: Record<string, boolean>
 }
 
+const OPERATION_SHARE_ROUND_NOTE_MAX_LENGTH = 5000
+
 /**
  * 单元格底纹类型。'solid' 即不上底纹，其余为各颜色在「增加底纹」打开时
  * 使用的纹样。这里只描述数据，具体 CSS 由 OperationShareCard 负责。
@@ -280,7 +282,10 @@ export function normalizeOperationShareCardConfig(
   if (isRecord(value.roundNoteOverrides)) {
     Object.entries(value.roundNoteOverrides).forEach(([round, note]) => {
       if (/^\d+$/.test(round) && typeof note === 'string') {
-        roundNoteOverrides[Number(round)] = note.slice(0, 500)
+        roundNoteOverrides[Number(round)] = note.slice(
+          0,
+          OPERATION_SHARE_ROUND_NOTE_MAX_LENGTH,
+        )
       }
     })
   }

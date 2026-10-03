@@ -22,6 +22,10 @@ import {
   isOperationShareTargetSwitchAction,
 } from './operationShareModel'
 import {
+  hasOperationShareNoteText,
+  OperationShareNoteContent,
+} from './operationShareNote'
+import {
   DEFAULT_OPERATION_SHARE_TABLE_THEME,
   type OperationShareTableTheme,
   type OperationShareTableThemeOverrides,
@@ -785,6 +789,7 @@ export function OperationShareCard({
                 const { otherActions, displayOrderByActionOrder } =
                   getOperationShareRoundDisplay(round, config)
                 const noteText = getOperationShareRoundNoteText(round, config)
+                const hasNoteText = hasOperationShareNoteText(noteText)
                 const rowBackground = getOperationShareRoundBackground(
                   round.round,
                   config.tableColor,
@@ -854,17 +859,21 @@ export function OperationShareCard({
                         style={{
                           borderColor: tableTheme.border,
                           background: rowBackground,
-                          color: noteText
+                          color: hasNoteText
                             ? tableTheme.text
                             : tableTheme.mutedText,
                         }}
                       >
                         <div
                           className={`whitespace-pre-wrap break-words text-[15px] font-medium leading-5 ${
-                            noteText ? 'text-left' : 'text-center'
+                            hasNoteText ? 'text-left' : 'text-center'
                           }`}
                         >
-                          {noteText || '—'}
+                          {hasNoteText ? (
+                            <OperationShareNoteContent value={noteText} />
+                          ) : (
+                            '—'
+                          )}
                         </div>
                       </td>
                     ) : null}

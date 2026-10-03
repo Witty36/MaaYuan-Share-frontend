@@ -42,6 +42,11 @@ import {
   renderOperationShareCardBlob,
 } from './operationShareImage'
 import {
+  getOperationShareNotePlainText,
+  OperationShareNoteEditor,
+  OperationShareNoteFormatToolbar,
+} from './operationShareNote'
+import {
   OPERATION_SHARE_ACTION_COLOR_ORDER,
   OPERATION_SHARE_CARD_CONFIG_SCHEMA_VERSION,
   OPERATION_SHARE_CARD_KEYS,
@@ -103,18 +108,30 @@ const MOBILE_NOTE_MIN_COLUMN_WIDTH = 240
 function appendOperationShareNoteText(note: string, text: string) {
   const trimmed = note.trim()
   if (!trimmed) return text
-  if (trimmed.includes(text)) return trimmed
+  if (getOperationShareNotePlainText(trimmed).includes(text)) return trimmed
+  if (/<[a-z][\s\S]*>/i.test(trimmed)) {
+    const escapedText = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+    return `${trimmed}<br>${escapedText}`
+  }
   return `${trimmed}\n${text}`
 }
 
 function removeOperationShareNoteText(note: string, text: string) {
-  return note
+  const nextNote = note
     .split(text)
     .join('')
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
     .join('\n')
+
+  if (!/<[a-z][\s\S]*>/i.test(note)) return nextNote
+  return nextNote
+    .replace(/(?:<br\s*\/?>\s*){2,}/gi, '<br>')
+    .replace(/(?:<br\s*\/?>)+$/i, '')
 }
 
 function OperationShareSelectionCheckbox({
@@ -1401,6 +1418,9 @@ export default function OperationShareDialog({
                             </Button>
                           ) : null}
                         </div>
+                        {effectiveEditMode === 'note' ? (
+                          <OperationShareNoteFormatToolbar />
+                        ) : null}
                       </div>
                       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                         {effectiveEditMode === 'note'
@@ -2206,21 +2226,17 @@ export default function OperationShareDialog({
                                       : 'p-1'
                                   }`}
                                 >
-                                  <textarea
-                                    aria-label={`${round.round} 回合备注`}
-                                    className={`w-full resize-y rounded border border-slate-300 bg-white text-slate-800 outline-none focus:border-sky-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:placeholder:text-slate-500 ${
-                                      isMobileDevice ? 'block min-w-0' : ''
+                                  <OperationShareNoteEditor
+                                    ariaLabel={`${round.round} 回合备注`}
+                                    className={`block w-full resize-y overflow-y-auto whitespace-pre-wrap break-words rounded border border-slate-300 bg-white text-slate-800 outline-none focus:border-sky-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 ${
+                                      isMobileDevice ? 'min-w-0' : ''
                                     } ${
                                       effectiveEditMode === 'note'
                                         ? 'min-h-14 px-2 py-1.5 text-xs leading-5'
                                         : 'max-h-24 min-h-6 px-1 py-0.5 text-[11px] leading-4'
                                     }`}
-                                    maxLength={500}
-                                    onChange={(event) =>
-                                      updateRoundNote(
-                                        round.round,
-                                        event.currentTarget.value,
-                                      )
+                                    onChange={(value) =>
+                                      updateRoundNote(round.round, value)
                                     }
                                     placeholder="修改本回合备注"
                                     value={note}
