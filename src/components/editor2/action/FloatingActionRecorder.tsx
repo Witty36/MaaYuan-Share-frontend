@@ -139,10 +139,10 @@ const getInitialRecorderTargetIndices = (enemyCount: number) =>
     ),
   )
 const TARGET_POSITION_TONE_CLASS: Record<string, string> = {
-  '1': 'border-fuchsia-300 bg-fuchsia-100/80 text-fuchsia-700 hover:bg-fuchsia-200/80 dark:border-fuchsia-500/60 dark:bg-fuchsia-500/20 dark:text-fuchsia-200 dark:hover:bg-fuchsia-500/30',
-  '2': 'border-blue-300 bg-blue-100/80 text-blue-700 hover:bg-blue-200/80 dark:border-blue-500/60 dark:bg-blue-500/20 dark:text-blue-200 dark:hover:bg-blue-500/30',
-  '3': 'border-amber-300 bg-amber-100/80 text-amber-800 hover:bg-amber-200/80 dark:border-amber-500/60 dark:bg-amber-500/20 dark:text-amber-200 dark:hover:bg-amber-500/30',
-  '4': 'border-emerald-300 bg-emerald-100/80 text-emerald-700 hover:bg-emerald-200/80 dark:border-emerald-500/60 dark:bg-emerald-500/20 dark:text-emerald-200 dark:hover:bg-emerald-500/30',
+  '1': 'border-pink-200 bg-[#ffe3ed] hover:bg-[#ffe3ed] dark:border-pink-500/50 dark:bg-[#ffe3ed] dark:hover:bg-[#ffe3ed]',
+  '2': 'border-[#82bfe3] bg-[#c3e8ff] hover:bg-[#c3e8ff] dark:border-blue-500/50 dark:bg-[#c3e8ff] dark:hover:bg-[#c3e8ff]',
+  '3': 'border-amber-200 bg-[#fff3c9] hover:bg-[#fff3c9] dark:border-amber-500/50 dark:bg-[#fff3c9] dark:hover:bg-[#fff3c9]',
+  '4': 'border-[#b8cc9c] bg-[#e1edc1] hover:bg-[#e1edc1] dark:border-emerald-500/50 dark:bg-[#e1edc1] dark:hover:bg-[#e1edc1]',
   '5': 'border-rose-300 bg-rose-100/80 text-rose-700 hover:bg-rose-200/80 dark:border-rose-500/60 dark:bg-rose-500/20 dark:text-rose-200 dark:hover:bg-rose-500/30',
 }
 const TARGET_POSITION_NEUTRAL_CLASS =
@@ -1533,6 +1533,8 @@ export function FloatingActionRecorder({
 
   const renderActionToken = (item: RecorderRoundItem, round: number) => {
     const isExtra = item.display.area === 'extra'
+    const itemLabel = formatRecorderRoundItem(item)
+    const usesTrimmedGlyphBox = !isExtra && itemLabel.endsWith('A')
     const targetIndex = item.targetIndex
     const normalizedTargetIndex =
       targetIndex === undefined
@@ -1638,6 +1640,7 @@ export function FloatingActionRecorder({
           placement="top"
           portalClassName="z-[1600]"
           popoverClassName="[&>.bp4-popover2-content]:!p-0 overflow-hidden"
+          targetProps={{ className: '!inline-flex items-center' }}
           content={
             <div className="p-0.5">
               <div className="flex items-center justify-center gap-0.5">
@@ -1776,16 +1779,11 @@ export function FloatingActionRecorder({
           <button
             type="button"
             className={clsx(
-              'inline-flex items-center rounded-sm border border-transparent px-1 transition',
+              'inline-flex items-center justify-center rounded-sm border-0 px-1 leading-none transition',
               targetToneClass,
               isExtra
-                ? 'min-h-3 text-[10px] font-normal leading-3 text-stone-500 hover:bg-black/5 dark:text-stone-400 dark:hover:bg-white/10'
-                : clsx(
-                    'min-h-4 text-[13px] font-semibold leading-4',
-                    targetToneClass
-                      ? undefined
-                      : 'text-stone-700 dark:text-stone-100',
-                  ),
+                ? 'h-4 text-[10px] font-normal text-stone-500 hover:bg-black/5 dark:text-stone-400 dark:hover:bg-white/10'
+                : 'h-[18px] text-[13px] font-semibold text-stone-700 dark:text-stone-100',
             )}
             title={`第 ${round} 回合第 ${item.order} 个动作：${formatRecorderRoundItem(
               item,
@@ -1795,7 +1793,17 @@ export function FloatingActionRecorder({
                 : ''
             }（点击编辑、删除动作）`}
           >
-            {formatRecorderRoundItem(item)}
+            <span
+              className={clsx(
+                'block',
+                !isExtra &&
+                  (usesTrimmedGlyphBox
+                    ? '[text-box-trim:trim-both] [text-box-edge:cap_alphabetic]'
+                    : 'relative -top-px'),
+              )}
+            >
+              {itemLabel}
+            </span>
           </button>
         </Popover2>
         {showEnemyEvents ? (
