@@ -162,7 +162,7 @@ describe('operation share card styles', () => {
     ).toBe('blue')
   })
 
-  it('fills action labels in the generated image without changing their text color', () => {
+  it('fills action labels in the generated image while keeping the original text color', () => {
     const config = createOperationShareCardConfig()
     config.actionColors['1:1'] = 'pink'
     const cardModel: OperationShareModel = {
@@ -185,10 +185,16 @@ describe('operation share card styles', () => {
       }),
     )
 
-    expect(getOperationShareActionFillColor('pink')).toBe('#fce7f3')
-    expect(getOperationShareActionFillColor(undefined, 2)).toBe('#fae8ff')
-    expect(markup).toContain('color:#be185d')
-    expect(markup).toContain('background-color:#fce7f3')
+    expect(getOperationShareActionFillColor('pink')).toBe(
+      OPERATION_SHARE_CELL_PALETTE.pink.hex,
+    )
+    expect(getOperationShareActionFillColor(undefined, 2)).toBe(
+      OPERATION_SHARE_CELL_PALETTE.pink.hex,
+    )
+    expect(markup).not.toContain('color:#be185d')
+    expect(markup).toContain(
+      `background-color:${OPERATION_SHARE_CELL_PALETTE.pink.hex}`,
+    )
     expect(markup).toContain('border-radius:4px')
     expect(markup).toContain('white-space:nowrap')
     expect(markup).toContain('10圈</span><wbr/>')

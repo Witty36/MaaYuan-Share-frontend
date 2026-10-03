@@ -23,10 +23,8 @@ import { AppToaster } from '../Toaster'
 import { DeployedOperatorsShareCard } from './DeployedOperatorsShareCard'
 import {
   OperationShareCard,
-  getOperationShareActionColor,
   getOperationShareActionFillColor,
   getOperationShareActionLabel,
-  getOperationShareActionTextColor,
   getOperationShareCellVisualStyle,
   getOperationShareNoteActionLabel,
   getOperationShareRoundDisplay,
@@ -1279,11 +1277,7 @@ export default function OperationShareDialog({
                               <button
                                 key={colorKey}
                                 aria-label={label}
-                                className={`h-8 w-8 rounded text-base font-bold transition-transform enabled:hover:scale-105 enabled:focus:outline-none enabled:focus:ring-2 enabled:focus:ring-sky-500 enabled:focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40 ${
-                                  colorMode === 'cell'
-                                    ? 'border border-slate-300'
-                                    : 'bg-white'
-                                }`}
+                                className="h-8 w-8 rounded border border-slate-300 text-base font-bold transition-transform enabled:hover:scale-105 enabled:focus:outline-none enabled:focus:ring-2 enabled:focus:ring-sky-500 enabled:focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-100"
                                 disabled={
                                   (colorMode === 'action'
                                     ? selectedActionKeys.size
@@ -1300,13 +1294,11 @@ export default function OperationShareDialog({
                                   colorMode === 'action'
                                     ? {
                                         backgroundColor:
-                                          getOperationShareActionFillColor(
-                                            colorKey,
-                                          ),
-                                        color:
-                                          getOperationShareActionTextColor(
-                                            colorKey,
-                                          ),
+                                          colorKey === 'ice'
+                                            ? 'transparent'
+                                            : getOperationShareActionFillColor(
+                                                colorKey,
+                                              ),
                                       }
                                     : getOperationShareCellVisualStyle(
                                         colorKey,
@@ -1395,8 +1387,6 @@ export default function OperationShareDialog({
                               style={{
                                 backgroundColor:
                                   getOperationShareActionFillColor(colorKey),
-                                color:
-                                  getOperationShareActionTextColor(colorKey),
                               }}
                             >
                               A
@@ -1701,12 +1691,6 @@ export default function OperationShareDialog({
                                                   action.order,
                                                 ),
                                               )
-                                            const actionColor =
-                                              getOperationShareActionColor(
-                                                action,
-                                                cardConfig.actionColors,
-                                                round.round,
-                                              )
                                             const actionFill =
                                               getOperationShareActionFillColor(
                                                 cardConfig.actionColors[
@@ -1736,21 +1720,16 @@ export default function OperationShareDialog({
                                                   )
                                                 }
                                                 style={
-                                                  actionColor
+                                                  actionFill
                                                     ? {
-                                                        color: actionColor,
-                                                        ...(actionFill
-                                                          ? {
-                                                              backgroundColor:
-                                                                actionFill,
-                                                              ...(isMobileDevice
-                                                                ? {}
-                                                                : {
-                                                                    paddingInline:
-                                                                      '4px',
-                                                                  }),
-                                                            }
-                                                          : {}),
+                                                        backgroundColor:
+                                                          actionFill,
+                                                        ...(isMobileDevice
+                                                          ? {}
+                                                          : {
+                                                              paddingInline:
+                                                                '4px',
+                                                            }),
                                                       }
                                                     : undefined
                                                 }
@@ -1762,11 +1741,6 @@ export default function OperationShareDialog({
                                               <span
                                                 key={actionKey}
                                                 className="whitespace-nowrap rounded-sm px-0.5 py-0.5 text-[11px] font-medium leading-4"
-                                                style={
-                                                  actionColor
-                                                    ? { color: actionColor }
-                                                    : undefined
-                                                }
                                               >
                                                 {label}
                                               </span>
@@ -1853,7 +1827,7 @@ export default function OperationShareDialog({
                                         event.currentTarget.value,
                                       )
                                     }
-                                    placeholder="可直接修改本回合备注"
+                                    placeholder="修改本回合备注"
                                     value={note}
                                   />
                                   {effectiveEditMode === 'note' &&

@@ -51,13 +51,12 @@ export const OPERATION_SHARE_ACTION_TEXT_COLORS: Record<
 export const OPERATION_SHARE_ACTION_FILL_COLORS: Record<
   OperationShareCellColorKey,
   string
-> = {
-  yellow: '#fef3c7',
-  pink: '#fce7f3',
-  blue: '#dbeafe',
-  green: '#d1fae5',
-  ice: '#e2e8f0',
-}
+> = Object.fromEntries(
+  OPERATION_SHARE_CELL_COLOR_KEYS.map((colorKey) => [
+    colorKey,
+    OPERATION_SHARE_CELL_PALETTE[colorKey].hex,
+  ]),
+) as Record<OperationShareCellColorKey, string>
 
 const OPERATION_SHARE_TARGET_ACTION_COLOR_KEYS: Partial<
   Record<number, OperationShareCellColorKey>
@@ -66,13 +65,6 @@ const OPERATION_SHARE_TARGET_ACTION_COLOR_KEYS: Partial<
   3: 'blue',
   4: 'yellow',
   5: 'green',
-}
-
-const OPERATION_SHARE_TARGET_FILL_COLORS: Record<string, string> = {
-  '#a21caf': '#fae8ff',
-  '#1d4ed8': '#dbeafe',
-  '#92400e': '#fef3c7',
-  '#047857': '#d1fae5',
 }
 
 export function getOperationShareActionTextColor(style?: string) {
@@ -94,25 +86,21 @@ export function getOperationShareActionFillColor(
   style?: string,
   targetIndex?: number,
 ) {
-  if (
+  const explicitColorKey =
     style &&
     Object.prototype.hasOwnProperty.call(
       OPERATION_SHARE_ACTION_FILL_COLORS,
       style,
     )
-  ) {
-    return OPERATION_SHARE_ACTION_FILL_COLORS[
-      style as OperationShareCellColorKey
-    ]
-  }
+      ? (style as OperationShareCellColorKey)
+      : undefined
+  const colorKey =
+    explicitColorKey ??
+    (targetIndex === undefined
+      ? undefined
+      : OPERATION_SHARE_TARGET_ACTION_COLOR_KEYS[targetIndex])
 
-  const actionTextColor =
-    getOperationShareActionTextColor(style) ??
-    getRecorderMetaTargetColor(targetIndex)
-
-  return actionTextColor
-    ? OPERATION_SHARE_TARGET_FILL_COLORS[actionTextColor.toLowerCase()]
-    : undefined
+  return colorKey ? OPERATION_SHARE_ACTION_FILL_COLORS[colorKey] : undefined
 }
 
 export function getOperationShareActionColor(
@@ -562,10 +550,6 @@ function ActionList({
     <div className={`${alignClassName} ${textClassName}`}>
       {actions.map((action, index) => {
         const actionKey = buildOperationShareActionKey(round, action.order)
-        const actionColor =
-          variant === 'other'
-            ? undefined
-            : getOperationShareActionColor(action, actionColors, round)
         const actionFill =
           variant === 'other'
             ? undefined
@@ -578,18 +562,13 @@ function ActionList({
             ? { whiteSpace: 'nowrap' as const }
             : {
                 whiteSpace: 'nowrap' as const,
-                ...(actionColor
+                ...(actionFill
                   ? {
-                      color: actionColor,
-                      ...(actionFill
-                        ? {
-                            backgroundColor: actionFill,
-                            borderRadius: '4px',
-                            display: 'inline-block',
-                            lineHeight: 1.25,
-                            padding: '0 4px',
-                          }
-                        : {}),
+                      backgroundColor: actionFill,
+                      borderRadius: '4px',
+                      display: 'inline-block',
+                      lineHeight: 1.25,
+                      padding: '0 4px',
                     }
                   : {}),
               }

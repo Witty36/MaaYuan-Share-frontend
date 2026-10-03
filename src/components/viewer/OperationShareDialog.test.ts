@@ -380,7 +380,7 @@ describe('operation share dialog short code switch', () => {
     )
 
     const colorNoteInput = document.querySelector(
-      'textarea[placeholder="可直接修改本回合备注"]',
+      'textarea[placeholder="修改本回合备注"]',
     ) as HTMLTextAreaElement | null
 
     expect(colorNoteInput).not.toBeNull()
@@ -408,7 +408,7 @@ describe('operation share dialog short code switch', () => {
     })
 
     const noteInput = document.querySelector(
-      'textarea[placeholder="可直接修改本回合备注"]',
+      'textarea[placeholder="修改本回合备注"]',
     ) as HTMLTextAreaElement | null
     const noteCell = noteInput?.closest('td')
     const noteTable = noteCell?.closest('table')
@@ -446,7 +446,7 @@ describe('operation share dialog short code switch', () => {
     })
 
     const colorNoteInputAfterSwitch = document.querySelector(
-      'textarea[placeholder="可直接修改本回合备注"]',
+      'textarea[placeholder="修改本回合备注"]',
     ) as HTMLTextAreaElement | null
 
     expect(colorNoteInputAfterSwitch).not.toBeNull()
@@ -489,7 +489,7 @@ describe('operation share dialog short code switch', () => {
     expect(
       document
         .querySelector('table[data-edit-mode="color"]')
-        ?.querySelector('textarea[placeholder="可直接修改本回合备注"]'),
+        ?.querySelector('textarea[placeholder="修改本回合备注"]'),
     ).toBeNull()
   })
 
