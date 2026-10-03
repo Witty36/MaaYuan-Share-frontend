@@ -45,6 +45,7 @@ import {
   getOperationShareNotePlainText,
   OperationShareNoteEditor,
   OperationShareNoteFormatToolbar,
+  resetOperationShareNoteFormatting,
 } from './operationShareNote'
 import {
   OPERATION_SHARE_ACTION_COLOR_ORDER,
@@ -90,6 +91,53 @@ import {
 type GenerationStatus = 'idle' | 'generating' | 'ready' | 'error'
 type ColorMode = 'action' | 'cell'
 type EditMode = 'color' | 'note'
+type OperationShareNoteHistoryState = Pick<
+  OperationShareCardConfig,
+  'hiddenOtherActionKeys' | 'roundNoteOverrides'
+>
+
+function cloneOperationShareNoteHistoryState(
+  config: OperationShareCardConfig,
+): OperationShareNoteHistoryState {
+  return {
+    hiddenOtherActionKeys: config.hiddenOtherActionKeys
+      ? { ...config.hiddenOtherActionKeys }
+      : undefined,
+    roundNoteOverrides: config.roundNoteOverrides
+      ? { ...config.roundNoteOverrides }
+      : undefined,
+  }
+}
+
+function areOperationShareNoteHistoryStatesEqual(
+  left: OperationShareNoteHistoryState,
+  right: OperationShareNoteHistoryState,
+) {
+  const leftRoundNotes = left.roundNoteOverrides ?? {}
+  const rightRoundNotes = right.roundNoteOverrides ?? {}
+  const roundNoteKeys = Object.keys(leftRoundNotes)
+  if (roundNoteKeys.length !== Object.keys(rightRoundNotes).length) {
+    return false
+  }
+  if (
+    !roundNoteKeys.every(
+      (key) =>
+        leftRoundNotes[Number(key)] === rightRoundNotes[Number(key)],
+    )
+  ) {
+    return false
+  }
+
+  const leftHiddenActions = left.hiddenOtherActionKeys ?? {}
+  const rightHiddenActions = right.hiddenOtherActionKeys ?? {}
+  const hiddenActionKeys = Object.keys(leftHiddenActions)
+  if (hiddenActionKeys.length !== Object.keys(rightHiddenActions).length) {
+    return false
+  }
+  return hiddenActionKeys.every(
+    (key) => leftHiddenActions[key] === rightHiddenActions[key],
+  )
+}
 
 function isMobileDeviceUserAgent() {
   if (typeof navigator === 'undefined') return false
@@ -218,6 +266,20 @@ export default function OperationShareDialog({
   const [cardConfig, setCardConfig] = useState(
     () => localConfigRef.current ?? createOperationShareCardConfig(),
   )
+  const noteConfigRef = useRef(cardConfig)
+  noteConfigRef.current = cardConfig
+  const noteHistoryRef = useRef<{
+    future: OperationShareNoteHistoryState[]
+    past: OperationShareNoteHistoryState[]
+  }>({ future: [], past: [] })
+  const noteHistoryGroupRef = useRef<OperationShareNoteHistoryState | null>(
+    null,
+  )
+  const [noteEditorRevision, setNoteEditorRevision] = useState(0)
+  const [noteHistoryAvailability, setNoteHistoryAvailability] = useState({
+    canRedo: false,
+    canUndo: false,
+  })
   const shouldPersistCardConfigRef = useRef(false)
   const [authorCardConfig, setAuthorCardConfig] = useState(() =>
     createOperationShareCardConfig(),
@@ -284,6 +346,137 @@ export default function OperationShareDialog({
     },
     [],
   )
+
+  const refreshNoteHistoryAvailability = useCallback(() => {
+    const nextAvailability = {
+      canRedo: noteHistoryRef.current.future.length > 0,
+      canUndo: noteHistoryRef.current.past.length > 0,
+    }
+    setNoteHistoryAvailability((current) =>
+      current.canRedo === nextAvailability.canRedo &&
+      current.canUndo === nextAvailability.canUndo
+        ? current
+        : nextAvailability,
+    )
+  }, [])
+
+  const updateNoteCardConfig = useCallback(
+    (
+      updater: (current: OperationShareCardConfig) => OperationShareCardConfig,
+    ) => {
+      const current = noteConfigRef.current
+      const next = updater(current)
+      const before = cloneOperationShareNoteHistoryState(current)
+      const after = cloneOperationShareNoteHistoryState(next)
+      if (areOperationShareNoteHistoryStatesEqual(before, after)) return
+
+      noteConfigRef.current = next
+      if (!noteHistoryGroupRef.current) {
+        noteHistoryRef.current.past.push(before)
+        if (noteHistoryRef.current.past.length > 100) {
+          noteHistoryRef.current.past.shift()
+        }
+        noteHistoryRef.current.future = []
+        refreshNoteHistoryAvailability()
+      }
+      updateCardConfig(() => next)
+    },
+    [refreshNoteHistoryAvailability, updateCardConfig],
+  )
+
+  const beginNoteHistoryGroup = useCallback(() => {
+    if (noteHistoryGroupRef.current) return
+    noteHistoryGroupRef.current = cloneOperationShareNoteHistoryState(
+      noteConfigRef.current,
+    )
+  }, [])
+
+  const endNoteHistoryGroup = useCallback(() => {
+    const before = noteHistoryGroupRef.current
+    if (!before) return
+    noteHistoryGroupRef.current = null
+
+    const after = cloneOperationShareNoteHistoryState(noteConfigRef.current)
+    if (areOperationShareNoteHistoryStatesEqual(before, after)) return
+
+    noteHistoryRef.current.past.push(before)
+    if (noteHistoryRef.current.past.length > 100) {
+      noteHistoryRef.current.past.shift()
+    }
+    noteHistoryRef.current.future = []
+    refreshNoteHistoryAvailability()
+  }, [refreshNoteHistoryAvailability])
+
+  const runNoteHistoryGroup = useCallback(
+    (action: () => void) => {
+      beginNoteHistoryGroup()
+      try {
+        action()
+      } finally {
+        endNoteHistoryGroup()
+      }
+    },
+    [beginNoteHistoryGroup, endNoteHistoryGroup],
+  )
+
+  const applyNoteHistoryState = useCallback(
+    (state: OperationShareNoteHistoryState) => {
+      const next = {
+        ...noteConfigRef.current,
+        hiddenOtherActionKeys: state.hiddenOtherActionKeys,
+        roundNoteOverrides: state.roundNoteOverrides,
+      }
+      noteConfigRef.current = next
+      setNoteEditorRevision((current) => current + 1)
+      updateCardConfig(() => next)
+    },
+    [updateCardConfig],
+  )
+
+  const undoNoteChange = useCallback(() => {
+    if (noteHistoryGroupRef.current) endNoteHistoryGroup()
+    const previous = noteHistoryRef.current.past.pop()
+    if (!previous) {
+      refreshNoteHistoryAvailability()
+      return
+    }
+
+    noteHistoryRef.current.future.push(
+      cloneOperationShareNoteHistoryState(noteConfigRef.current),
+    )
+    applyNoteHistoryState(previous)
+    refreshNoteHistoryAvailability()
+  }, [
+    applyNoteHistoryState,
+    endNoteHistoryGroup,
+    refreshNoteHistoryAvailability,
+  ])
+
+  const redoNoteChange = useCallback(() => {
+    if (noteHistoryGroupRef.current) endNoteHistoryGroup()
+    const next = noteHistoryRef.current.future.pop()
+    if (!next) {
+      refreshNoteHistoryAvailability()
+      return
+    }
+
+    noteHistoryRef.current.past.push(
+      cloneOperationShareNoteHistoryState(noteConfigRef.current),
+    )
+    applyNoteHistoryState(next)
+    refreshNoteHistoryAvailability()
+  }, [
+    applyNoteHistoryState,
+    endNoteHistoryGroup,
+    refreshNoteHistoryAvailability,
+  ])
+
+  useEffect(() => {
+    noteHistoryRef.current = { future: [], past: [] }
+    noteHistoryGroupRef.current = null
+    setNoteHistoryAvailability({ canRedo: false, canUndo: false })
+    setNoteEditorRevision((current) => current + 1)
+  }, [operation.id])
 
   useEffect(() => {
     if (!shouldPersistCardConfigRef.current) return
@@ -706,7 +899,7 @@ export default function OperationShareDialog({
 
   const updateRoundNote = (round: number, note: string) => {
     invalidatePreview()
-    updateCardConfig((current) => ({
+    updateNoteCardConfig((current) => ({
       ...current,
       roundNoteOverrides: {
         ...current.roundNoteOverrides,
@@ -720,7 +913,7 @@ export default function OperationShareDialog({
     label: string,
   ) => {
     invalidatePreview()
-    updateCardConfig((current) => {
+    updateNoteCardConfig((current) => {
       const note = getOperationShareRoundNoteText(round, current)
       const included = note.includes(label)
       return {
@@ -737,7 +930,7 @@ export default function OperationShareDialog({
 
   const restoreRoundNote = (round: number) => {
     invalidatePreview()
-    updateCardConfig((current) => {
+    updateNoteCardConfig((current) => {
       const roundNoteOverrides = { ...current.roundNoteOverrides }
       delete roundNoteOverrides[round]
 
@@ -1419,7 +1612,13 @@ export default function OperationShareDialog({
                           ) : null}
                         </div>
                         {effectiveEditMode === 'note' ? (
-                          <OperationShareNoteFormatToolbar />
+                          <OperationShareNoteFormatToolbar
+                            canRedo={noteHistoryAvailability.canRedo}
+                            canUndo={noteHistoryAvailability.canUndo}
+                            onRedo={redoNoteChange}
+                            onUndo={undoNoteChange}
+                            runHistoryGroup={runNoteHistoryGroup}
+                          />
                         ) : null}
                       </div>
                       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
@@ -2239,6 +2438,8 @@ export default function OperationShareDialog({
                                       updateRoundNote(round.round, value)
                                     }
                                     placeholder="修改本回合备注"
+                                    revision={noteEditorRevision}
+                                    round={round.round}
                                     value={note}
                                   />
                                   {effectiveEditMode === 'note' &&
@@ -2297,28 +2498,68 @@ export default function OperationShareDialog({
                                           icon={<Icon icon="reset" size={9} />}
                                           minimal
                                           onClick={() =>
-                                            restoreRoundNote(round.round)
+                                            runNoteHistoryGroup(() =>
+                                              restoreRoundNote(round.round),
+                                            )
                                           }
                                           small
                                         >
                                           恢复自动内容
                                         </Button>
                                       ) : null}
+                                      {hasNoteOverride ? (
+                                        <Button
+                                          className="!inline-flex !h-5 !min-h-0 !items-center !gap-0.5 !px-1 !py-0 !text-[10px] !font-normal !leading-none"
+                                          icon={<Icon icon="reset" size={9} />}
+                                          minimal
+                                          onClick={() =>
+                                            runNoteHistoryGroup(() =>
+                                              resetOperationShareNoteFormatting(
+                                                round.round,
+                                              ),
+                                            )
+                                          }
+                                          small
+                                        >
+                                          恢复格式
+                                        </Button>
+                                      ) : null}
                                     </div>
                                   ) : effectiveEditMode === 'note' &&
                                     (hasNoteOverride ||
                                       hasHiddenOtherActions) ? (
-                                    <Button
-                                      className="!mt-1 !inline-flex !h-5 !min-h-0 !items-center !gap-0.5 !px-1 !py-0 !text-[10px] !font-normal !leading-none"
-                                      icon={<Icon icon="reset" size={9} />}
-                                      minimal
-                                      onClick={() =>
-                                        restoreRoundNote(round.round)
-                                      }
-                                      small
-                                    >
-                                      恢复自动内容
-                                    </Button>
+                                    <div className="mt-1 flex flex-wrap items-center gap-0.5">
+                                      {hasNoteOverride ? (
+                                        <Button
+                                          className="!inline-flex !h-5 !min-h-0 !items-center !gap-0.5 !px-1 !py-0 !text-[10px] !font-normal !leading-none"
+                                          icon={<Icon icon="reset" size={9} />}
+                                          minimal
+                                          onClick={() =>
+                                            runNoteHistoryGroup(() =>
+                                              resetOperationShareNoteFormatting(
+                                                round.round,
+                                              ),
+                                            )
+                                          }
+                                          small
+                                        >
+                                          恢复格式
+                                        </Button>
+                                      ) : null}
+                                      <Button
+                                        className="!inline-flex !h-5 !min-h-0 !items-center !gap-0.5 !px-1 !py-0 !text-[10px] !font-normal !leading-none"
+                                        icon={<Icon icon="reset" size={9} />}
+                                        minimal
+                                        onClick={() =>
+                                          runNoteHistoryGroup(() =>
+                                            restoreRoundNote(round.round),
+                                          )
+                                        }
+                                        small
+                                      >
+                                        恢复自动内容
+                                      </Button>
+                                    </div>
                                   ) : null}
                                 </td>
                               ) : null}

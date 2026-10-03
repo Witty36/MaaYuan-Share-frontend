@@ -191,30 +191,79 @@ function NoteNoHighlightIcon() {
   )
 }
 
+function NoteUndoIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-[13px] w-[13px]"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2.3}
+      viewBox="0 0 20 20"
+    >
+      <path d="M5.2 6.4h5.6a5 5 0 0 1 0 10H9.3" />
+      <path d="M8 3.6 5.2 6.4l2.8 2.8" />
+    </svg>
+  )
+}
+
+function NoteRedoIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-[13px] w-[13px]"
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2.3}
+      viewBox="0 0 20 20"
+    >
+      <path d="M14.8 6.4h-5.6a5 5 0 0 0 0 10h1.5" />
+      <path d="M12 3.6l2.8 2.8-2.8 2.8" />
+    </svg>
+  )
+}
+
 function NoteFormatButton({
   ariaLabel,
   active = false,
   children,
+  disabled = false,
   onClick,
+  soft = false,
   wide = false,
 }: {
   ariaLabel: string
   active?: boolean
   children: ReactNode
+  disabled?: boolean
   onClick: () => void
+  soft?: boolean
   wide?: boolean
 }) {
+  const stateClassName = soft
+    ? disabled
+      ? 'cursor-not-allowed bg-slate-100 opacity-45 dark:bg-slate-700'
+      : active
+        ? 'bg-sky-100 text-sky-700 dark:bg-sky-950/60 dark:text-sky-200'
+        : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600'
+    : disabled
+      ? 'cursor-not-allowed border border-slate-200 bg-white opacity-35 dark:border-slate-600 dark:bg-slate-800'
+      : active
+        ? 'border border-sky-400 bg-sky-50 text-sky-700 dark:border-sky-500 dark:bg-sky-950/50 dark:text-sky-200'
+        : 'border border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700'
+
   return (
     <button
       aria-label={ariaLabel}
       aria-pressed={active || undefined}
-      className={`inline-flex h-6 shrink-0 items-center justify-center rounded-md border p-0 text-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-500 dark:text-slate-200 ${
+      className={`inline-flex h-6 shrink-0 items-center justify-center rounded-md p-0 text-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sky-500 dark:text-slate-200 ${
         wide ? 'w-auto px-1.5' : 'w-6'
-      } ${
-        active
-          ? 'border-sky-400 bg-sky-50 text-sky-700 dark:border-sky-500 dark:bg-sky-950/50 dark:text-sky-200'
-          : 'border-slate-200 bg-white hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:hover:bg-slate-700'
-      }`}
+      } ${stateClassName}`}
+      disabled={disabled}
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
       title={ariaLabel}
@@ -294,32 +343,31 @@ function getNoteInlineCssProperty(property: NoteInlineStyleProperty) {
   return 'color'
 }
 
-function removeNoteInlineStyleFromRange(
-  range: Range,
-  editor: HTMLDivElement,
+function removeNoteInlineStyleFromFragment(
+  fragment: DocumentFragment,
   property: NoteInlineStyleProperty,
 ) {
   const cssProperty = getNoteInlineCssProperty(property)
+  const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_ELEMENT)
+  let node = walker.nextNode()
 
-  Array.from(editor.querySelectorAll<HTMLElement>('span, font')).forEach(
-    (element) => {
-      if (!range.intersectsNode(element)) return
-
-      if (element.tagName.toLowerCase() === 'font') {
-        if (property === 'color') {
-          element.removeAttribute('color')
-        } else if (property === 'fontSize') {
-          element.removeAttribute('size')
-        }
-        return
+  while (node) {
+    const element = node as HTMLElement
+    const tagName = element.tagName.toLowerCase()
+    if (tagName === 'font') {
+      if (property === 'color') {
+        element.removeAttribute('color')
+      } else if (property === 'fontSize') {
+        element.removeAttribute('size')
       }
-
+    } else if (tagName === 'span') {
       element.style.removeProperty(cssProperty)
       if (!element.getAttribute('style')?.trim()) {
         element.removeAttribute('style')
       }
-    },
-  )
+    }
+    node = walker.nextNode()
+  }
 }
 
 function wrapNoteRangeWithStyle(
@@ -329,21 +377,40 @@ function wrapNoteRangeWithStyle(
 ) {
   if (range.collapsed) return null
 
+  const fragment = range.extractContents()
+  removeNoteInlineStyleFromFragment(fragment, property)
+
   const span = document.createElement('span')
   span.style.setProperty(getNoteInlineCssProperty(property), nextValue)
-  span.appendChild(range.extractContents())
+  span.appendChild(fragment)
   range.insertNode(span)
   return span
 }
 
 function setNoteRangeStyle(
   range: Range,
-  editor: HTMLDivElement,
   property: NoteInlineStyleProperty,
   nextValue: string,
 ) {
-  removeNoteInlineStyleFromRange(range, editor, property)
   return wrapNoteRangeWithStyle(range, property, nextValue)
+}
+
+function clearNoteRangeStyle(
+  range: Range,
+  property: NoteInlineStyleProperty,
+) {
+  if (range.collapsed) return null
+
+  const fragment = range.extractContents()
+  const insertedNodes = Array.from(fragment.childNodes)
+  removeNoteInlineStyleFromFragment(fragment, property)
+  if (insertedNodes.length === 0) return null
+
+  range.insertNode(fragment)
+  const nextRange = document.createRange()
+  nextRange.setStartBefore(insertedNodes[0])
+  nextRange.setEndAfter(insertedNodes[insertedNodes.length - 1])
+  return nextRange
 }
 
 function getFirstSelectedTextNode(range: Range) {
@@ -373,6 +440,14 @@ function getNoteRangeFontSize(range: Range, editor: HTMLDivElement) {
   )
 }
 
+function getNoteFormattingRange(range: Range, editor: HTMLDivElement) {
+  if (!range.collapsed) return range
+
+  const wholeNoteRange = document.createRange()
+  wholeNoteRange.selectNodeContents(editor)
+  return wholeNoteRange
+}
+
 function applyNoteInlineStyle(
   property: NoteInlineStyleProperty,
   nextValue: string,
@@ -382,16 +457,17 @@ function applyNoteInlineStyle(
     selectAllEditors.forEach((editor) => {
       const range = document.createRange()
       range.selectNodeContents(editor)
-      if (!setNoteRangeStyle(range, editor, property, nextValue)) return
+      if (!setNoteRangeStyle(range, property, nextValue)) return
       emitNoteEditorInput(editor)
     })
     return
   }
 
   const { editor, selection, range } = getActiveNoteEditor()
-  if (!editor || !selection || !range || range.collapsed) return
+  if (!editor || !selection || !range) return
 
-  const span = setNoteRangeStyle(range, editor, property, nextValue)
+  const formattingRange = getNoteFormattingRange(range, editor)
+  const span = setNoteRangeStyle(formattingRange, property, nextValue)
   if (!span) return
 
   const nextRange = document.createRange()
@@ -409,16 +485,88 @@ function clearNoteInlineStyle(property: NoteInlineStyleProperty) {
       range.selectNodeContents(editor)
       if (range.collapsed) return
 
-      removeNoteInlineStyleFromRange(range, editor, property)
+      clearNoteRangeStyle(range, property)
       emitNoteEditorInput(editor)
     })
     return
   }
 
-  const { editor, range } = getActiveNoteEditor()
-  if (!editor || !range || range.collapsed) return
+  const { editor, selection, range } = getActiveNoteEditor()
+  if (!editor || !selection || !range) return
 
-  removeNoteInlineStyleFromRange(range, editor, property)
+  const nextRange = clearNoteRangeStyle(
+    getNoteFormattingRange(range, editor),
+    property,
+  )
+  if (!nextRange) return
+
+  selection.removeAllRanges()
+  selection.addRange(nextRange)
+  emitNoteEditorInput(editor)
+}
+
+function clearNoteFormatting() {
+  const properties: NoteInlineStyleProperty[] = [
+    'color',
+    'backgroundColor',
+    'fontSize',
+  ]
+  const clearRangeFormatting = (range: Range) => {
+    let nextRange: Range | null = range
+    for (const property of properties) {
+      if (!nextRange) return null
+      nextRange = clearNoteRangeStyle(nextRange, property)
+    }
+    return nextRange
+  }
+
+  const selectAllEditors = getSelectAllNoteEditors()
+  if (selectAllEditors.length > 0) {
+    selectAllEditors.forEach((editor) => {
+      const range = document.createRange()
+      range.selectNodeContents(editor)
+      if (!clearRangeFormatting(range)) return
+      emitNoteEditorInput(editor)
+    })
+    return
+  }
+
+  const { editor, selection, range } = getActiveNoteEditor()
+  if (!editor || !selection || !range) return
+
+  const nextRange = clearRangeFormatting(
+    getNoteFormattingRange(range, editor),
+  )
+  if (!nextRange) return
+
+  selection.removeAllRanges()
+  selection.addRange(nextRange)
+  emitNoteEditorInput(editor)
+}
+
+export function resetOperationShareNoteFormatting(round: number) {
+  if (typeof document === 'undefined') return
+
+  const editor = document.querySelector<HTMLDivElement>(
+    `[data-operation-share-note-editor][data-operation-share-note-round="${round}"]`,
+  )
+  if (!editor) return
+
+  const properties: NoteInlineStyleProperty[] = [
+    'color',
+    'backgroundColor',
+    'fontSize',
+  ]
+  const range = document.createRange()
+  range.selectNodeContents(editor)
+
+  let nextRange: Range | null = range
+  for (const property of properties) {
+    if (!nextRange) return
+    nextRange = clearNoteRangeStyle(nextRange, property)
+  }
+
+  if (!nextRange) return
   emitNoteEditorInput(editor)
 }
 
@@ -440,12 +588,7 @@ function applyNoteFontSize(direction: 1 | -1) {
       )
 
       if (
-        !setNoteRangeStyle(
-          range,
-          editor,
-          'fontSize',
-          `${nextFontSize}px`,
-        )
+        !setNoteRangeStyle(range, 'fontSize', `${nextFontSize}px`)
       ) {
         return
       }
@@ -455,9 +598,10 @@ function applyNoteFontSize(direction: 1 | -1) {
   }
 
   const { editor, range } = getActiveNoteEditor()
-  if (!editor || !range || range.collapsed) return
+  if (!editor || !range) return
 
-  const currentFontSize = getNoteRangeFontSize(range, editor)
+  const formattingRange = getNoteFormattingRange(range, editor)
+  const currentFontSize = getNoteRangeFontSize(formattingRange, editor)
   const nextFontSize = Math.min(
     NOTE_MAX_FONT_SIZE,
     Math.max(
@@ -465,10 +609,34 @@ function applyNoteFontSize(direction: 1 | -1) {
       Math.round(currentFontSize) + direction * NOTE_FONT_SIZE_STEP,
     ),
   )
-  applyNoteInlineStyle('fontSize', `${nextFontSize}px`)
+  const span = setNoteRangeStyle(
+    formattingRange,
+    'fontSize',
+    `${nextFontSize}px`,
+  )
+  if (!span) return
+
+  const nextRange = document.createRange()
+  nextRange.selectNodeContents(span)
+  const selection = window.getSelection()
+  selection?.removeAllRanges()
+  selection?.addRange(nextRange)
+  emitNoteEditorInput(editor)
 }
 
-export function OperationShareNoteFormatToolbar() {
+export function OperationShareNoteFormatToolbar({
+  canRedo,
+  canUndo,
+  onRedo,
+  onUndo,
+  runHistoryGroup,
+}: {
+  canRedo: boolean
+  canUndo: boolean
+  onRedo: () => void
+  onUndo: () => void
+  runHistoryGroup: (action: () => void) => void
+}) {
   const [allSelected, setAllSelected] = useState(false)
 
   useEffect(() => {
@@ -501,53 +669,102 @@ export function OperationShareNoteFormatToolbar() {
           {allSelected ? '已全选' : '全选'}
         </span>
       </NoteFormatButton>
+      <NoteFormatButton
+        ariaLabel="撤销"
+        disabled={!canUndo}
+        onClick={onUndo}
+        soft
+      >
+        <NoteUndoIcon />
+      </NoteFormatButton>
+      <NoteFormatButton
+        ariaLabel="恢复"
+        disabled={!canRedo}
+        onClick={onRedo}
+        soft
+      >
+        <NoteRedoIcon />
+      </NoteFormatButton>
       <span
         aria-hidden="true"
         className="mx-0.5 h-4 w-px shrink-0 bg-slate-200 dark:bg-slate-600"
       />
       <NoteFormatButton
         ariaLabel="恢复原来的字色"
-        onClick={() => clearNoteInlineStyle('color')}
+        onClick={() =>
+          runHistoryGroup(() => clearNoteInlineStyle('color'))
+        }
       >
         <NoteColorIcon color="#111827" />
       </NoteFormatButton>
       <NoteFormatButton
         ariaLabel="红字"
-        onClick={() => applyNoteInlineStyle('color', NOTE_COLORS.red)}
+        onClick={() =>
+          runHistoryGroup(() =>
+            applyNoteInlineStyle('color', NOTE_COLORS.red),
+          )
+        }
       >
         <NoteColorIcon color={NOTE_COLORS.red} />
       </NoteFormatButton>
       <NoteFormatButton
         ariaLabel="蓝字"
-        onClick={() => applyNoteInlineStyle('color', NOTE_COLORS.blue)}
+        onClick={() =>
+          runHistoryGroup(() =>
+            applyNoteInlineStyle('color', NOTE_COLORS.blue),
+          )
+        }
       >
         <NoteColorIcon color={NOTE_COLORS.blue} />
       </NoteFormatButton>
       <NoteFormatButton
         ariaLabel="取消背景色"
-        onClick={() => clearNoteInlineStyle('backgroundColor')}
+        onClick={() =>
+          runHistoryGroup(() =>
+            clearNoteInlineStyle('backgroundColor'),
+          )
+        }
       >
         <NoteNoHighlightIcon />
       </NoteFormatButton>
       <NoteFormatButton
         ariaLabel="黄色背景"
         onClick={() =>
-          applyNoteInlineStyle('backgroundColor', NOTE_HIGHLIGHT_COLOR)
+          runHistoryGroup(() =>
+            applyNoteInlineStyle(
+              'backgroundColor',
+              NOTE_HIGHLIGHT_COLOR,
+            ),
+          )
         }
       >
         <NoteHighlightIcon />
       </NoteFormatButton>
       <NoteFormatButton
         ariaLabel="放大文字"
-        onClick={() => applyNoteFontSize(1)}
+        onClick={() => runHistoryGroup(() => applyNoteFontSize(1))}
       >
         <NoteSizeIcon larger />
       </NoteFormatButton>
       <NoteFormatButton
         ariaLabel="缩小文字"
-        onClick={() => applyNoteFontSize(-1)}
+        onClick={() => runHistoryGroup(() => applyNoteFontSize(-1))}
       >
         <NoteSizeIcon larger={false} />
+      </NoteFormatButton>
+      <span
+        aria-hidden="true"
+        className="mx-0.5 h-4 w-px shrink-0 bg-slate-200 dark:bg-slate-600"
+      />
+      <NoteFormatButton
+        ariaLabel="恢复默认格式"
+        onClick={() => runHistoryGroup(clearNoteFormatting)}
+        wide
+      >
+        <span className="inline-flex items-center gap-1 text-[10px] font-medium leading-none">
+          <Icon icon="reset" size={10} />
+          恢复默认格式
+        </span>
       </NoteFormatButton>
     </div>
   )
@@ -559,6 +776,8 @@ export function OperationShareNoteEditor({
   onBlur,
   onChange,
   placeholder,
+  revision,
+  round,
   value,
 }: {
   ariaLabel: string
@@ -566,10 +785,13 @@ export function OperationShareNoteEditor({
   onBlur?: () => void
   onChange: (value: string) => void
   placeholder: string
+  revision: number
+  round: number
   value: string
 }) {
   const editorRef = useRef<HTMLDivElement | null>(null)
   const isEditingRef = useRef(false)
+  const revisionRef = useRef(revision)
 
   const emitChange = useCallback(() => {
     const editor = editorRef.current
@@ -585,9 +807,21 @@ export function OperationShareNoteEditor({
 
   useEffect(() => {
     const editor = editorRef.current
-    if (!editor || isEditingRef.current || editor.innerHTML === value) return
+    const revisionChanged = revisionRef.current !== revision
+    revisionRef.current = revision
+    if (!editor || editor.innerHTML === value) return
+    if (!revisionChanged && isEditingRef.current) return
+
     editor.innerHTML = value
-  }, [value])
+    if (!revisionChanged || document.activeElement !== editor) return
+
+    const range = document.createRange()
+    range.selectNodeContents(editor)
+    range.collapse(false)
+    const selection = window.getSelection()
+    selection?.removeAllRanges()
+    selection?.addRange(range)
+  }, [revision, value])
 
   return (
     <div className="min-w-0">
@@ -597,6 +831,7 @@ export function OperationShareNoteEditor({
         className={`${className} empty:before:pointer-events-none empty:before:text-slate-400 empty:before:content-[attr(data-placeholder)] dark:empty:before:text-slate-500`}
         contentEditable
         data-operation-share-note-editor
+        data-operation-share-note-round={round}
         data-placeholder={placeholder}
         onBlur={() => {
           isEditingRef.current = false
