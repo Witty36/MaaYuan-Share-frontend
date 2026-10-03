@@ -3583,8 +3583,8 @@
           "zh_tw": "恢復目標色"
         },
         "share_cell_color_clear_cell": {
-          "cn": "清除颜色",
-          "zh_tw": "清除顏色"
+          "cn": "恢复目标色",
+          "zh_tw": "恢復目標色"
         },
         "share_cell_color_clear_selection": {
           "cn": "取消选择（{{count}}）",

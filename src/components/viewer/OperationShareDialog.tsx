@@ -10,7 +10,14 @@ import {
 
 import { useAtomValue } from 'jotai'
 import { CopilotInfoStatusEnum } from 'maa-copilot-client'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 
 import {
   getOperationShareImageConfigs,
@@ -86,6 +93,12 @@ function isMobileDeviceUserAgent() {
     navigator.userAgent,
   )
 }
+
+const MOBILE_TABLE_ROUND_COLUMN_WIDTH = 24
+const MOBILE_ACTION_COLUMN_WIDTH = 36
+const MOBILE_ACTION_COLUMN_WIDE_WIDTH = 72
+const MOBILE_NOTE_ACTION_COLUMN_MIN_WIDTH = 28
+const MOBILE_NOTE_MIN_COLUMN_WIDTH = 240
 
 function appendOperationShareNoteText(note: string, text: string) {
   const trimmed = note.trim()
@@ -212,6 +225,14 @@ export default function OperationShareDialog({
   const showRoundNoteColumn =
     cardConfig.showNotes || cardConfig.showOtherActions
   const effectiveEditMode: EditMode = showRoundNoteColumn ? editMode : 'color'
+  const [useMobileEqualActionColumns, setUseMobileEqualActionColumns] =
+    useState(false)
+  const [mobileNoteActionColumnWidths, setMobileNoteActionColumnWidths] =
+    useState<Record<string, number>>({})
+  const mobileTableScrollRef = useRef<HTMLDivElement | null>(null)
+  const mobileTableRef = useRef<HTMLTableElement | null>(null)
+  const isMobileNoteMode =
+    isMobileDevice && effectiveEditMode === 'note' && showRoundNoteColumn
 
   useEffect(() => {
     if (!showRoundNoteColumn) setEditMode('color')
@@ -370,6 +391,167 @@ export default function OperationShareDialog({
       })),
     [editableColumns, model.rounds],
   )
+  const getMobileNoteActionColumnWidth = (columnKey: string) =>
+    mobileNoteActionColumnWidths[columnKey] ??
+    MOBILE_NOTE_ACTION_COLUMN_MIN_WIDTH
+  const mobileNoteTableMinWidth =
+    MOBILE_TABLE_ROUND_COLUMN_WIDTH +
+    editableColumnGroups.reduce(
+      (width, column) =>
+        width + getMobileNoteActionColumnWidth(column.key),
+      0,
+    ) +
+    MOBILE_NOTE_MIN_COLUMN_WIDTH
+  const useMobileEqualColumns =
+    isMobileDevice &&
+    effectiveEditMode === 'color' &&
+    !showRoundNoteColumn &&
+    useMobileEqualActionColumns
+  const useMobileFixedActionColumns =
+    isMobileDevice &&
+    effectiveEditMode === 'color' &&
+    (showRoundNoteColumn || !useMobileEqualActionColumns)
+
+  useLayoutEffect(() => {
+    const scrollContainer = mobileTableScrollRef.current
+    if (
+      !isMobileDevice ||
+      effectiveEditMode !== 'color' ||
+      showRoundNoteColumn ||
+      !scrollContainer
+    ) {
+      setUseMobileEqualActionColumns(false)
+      return
+    }
+
+    const updateColumnLayout = () => {
+      const measuredActionWidths = new Map<string, number>()
+      mobileTableRef.current
+        ?.querySelectorAll<HTMLElement>('[data-mobile-action-column]')
+        .forEach((actionElement) => {
+          const columnKey = actionElement.dataset.mobileActionColumn
+          if (!columnKey) return
+
+          measuredActionWidths.set(
+            columnKey,
+            Math.max(
+              measuredActionWidths.get(columnKey) ?? 0,
+              Math.ceil(actionElement.getBoundingClientRect().width),
+              actionElement.scrollWidth,
+            ),
+          )
+        })
+
+      const fixedActionTableWidth =
+        MOBILE_TABLE_ROUND_COLUMN_WIDTH +
+        editableColumnGroups.reduce((width, column) => {
+          const assignedWidth =
+            column.maxActionsInRound >= 3
+              ? MOBILE_ACTION_COLUMN_WIDE_WIDTH
+              : MOBILE_ACTION_COLUMN_WIDTH
+
+          return (
+            width +
+            Math.max(assignedWidth, measuredActionWidths.get(column.key) ?? 0)
+          )
+        }, 0) +
+        editableColumnGroups.length +
+        1
+
+      setUseMobileEqualActionColumns(
+        fixedActionTableWidth < scrollContainer.clientWidth,
+      )
+    }
+
+    updateColumnLayout()
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateColumnLayout)
+      return () => window.removeEventListener('resize', updateColumnLayout)
+    }
+
+    const observer = new ResizeObserver(updateColumnLayout)
+    observer.observe(scrollContainer)
+    return () => observer.disconnect()
+  }, [
+    cardConfig.hiddenOtherActionKeys,
+    cardConfig.showOtherActions,
+    cardConfig.showTargetSwitches,
+    colorMode,
+    editableColumnGroups,
+    effectiveEditMode,
+    isMobileDevice,
+    showRoundNoteColumn,
+  ])
+
+  useLayoutEffect(() => {
+    if (!isMobileNoteMode) {
+      setMobileNoteActionColumnWidths({})
+      return
+    }
+
+    let cancelled = false
+
+    const updateNoteActionColumnWidth = () => {
+      const actionGroups =
+        mobileTableRef.current?.querySelectorAll<HTMLElement>(
+          '[data-mobile-note-action-group]',
+        )
+
+      const contentWidths: Record<string, number> = {}
+      Array.from(actionGroups ?? []).forEach((group) => {
+        const columnKey = group.dataset.mobileNoteActionColumn
+        if (!columnKey) return
+
+        contentWidths[columnKey] = Math.max(
+          contentWidths[columnKey] ?? MOBILE_NOTE_ACTION_COLUMN_MIN_WIDTH,
+          Math.ceil(
+            Math.max(
+              group.getBoundingClientRect().width,
+              group.scrollWidth,
+            ),
+          ) + 4,
+        )
+      })
+
+      const nextWidths = Object.fromEntries(
+        editableColumnGroups.map((column) => [
+          column.key,
+          Math.max(
+            MOBILE_NOTE_ACTION_COLUMN_MIN_WIDTH,
+            contentWidths[column.key] ?? MOBILE_NOTE_ACTION_COLUMN_MIN_WIDTH,
+          ),
+        ]),
+      ) as Record<string, number>
+
+      if (!cancelled) {
+        setMobileNoteActionColumnWidths((currentWidths) => {
+          const changed =
+            Object.keys(nextWidths).length !==
+              Object.keys(currentWidths).length ||
+            Object.entries(nextWidths).some(
+              ([columnKey, width]) =>
+                currentWidths[columnKey] !== width,
+            )
+          return changed ? nextWidths : currentWidths
+        })
+      }
+    }
+
+    updateNoteActionColumnWidth()
+    document.fonts?.ready.then(updateNoteActionColumnWidth).catch(() => {})
+    window.addEventListener('resize', updateNoteActionColumnWidth)
+
+    return () => {
+      cancelled = true
+      window.removeEventListener('resize', updateNoteActionColumnWidth)
+    }
+  }, [
+    cardConfig.actionColors,
+    editableColumnGroups,
+    isMobileNoteMode,
+    language,
+  ])
   const actionKeysByCellKey = useMemo(() => {
     const keysByCellKey = new Map<string, string[]>()
 
@@ -896,10 +1078,10 @@ export default function OperationShareDialog({
       title={t.components.viewer.OperationViewer.share_image_dialog_title}
     >
       <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-        <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto bg-slate-100 px-2 py-4 md:p-6">
+        <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto bg-slate-100 px-2 py-4 md:p-6 dark:bg-[#2f343c]">
           <div
             aria-label="分享图片类型"
-            className="mb-5 grid grid-cols-2 gap-2 rounded border border-slate-200 bg-white p-2"
+            className="mb-5 grid grid-cols-2 gap-2 rounded border border-slate-200 bg-white p-2 dark:border-slate-600 dark:bg-[#383e47]"
             role="tablist"
           >
             <Button
@@ -960,13 +1142,15 @@ export default function OperationShareDialog({
               />
             </div>
             {shortCodeHint ? (
-              <p className="m-0 text-xs text-slate-500">{shortCodeHint}</p>
+              <p className="m-0 text-xs text-slate-500 dark:text-slate-400">
+                {shortCodeHint}
+              </p>
             ) : null}
           </div>
 
           {cardKind === 'actions' ? (
             <fieldset
-              className="mb-5 min-w-0 max-w-full overflow-hidden rounded border border-slate-200 bg-white px-1 py-4 md:p-4"
+              className="mb-5 min-w-0 max-w-full overflow-hidden rounded border border-slate-200 bg-white px-1 py-4 dark:border-slate-600 dark:bg-[#383e47] md:p-4"
               disabled={
                 status === 'generating' || authorConfigStatus === 'loading'
               }
@@ -974,7 +1158,7 @@ export default function OperationShareDialog({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-base font-semibold text-slate-800">
+                    <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">
                       生成前编辑
                     </h3>
                     <Button
@@ -997,7 +1181,7 @@ export default function OperationShareDialog({
                       恢复作者配置
                     </Button>
                   </div>
-                  <p className="mt-1 text-sm text-slate-500">
+                  <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                     配置会自动保存到当前作业。
                   </p>
                 </div>
@@ -1032,9 +1216,9 @@ export default function OperationShareDialog({
               </div>
 
               {model.rounds.length > 0 ? (
-                <div className="mt-4 border-t border-slate-200 pt-4">
+                <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-600">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h4 className="text-sm font-semibold text-slate-700">
+                    <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                       表格配色
                     </h4>
                     <Button
@@ -1050,9 +1234,12 @@ export default function OperationShareDialog({
                       恢复预设
                     </Button>
                   </div>
-                  <p className="mt-1 text-xs text-slate-400">
+                  <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">
                     选择生成作业分享图整体的主题色，可自定义颜色。
-                    <span aria-live="polite" className="ml-2 text-slate-500">
+                    <span
+                      aria-live="polite"
+                      className="ml-2 text-slate-500 dark:text-slate-400"
+                    >
                       {tableThemeStatus}
                     </span>
                   </p>
@@ -1075,8 +1262,8 @@ export default function OperationShareDialog({
                           aria-pressed={selected}
                           className={`flex h-7 items-center gap-1.5 rounded border px-1.5 text-xs transition-colors ${
                             selected
-                              ? 'border-sky-500 bg-sky-50 text-sky-800'
-                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                              ? 'border-sky-500 bg-sky-50 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-200 dark:hover:border-slate-500 dark:hover:bg-slate-600'
                           }`}
                           onClick={() => updateTableColor(preset.baseColor)}
                           type="button"
@@ -1096,7 +1283,7 @@ export default function OperationShareDialog({
                     })}
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <label className="flex h-7 items-center gap-2 rounded border border-slate-200 bg-slate-50 px-2 text-xs text-slate-600">
+                    <label className="flex h-7 items-center gap-2 rounded border border-slate-200 bg-slate-50 px-2 text-xs text-slate-600 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200">
                       <span>自定义</span>
                       <input
                         aria-label="选择表格主题色"
@@ -1110,7 +1297,7 @@ export default function OperationShareDialog({
                           DEFAULT_OPERATION_SHARE_TABLE_BASE_COLOR
                         }
                       />
-                      <span className="tabular-nums text-slate-500">
+                      <span className="tabular-nums text-slate-500 dark:text-slate-400">
                         {cardConfig.tableColor ?? '默认'}
                       </span>
                     </label>
@@ -1122,7 +1309,7 @@ export default function OperationShareDialog({
                           ? '收起高级自定义'
                           : '展开高级自定义'
                       }
-                      className="!text-xs !font-normal !text-slate-500 hover:!text-slate-700"
+                      className="!text-xs !font-normal !text-slate-500 hover:!text-slate-700 dark:!text-slate-400 dark:hover:!text-slate-200"
                       icon={
                         <Icon
                           icon={
@@ -1147,14 +1334,14 @@ export default function OperationShareDialog({
                   </div>
                   {isTableThemeAdvancedOpen ? (
                     <div
-                      className="mt-2 w-fit max-w-full rounded border border-slate-200 bg-slate-50 p-2"
+                      className="mt-2 w-fit max-w-full rounded border border-slate-200 bg-slate-50 p-2 dark:border-slate-600 dark:bg-slate-800/60"
                       id="operation-share-table-theme-advanced"
                     >
-                      <div className="flex flex-wrap items-center gap-1 text-xs text-slate-600">
+                      <div className="flex flex-wrap items-center gap-1 text-xs text-slate-600 dark:text-slate-200">
                         {tableThemeColorFields.map(({ key, label, value }) => (
                           <label
                             key={key}
-                            className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded border border-slate-200 bg-white px-1.5"
+                            className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded border border-slate-200 bg-white px-1.5 dark:border-slate-600 dark:bg-slate-700"
                           >
                             <input
                               aria-label={`${label}颜色`}
@@ -1178,11 +1365,11 @@ export default function OperationShareDialog({
               ) : null}
 
               {model.rounds.length > 0 ? (
-                <div className="mt-4 border-t border-slate-200 pt-4">
+                <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-600">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
-                        <h4 className="text-sm font-semibold text-slate-700">
+                        <h4 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                           {
                             t.components.viewer.OperationViewer
                               .share_cell_color_section_title
@@ -1190,7 +1377,7 @@ export default function OperationShareDialog({
                         </h4>
                         <div
                           aria-label="表格编辑模式"
-                          className="inline-flex overflow-hidden rounded border border-slate-200 bg-white p-0.5"
+                          className="inline-flex overflow-hidden rounded border border-slate-200 bg-white p-0.5 dark:border-slate-600 dark:bg-slate-700"
                           role="group"
                         >
                           <Button
@@ -1215,7 +1402,7 @@ export default function OperationShareDialog({
                           ) : null}
                         </div>
                       </div>
-                      <p className="mt-1 text-xs text-slate-500">
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                         {effectiveEditMode === 'note'
                           ? '当前编辑备注，动作仅供查看。'
                           : colorMode === 'action'
@@ -1226,9 +1413,9 @@ export default function OperationShareDialog({
                       </p>
                     </div>
                     {effectiveEditMode === 'color' ? (
-                      <div className="mt-3 border-y border-slate-200/70 py-2">
+                      <div className="mt-3 border-y border-slate-200/70 py-2 dark:border-slate-600">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="shrink-0 text-xs font-medium text-slate-600">
+                          <span className="shrink-0 text-xs font-medium text-slate-600 dark:text-slate-200">
                             {
                               t.components.viewer.OperationViewer
                                 .share_action_color_notes_title
@@ -1249,7 +1436,7 @@ export default function OperationShareDialog({
                             >
                               <span
                                 aria-hidden="true"
-                                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[10px] font-bold ${
+                                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[10px] font-bold text-slate-800 ${
                                   colorKey === 'ice'
                                     ? 'border-slate-300'
                                     : 'border-transparent'
@@ -1257,7 +1444,7 @@ export default function OperationShareDialog({
                                 style={{
                                   backgroundColor:
                                     colorKey === 'ice'
-                                      ? 'transparent'
+                                      ? '#ffffff'
                                       : getOperationShareActionFillColor(
                                           colorKey,
                                         ),
@@ -1265,7 +1452,7 @@ export default function OperationShareDialog({
                               >
                                 A
                               </span>
-                              <span className="w-7 shrink-0 text-[11px] text-slate-500">
+                              <span className="w-7 shrink-0 text-[11px] text-slate-500 dark:text-slate-400">
                                 {actionColorNoteNames[colorKey]}
                               </span>
                               <input
@@ -1274,7 +1461,7 @@ export default function OperationShareDialog({
                                     color: actionColorNoteNames[colorKey],
                                   },
                                 )}
-                                className="h-7 min-w-0 flex-1 rounded bg-white/90 px-1.5 text-xs text-slate-700 outline-none transition placeholder:text-slate-300 focus:bg-white focus:ring-1 focus:ring-sky-200"
+                                className="h-7 min-w-0 flex-1 rounded bg-white/90 px-1.5 text-xs text-slate-700 outline-none transition placeholder:text-slate-300 focus:bg-white focus:ring-1 focus:ring-sky-200 dark:bg-slate-800 dark:text-slate-50 dark:placeholder:text-slate-500 dark:ring-1 dark:ring-inset dark:ring-slate-600 dark:focus:bg-slate-800 dark:focus:ring-sky-500"
                                 maxLength={80}
                                 onChange={(event) =>
                                   updateActionColorNote(
@@ -1308,7 +1495,7 @@ export default function OperationShareDialog({
                             t.components.viewer.OperationViewer
                               .share_cell_color_group_action
                           }
-                          className="flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 p-1"
+                          className="flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 p-1 dark:border-slate-600 dark:bg-slate-800"
                           role="group"
                         >
                           {OPERATION_SHARE_ACTION_COLOR_ORDER.map(
@@ -1323,7 +1510,7 @@ export default function OperationShareDialog({
                                 <button
                                   key={colorKey}
                                   aria-label={label}
-                                  className="h-8 w-8 rounded border border-slate-300 text-base font-bold transition-transform enabled:hover:scale-105 enabled:focus:outline-none enabled:focus:ring-2 enabled:focus:ring-sky-500 enabled:focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-100"
+                                  className="h-8 w-8 rounded border border-slate-300 text-base font-bold text-slate-800 transition-transform enabled:hover:scale-105 enabled:focus:outline-none enabled:focus:ring-2 enabled:focus:ring-sky-500 enabled:focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-100"
                                   disabled={
                                     (colorMode === 'action'
                                       ? selectedActionKeys.size
@@ -1341,7 +1528,7 @@ export default function OperationShareDialog({
                                   style={{
                                     backgroundColor:
                                       colorKey === 'ice'
-                                        ? 'transparent'
+                                        ? '#ffffff'
                                         : getOperationShareActionFillColor(
                                             colorKey,
                                           ),
@@ -1372,15 +1559,18 @@ export default function OperationShareDialog({
                             aria-pressed={colorMode === 'action'}
                             className={`h-6 rounded px-1.5 transition ${
                               colorMode === 'action'
-                                ? 'bg-sky-50 font-medium text-sky-700'
-                                : 'hover:text-slate-600'
+                                ? 'bg-sky-50 font-medium text-sky-700 dark:bg-sky-900/40 dark:text-sky-300'
+                                : 'hover:text-slate-600 dark:hover:text-slate-200'
                             }`}
                             onClick={() => setColorMode('action')}
                             type="button"
                           >
                             操作
                           </button>
-                          <span aria-hidden="true" className="text-slate-300">
+                          <span
+                            aria-hidden="true"
+                            className="text-slate-300 dark:text-slate-600"
+                          >
                             /
                           </span>
                           <button
@@ -1391,8 +1581,8 @@ export default function OperationShareDialog({
                             aria-pressed={colorMode === 'cell'}
                             className={`h-6 rounded px-1.5 transition ${
                               colorMode === 'cell'
-                                ? 'bg-sky-50 font-medium text-sky-700'
-                                : 'hover:text-slate-600'
+                                ? 'bg-sky-50 font-medium text-sky-700 dark:bg-sky-900/40 dark:text-sky-300'
+                                : 'hover:text-slate-600 dark:hover:text-slate-200'
                             }`}
                             onClick={() => setColorMode('cell')}
                             type="button"
@@ -1446,14 +1636,27 @@ export default function OperationShareDialog({
                       </div>
                     ) : null}
                   </div>
-                  <div className="mt-3 max-h-80 w-full min-w-0 max-w-full overflow-x-auto overflow-y-auto overscroll-x-contain rounded border border-slate-200">
+                  <div
+                    className="mt-3 max-h-80 w-full min-w-0 max-w-full overflow-x-auto overflow-y-auto overscroll-x-contain rounded border border-slate-200 bg-white dark:border-slate-600 dark:bg-[#2f343c]"
+                    ref={mobileTableScrollRef}
+                  >
                     <table
-                      className={`border-collapse bg-white text-center text-xs ${
+                      className={`border-collapse bg-white text-center text-xs text-slate-800 dark:bg-[#2f343c] dark:text-slate-100 ${
                         isMobileDevice
-                          ? 'w-max min-w-0 table-auto'
+                          ? isMobileNoteMode
+                            ? 'w-full table-fixed'
+                            : useMobileEqualColumns
+                              ? 'w-full min-w-full table-fixed'
+                              : 'w-max min-w-0 table-auto'
                           : 'w-full table-fixed'
                       }`}
                       data-edit-mode={effectiveEditMode}
+                      ref={mobileTableRef}
+                      style={
+                        isMobileNoteMode
+                          ? { minWidth: `${mobileNoteTableMinWidth}px` }
+                          : undefined
+                      }
                     >
                       <colgroup>
                         <col
@@ -1463,10 +1666,25 @@ export default function OperationShareDialog({
                           <col
                             key={column.key}
                             className={
-                              isMobileDevice
+                              isMobileDevice && useMobileFixedActionColumns
                                 ? column.maxActionsInRound >= 3
                                   ? 'w-[4.5rem]'
                                   : 'w-9'
+                                : undefined
+                            }
+                            style={
+                              isMobileNoteMode
+                                ? {
+                                    width: `${getMobileNoteActionColumnWidth(
+                                      column.key,
+                                    )}px`,
+                                    minWidth: `${getMobileNoteActionColumnWidth(
+                                      column.key,
+                                    )}px`,
+                                    maxWidth: `${getMobileNoteActionColumnWidth(
+                                      column.key,
+                                    )}px`,
+                                  }
                                 : undefined
                             }
                           />
@@ -1475,15 +1693,19 @@ export default function OperationShareDialog({
                           <col
                             style={{
                               width:
-                                effectiveEditMode === 'note' ? '56%' : '16%',
+                                isMobileNoteMode
+                                  ? 'auto'
+                                  : effectiveEditMode === 'note'
+                                    ? '56%'
+                                    : '16%',
                             }}
                           />
                         ) : null}
                       </colgroup>
-                      <thead className="text-slate-600">
+                      <thead className="text-slate-600 dark:text-slate-300">
                         <tr>
                           <th
-                            className={`sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 shadow-[0_1px_0_rgba(148,163,184,0.35)] ${
+                            className={`sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 shadow-[0_1px_0_rgba(148,163,184,0.35)] dark:border-slate-600 dark:bg-slate-800 ${
                               isMobileDevice ? 'px-0 py-1' : 'px-1 py-1.5'
                             }`}
                             style={
@@ -1533,7 +1755,7 @@ export default function OperationShareDialog({
                             return (
                               <th
                                 key={column.key}
-                                className={`sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 shadow-[0_1px_0_rgba(148,163,184,0.35)] last:border-r-0 ${
+                                className={`sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 shadow-[0_1px_0_rgba(148,163,184,0.35)] last:border-r-0 dark:border-slate-600 dark:bg-slate-800 ${
                                   effectiveEditMode === 'note'
                                     ? isMobileDevice
                                       ? 'px-0 py-1'
@@ -1542,6 +1764,21 @@ export default function OperationShareDialog({
                                       ? 'px-0 py-1'
                                       : 'px-2 py-2'
                                 }`}
+                                style={
+                                  isMobileNoteMode
+                                    ? {
+                                        width: `${getMobileNoteActionColumnWidth(
+                                          column.key,
+                                        )}px`,
+                                        minWidth: `${getMobileNoteActionColumnWidth(
+                                          column.key,
+                                        )}px`,
+                                        maxWidth: `${getMobileNoteActionColumnWidth(
+                                          column.key,
+                                        )}px`,
+                                      }
+                                    : undefined
+                                }
                               >
                                 {effectiveEditMode === 'color' ? (
                                   <OperationShareSelectionCheckbox
@@ -1570,10 +1807,10 @@ export default function OperationShareDialog({
                           })}
                           {showRoundNoteColumn ? (
                             <th
-                              className={`sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 text-left shadow-[0_1px_0_rgba(148,163,184,0.35)] last:border-r-0 ${
+                              className={`sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 text-left shadow-[0_1px_0_rgba(148,163,184,0.35)] last:border-r-0 dark:border-slate-600 dark:bg-slate-800 ${
                                 effectiveEditMode === 'note'
                                   ? 'px-2 py-2'
-                                  : 'px-1 py-1 text-[11px] text-slate-500'
+                                  : 'px-1 py-1 text-[11px] text-slate-500 dark:text-slate-400'
                               }`}
                             >
                               回合备注
@@ -1625,7 +1862,7 @@ export default function OperationShareDialog({
                           return (
                             <tr key={round.round}>
                               <th
-                                className="border-b border-r border-slate-200 px-1 py-0.5 font-medium text-slate-600 max-sm:px-0 max-sm:py-0"
+                                className="border-b border-r border-slate-200 px-1 py-0.5 font-medium text-slate-600 dark:border-slate-600 dark:text-slate-300 max-sm:px-0 max-sm:py-0"
                                 style={
                                   isMobileDevice
                                     ? {
@@ -1673,102 +1910,166 @@ export default function OperationShareDialog({
                                 )
                                 const cellSelected =
                                   selectedCellKeys.has(cellKey)
+                                const cellHasColor = Boolean(
+                                  cardConfig.cellColors[cellKey],
+                                )
+                                const actionNodes = actions.map((action) => {
+                                  const actionKey =
+                                    buildOperationShareActionKey(
+                                      round.round,
+                                      action.order,
+                                    )
+                                  const selected =
+                                    selectedActionKeys.has(actionKey)
+                                  const label = getOperationShareActionLabel(
+                                    action,
+                                    displayOrderByActionOrder.get(action.order),
+                                  )
+                                  const actionFill =
+                                    getOperationShareActionFillColor(
+                                      cardConfig.actionColors[actionKey],
+                                      action.targetIndex,
+                                    )
+
+                                  return effectiveEditMode === 'color' ? (
+                                    <button
+                                      key={actionKey}
+                                      aria-label={`${round.round} 回合 ${column.label}：${label}`}
+                                      aria-pressed={selected}
+                                      data-mobile-action-column={column.key}
+                                      className={`whitespace-nowrap rounded-sm py-0.5 font-medium leading-4 transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
+                                        actionFill ||
+                                        (cellHasColor && !selected)
+                                          ? 'text-slate-800'
+                                          : 'text-slate-800 dark:text-slate-100'
+                                      } ${
+                                        isMobileDevice ? 'px-0.5' : 'px-1'
+                                      } ${
+                                        selected
+                                          ? 'bg-sky-50 ring-1 ring-inset ring-sky-500 dark:bg-sky-900/60 dark:ring-sky-400'
+                                          : ''
+                                      }`}
+                                      onClick={() =>
+                                        toggleActionSelection(
+                                          actionKey,
+                                          !selected,
+                                        )
+                                      }
+                                      style={
+                                        actionFill
+                                          ? {
+                                              backgroundColor: actionFill,
+                                              ...(isMobileDevice
+                                                ? {}
+                                                : { paddingInline: '4px' }),
+                                            }
+                                          : undefined
+                                      }
+                                      type="button"
+                                    >
+                                      {label}
+                                    </button>
+                                  ) : (
+                                    <span
+                                      key={actionKey}
+                                      className={`whitespace-nowrap rounded-sm px-0.5 py-0.5 text-[11px] font-medium leading-4 ${
+                                        actionFill
+                                          ? 'text-slate-800'
+                                          : 'text-slate-800 dark:text-slate-100'
+                                      }`}
+                                      style={
+                                        actionFill
+                                          ? { backgroundColor: actionFill }
+                                          : undefined
+                                      }
+                                    >
+                                      {label}
+                                    </span>
+                                  )
+                                })
+
                                 return (
                                   <td
                                     key={column.key}
-                                    className={`border-b border-r border-slate-200 last:border-r-0 ${
+                                    className={`border-b border-r border-slate-200 last:border-r-0 dark:border-slate-600 ${
                                       effectiveEditMode === 'note'
-                                        ? 'p-0.5'
+                                        ? `p-0.5 ${
+                                            isMobileNoteMode
+                                              ? 'text-center align-middle'
+                                              : ''
+                                          }`
                                         : isMobileDevice
                                           ? 'p-0'
                                           : 'p-1'
                                     }`}
-                                    style={getOperationShareCellVisualStyle(
-                                      cardConfig.cellColors[cellKey],
-                                      cardConfig.showCellPattern,
-                                    )}
+                                    style={{
+                                      ...getOperationShareCellVisualStyle(
+                                        cardConfig.cellColors[cellKey],
+                                        cardConfig.showCellPattern,
+                                      ),
+                                      ...(isMobileNoteMode
+                                        ? {
+                                            width: `${getMobileNoteActionColumnWidth(
+                                              column.key,
+                                            )}px`,
+                                            minWidth: `${getMobileNoteActionColumnWidth(
+                                              column.key,
+                                            )}px`,
+                                            maxWidth: `${getMobileNoteActionColumnWidth(
+                                              column.key,
+                                            )}px`,
+                                          }
+                                        : {}),
+                                    }}
                                   >
-                                    {colorMode === 'action' ? (
+                                    {colorMode === 'action' ||
+                                    effectiveEditMode === 'note' ? (
                                       <div
                                         className={
-                                          effectiveEditMode === 'note'
-                                            ? 'flex min-h-6 flex-wrap items-center justify-center gap-0.5'
+                                          isMobileNoteMode
+                                            ? 'inline-flex min-h-6 flex-col items-center justify-center gap-y-0.5'
                                             : 'flex min-h-6 flex-wrap items-center justify-center gap-0.5'
+                                        }
+                                        data-mobile-note-action-group={
+                                          isMobileNoteMode ? true : undefined
+                                        }
+                                        data-mobile-note-action-column={
+                                          isMobileNoteMode
+                                            ? column.key
+                                            : undefined
                                         }
                                       >
                                         {actions.length > 0 ? (
-                                          actions.map((action) => {
-                                            const actionKey =
-                                              buildOperationShareActionKey(
-                                                round.round,
-                                                action.order,
-                                              )
-                                            const selected =
-                                              selectedActionKeys.has(actionKey)
-                                            const label =
-                                              getOperationShareActionLabel(
-                                                action,
-                                                displayOrderByActionOrder.get(
-                                                  action.order,
+                                          isMobileNoteMode ? (
+                                            Array.from(
+                                              {
+                                                length: Math.ceil(
+                                                  actionNodes.length / 3,
                                                 ),
-                                              )
-                                            const actionFill =
-                                              getOperationShareActionFillColor(
-                                                cardConfig.actionColors[
-                                                  actionKey
-                                                ],
-                                                action.targetIndex,
-                                              )
-                                            return effectiveEditMode ===
-                                              'color' ? (
-                                              <button
-                                                key={actionKey}
-                                                aria-label={`${round.round} 回合 ${column.label}：${label}`}
-                                                aria-pressed={selected}
-                                                className={`whitespace-nowrap rounded-sm py-0.5 font-medium leading-4 transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
-                                                  isMobileDevice
-                                                    ? 'px-0.5'
-                                                    : 'px-1'
-                                                } ${
-                                                  selected
-                                                    ? 'bg-sky-50 ring-1 ring-inset ring-sky-500'
-                                                    : ''
-                                                }`}
-                                                onClick={() =>
-                                                  toggleActionSelection(
-                                                    actionKey,
-                                                    !selected,
-                                                  )
-                                                }
-                                                style={
-                                                  actionFill
-                                                    ? {
-                                                        backgroundColor:
-                                                          actionFill,
-                                                        ...(isMobileDevice
-                                                          ? {}
-                                                          : {
-                                                              paddingInline:
-                                                                '4px',
-                                                            }),
-                                                      }
-                                                    : undefined
-                                                }
-                                                type="button"
-                                              >
-                                                {label}
-                                              </button>
-                                            ) : (
-                                              <span
-                                                key={actionKey}
-                                                className="whitespace-nowrap rounded-sm px-0.5 py-0.5 text-[11px] font-medium leading-4"
-                                              >
-                                                {label}
-                                              </span>
+                                              },
+                                              (_, rowIndex) => (
+                                                <div
+                                                  key={rowIndex}
+                                                  className="flex items-center justify-center gap-0.5"
+                                                >
+                                                  {actionNodes.slice(
+                                                    rowIndex * 3,
+                                                    rowIndex * 3 + 3,
+                                                  )}
+                                                </div>
+                                              ),
                                             )
-                                          })
+                                          ) : (
+                                            actionNodes
+                                          )
                                         ) : (
-                                          <span className="text-slate-400">
+                                          <span
+                                            className={
+                                              cellHasColor
+                                                ? 'text-slate-400'
+                                                : 'text-slate-400 dark:text-slate-500'
+                                            }
+                                          >
                                             —
                                           </span>
                                         )}
@@ -1782,12 +2083,16 @@ export default function OperationShareDialog({
                                         }`}
                                         aria-pressed={cellSelected}
                                         className={`relative flex min-h-6 w-full items-center justify-center rounded-sm transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
+                                          cellHasColor && !cellSelected
+                                            ? 'text-slate-800'
+                                            : 'text-slate-800 dark:text-slate-100'
+                                        } ${
                                           isMobileDevice
                                             ? 'gap-0 px-0 py-0'
                                             : 'gap-1.5 px-1.5 py-1'
                                         } ${
                                           cellSelected
-                                            ? 'bg-sky-50/80 ring-1 ring-inset ring-sky-500'
+                                            ? 'bg-sky-50/80 ring-1 ring-inset ring-sky-500 dark:bg-sky-900/50 dark:ring-sky-400'
                                             : ''
                                         }`}
                                         onClick={() =>
@@ -1813,7 +2118,7 @@ export default function OperationShareDialog({
                                             className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border ${
                                               cellSelected
                                                 ? 'border-sky-500 bg-sky-500 text-white'
-                                                : 'border-slate-400 bg-white/70'
+                                                : 'border-slate-400 bg-white/70 dark:border-slate-500 dark:bg-slate-800'
                                             }`}
                                           >
                                             {cellSelected ? (
@@ -1844,7 +2149,16 @@ export default function OperationShareDialog({
                                                 return (
                                                   <span
                                                     key={actionKey}
-                                                    className="whitespace-nowrap rounded-sm px-0.5 py-0.5 text-[11px]"
+                                                    className={`whitespace-nowrap rounded-sm px-0.5 py-0.5 text-[11px] ${
+                                                      actionFill ||
+                                                      (cellHasColor &&
+                                                        !cellSelected)
+                                                        ? 'text-slate-800'
+                                                        : 'text-slate-800 dark:text-slate-100'
+                                                    }`}
+                                                    data-mobile-action-column={
+                                                      column.key
+                                                    }
                                                     style={
                                                       actionFill
                                                         ? {
@@ -1868,7 +2182,13 @@ export default function OperationShareDialog({
                                       </button>
                                     ) : (
                                       <div className="flex min-h-6 items-center justify-center px-0.5 py-0.5">
-                                        <span className="min-w-0 break-words text-[11px] font-medium leading-4">
+                                        <span
+                                          className={`min-w-0 break-words text-[11px] font-medium leading-4 ${
+                                            cellHasColor
+                                              ? 'text-slate-800'
+                                              : 'text-slate-800 dark:text-slate-100'
+                                          }`}
+                                        >
                                           {actionLabels.length > 0
                                             ? actionLabels.join(' ')
                                             : '—'}
@@ -1880,13 +2200,17 @@ export default function OperationShareDialog({
                               })}
                               {showRoundNoteColumn ? (
                                 <td
-                                  className={`border-b border-slate-200 text-left align-top ${
-                                    effectiveEditMode === 'note' ? 'p-2' : 'p-1'
+                                  className={`border-b border-slate-200 text-left align-top dark:border-slate-600 ${
+                                    effectiveEditMode === 'note'
+                                      ? 'p-2'
+                                      : 'p-1'
                                   }`}
                                 >
                                   <textarea
                                     aria-label={`${round.round} 回合备注`}
-                                    className={`w-full resize-y rounded border border-slate-300 text-slate-800 outline-none focus:border-sky-500 ${
+                                    className={`w-full resize-y rounded border border-slate-300 bg-white text-slate-800 outline-none focus:border-sky-500 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-50 dark:placeholder:text-slate-500 ${
+                                      isMobileDevice ? 'block min-w-0' : ''
+                                    } ${
                                       effectiveEditMode === 'note'
                                         ? 'min-h-14 px-2 py-1.5 text-xs leading-5'
                                         : 'max-h-24 min-h-6 px-1 py-0.5 text-[11px] leading-4'
@@ -1904,7 +2228,7 @@ export default function OperationShareDialog({
                                   {effectiveEditMode === 'note' &&
                                   noteActions.length > 0 ? (
                                     <div className="mt-1 flex flex-wrap items-center gap-0.5">
-                                      <span className="mr-0.5 text-[10px] text-slate-400">
+                                      <span className="mr-0.5 text-[10px] text-slate-400 dark:text-slate-500">
                                         快捷填入
                                       </span>
                                       {noteActions.map((action) => {
@@ -1926,8 +2250,8 @@ export default function OperationShareDialog({
                                             }
                                             className={`!inline-flex !h-5 !min-h-0 !items-center !gap-0.5 !px-1 !py-0 !text-[10px] !font-normal !leading-none ${
                                               included
-                                                ? '!bg-slate-100 !text-slate-700'
-                                                : '!text-slate-400'
+                                                ? '!bg-slate-100 !text-slate-700 dark:!bg-slate-700 dark:!text-slate-200'
+                                                : '!text-slate-400 dark:!text-slate-500'
                                             }`}
                                             icon={
                                               <Icon
@@ -1993,7 +2317,7 @@ export default function OperationShareDialog({
             </fieldset>
           ) : (
             <fieldset
-              className="mb-5 rounded border border-slate-200 bg-white p-4"
+              className="mb-5 rounded border border-slate-200 bg-white p-4 dark:border-slate-600 dark:bg-[#383e47]"
               disabled={
                 status === 'generating' || authorConfigStatus === 'loading'
               }
@@ -2001,7 +2325,7 @@ export default function OperationShareDialog({
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-base font-semibold text-slate-800">
+                    <h3 className="text-base font-semibold text-slate-800 dark:text-slate-100">
                       生成前编辑
                     </h3>
                     <Button
@@ -2027,20 +2351,20 @@ export default function OperationShareDialog({
                       恢复作者配置
                     </Button>
                   </div>
-                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                  <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
                     配置会按当前作业自动缓存；可将关键命盘标记为“必须”，禁用命盘会自动标注为“绝对不能有”。
                   </p>
                 </div>
               </div>
 
               {model.operators.some((operator) => operator.discs.length > 0) ? (
-                <div className="mt-4 grid gap-2 border-t border-slate-200 pt-4 sm:grid-cols-2 md:grid-cols-5">
+                <div className="mt-4 grid gap-2 border-t border-slate-200 pt-4 dark:border-slate-600 sm:grid-cols-2 md:grid-cols-5">
                   {model.operators.map((operator, operatorIndex) => (
                     <section
                       key={`${operator.rawName}-${operatorIndex}`}
-                      className="min-w-0 rounded border border-slate-200 bg-slate-50 p-2"
+                      className="min-w-0 rounded border border-slate-200 bg-slate-50 p-2 dark:border-slate-600 dark:bg-slate-800/60"
                     >
-                      <h4 className="break-words text-xs font-semibold leading-5 text-slate-700">
+                      <h4 className="break-words text-xs font-semibold leading-5 text-slate-700 dark:text-slate-200">
                         {operator.slot ?? operatorIndex + 1} 号位 {'·'}
                         {operator.name}
                       </h4>
@@ -2083,7 +2407,7 @@ export default function OperationShareDialog({
                           })}
                         </div>
                       ) : (
-                        <p className="mt-2 text-sm text-slate-400">
+                        <p className="mt-2 text-sm text-slate-400 dark:text-slate-500">
                           未配置命盘
                         </p>
                       )}
@@ -2091,7 +2415,7 @@ export default function OperationShareDialog({
                   ))}
                 </div>
               ) : (
-                <p className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-400">
+                <p className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-400 dark:border-slate-600 dark:text-slate-500">
                   当前上阵密探未配置命盘。
                 </p>
               )}
@@ -2099,7 +2423,7 @@ export default function OperationShareDialog({
           )}
 
           {status === 'idle' ? (
-            <div className="flex min-h-48 flex-col items-center justify-center gap-2 rounded border border-dashed border-slate-300 bg-white text-slate-500">
+            <div className="flex min-h-48 flex-col items-center justify-center gap-2 rounded border border-dashed border-slate-300 bg-white text-slate-500 dark:border-slate-600 dark:bg-[#383e47] dark:text-slate-400">
               <span className="text-base font-medium">图片尚未生成</span>
               <span className="text-sm">
                 完成上方编辑后，点击“生成图片”预览。
@@ -2107,7 +2431,7 @@ export default function OperationShareDialog({
             </div>
           ) : null}
           {status === 'generating' ? (
-            <div className="flex min-h-64 flex-col items-center justify-center gap-4 text-slate-600">
+            <div className="flex min-h-64 flex-col items-center justify-center gap-4 text-slate-600 dark:text-slate-300">
               <Spinner />
               <span>
                 {t.components.viewer.OperationViewer.share_image_generating}
@@ -2130,7 +2454,7 @@ export default function OperationShareDialog({
             />
           ) : null}
         </div>
-        <div className="flex shrink-0 flex-wrap justify-end gap-2 rounded-b-lg border-t border-slate-200 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:pb-4">
+        <div className="flex shrink-0 flex-wrap justify-end gap-2 rounded-b-lg border-t border-slate-200 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] dark:border-slate-600 dark:bg-[#383e47] md:pb-4">
           <Button onClick={onClose}>
             {t.components.viewer.OperationViewer.share_image_close}
           </Button>
