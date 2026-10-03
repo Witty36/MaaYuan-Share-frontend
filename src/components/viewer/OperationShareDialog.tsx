@@ -38,7 +38,6 @@ import {
   OPERATION_SHARE_ACTION_COLOR_ORDER,
   OPERATION_SHARE_CARD_CONFIG_SCHEMA_VERSION,
   OPERATION_SHARE_CARD_KEYS,
-  OPERATION_SHARE_CELL_COLOR_KEYS,
   ObjectUrlStore,
   type OperationShareCardConfig,
   type OperationShareCardKind,
@@ -368,6 +367,33 @@ export default function OperationShareDialog({
       })),
     [editableColumns, model.rounds],
   )
+  const actionKeysByCellKey = useMemo(() => {
+    const keysByCellKey = new Map<string, string[]>()
+
+    model.rounds.forEach((round) => {
+      editableColumns.forEach((column) => {
+        keysByCellKey.set(
+          buildOperationShareCellKey(round.round, column.key),
+          (round.slots[column.slot] ?? []).map((action) =>
+            buildOperationShareActionKey(round.round, action.order),
+          ),
+        )
+      })
+    })
+
+    return keysByCellKey
+  }, [editableColumns, model.rounds])
+  const selectedCellActionKeys = useMemo(() => {
+    const actionKeys = new Set<string>()
+
+    selectedCellKeys.forEach((cellKey) => {
+      actionKeysByCellKey
+        .get(cellKey)
+        ?.forEach((actionKey) => actionKeys.add(actionKey))
+    })
+
+    return actionKeys
+  }, [actionKeysByCellKey, selectedCellKeys])
   const allActionKeys = useMemo(
     () => editableRoundGroups.flatMap((round) => round.actionKeys),
     [editableRoundGroups],
@@ -599,11 +625,17 @@ export default function OperationShareDialog({
     if (selectedCellKeys.size === 0) return
     invalidatePreview()
     updateCardConfig((current) => {
+      const actionColors = { ...current.actionColors }
+      selectedCellActionKeys.forEach((key) => {
+        actionColors[key] = style
+      })
+
       const cellColors = { ...current.cellColors }
       selectedCellKeys.forEach((key) => {
-        cellColors[key] = style
+        delete cellColors[key]
       })
-      return { ...current, cellColors }
+
+      return { ...current, actionColors, cellColors }
     })
     setSelectedCellKeys(new Set())
   }
@@ -625,11 +657,17 @@ export default function OperationShareDialog({
     if (selectedCellKeys.size === 0) return
     invalidatePreview()
     updateCardConfig((current) => {
+      const actionColors = { ...current.actionColors }
+      selectedCellActionKeys.forEach((key) => {
+        delete actionColors[key]
+      })
+
       const cellColors = { ...current.cellColors }
       selectedCellKeys.forEach((key) => {
         delete cellColors[key]
       })
-      return { ...current, cellColors }
+
+      return { ...current, actionColors, cellColors }
     })
     setSelectedCellKeys(new Set())
   }
@@ -1182,7 +1220,7 @@ export default function OperationShareDialog({
                             className="flex items-center gap-0.5 text-xs text-slate-400"
                             role="group"
                           >
-                            <span className="mr-0.5">配色对象</span>
+                            <span className="mr-0.5">配色模式</span>
                             <button
                               aria-label={
                                 t.components.viewer.OperationViewer
@@ -1233,85 +1271,57 @@ export default function OperationShareDialog({
                     </div>
                     {effectiveEditMode === 'color' ? (
                       <div className="flex flex-wrap items-center gap-2">
-                        {colorMode === 'cell' ? (
-                          <Switch
-                            checked={cardConfig.showCellPattern}
-                            className="m-0 mr-1"
-                            label={
-                              t.components.viewer.OperationViewer
-                                .share_cell_pattern
-                            }
-                            onChange={(event) =>
-                              updateOption(
-                                'showCellPattern',
-                                event.currentTarget.checked,
-                              )
-                            }
-                          />
-                        ) : null}
                         <div
                           aria-label={
-                            colorMode === 'action'
-                              ? t.components.viewer.OperationViewer
-                                  .share_cell_color_group_action
-                              : t.components.viewer.OperationViewer
-                                  .share_cell_color_group_cell
+                            t.components.viewer.OperationViewer
+                              .share_cell_color_group_action
                           }
                           className="flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 p-1"
                           role="group"
                         >
-                          {(colorMode === 'action'
-                            ? OPERATION_SHARE_ACTION_COLOR_ORDER
-                            : OPERATION_SHARE_CELL_COLOR_KEYS
-                          ).map((colorKey) => {
-                            const label =
-                              t.components.viewer.OperationViewer.share_cell_color_apply(
-                                {
-                                  label:
+                          {OPERATION_SHARE_ACTION_COLOR_ORDER.map(
+                            (colorKey) => {
+                              const label =
+                                t.components.viewer.OperationViewer.share_cell_color_apply(
+                                  {
+                                    label: actionColorNames[colorKey],
+                                  },
+                                )
+                              return (
+                                <button
+                                  key={colorKey}
+                                  aria-label={label}
+                                  className="h-8 w-8 rounded border border-slate-300 text-base font-bold transition-transform enabled:hover:scale-105 enabled:focus:outline-none enabled:focus:ring-2 enabled:focus:ring-sky-500 enabled:focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-100"
+                                  disabled={
+                                    (colorMode === 'action'
+                                      ? selectedActionKeys.size
+                                      : selectedCellKeys.size) === 0
+                                  }
+                                  onClick={() =>
                                     colorMode === 'action'
-                                      ? actionColorNames[colorKey]
-                                      : cellColorNames[colorKey],
-                                },
+                                      ? colorKey === 'ice'
+                                        ? clearActionColor()
+                                        : applyActionColor(colorKey)
+                                      : colorKey === 'ice'
+                                        ? clearCellColor()
+                                        : applyCellColor(colorKey)
+                                  }
+                                  style={{
+                                    backgroundColor:
+                                      colorKey === 'ice'
+                                        ? 'transparent'
+                                        : getOperationShareActionFillColor(
+                                            colorKey,
+                                          ),
+                                  }}
+                                  title={label}
+                                  type="button"
+                                >
+                                  A
+                                </button>
                               )
-                            return (
-                              <button
-                                key={colorKey}
-                                aria-label={label}
-                                className="h-8 w-8 rounded border border-slate-300 text-base font-bold transition-transform enabled:hover:scale-105 enabled:focus:outline-none enabled:focus:ring-2 enabled:focus:ring-sky-500 enabled:focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-100"
-                                disabled={
-                                  (colorMode === 'action'
-                                    ? selectedActionKeys.size
-                                    : selectedCellKeys.size) === 0
-                                }
-                                onClick={() =>
-                                  colorMode === 'action'
-                                    ? colorKey === 'ice'
-                                      ? clearActionColor()
-                                      : applyActionColor(colorKey)
-                                    : applyCellColor(colorKey)
-                                }
-                                style={
-                                  colorMode === 'action'
-                                    ? {
-                                        backgroundColor:
-                                          colorKey === 'ice'
-                                            ? 'transparent'
-                                            : getOperationShareActionFillColor(
-                                                colorKey,
-                                              ),
-                                      }
-                                    : getOperationShareCellVisualStyle(
-                                        colorKey,
-                                        cardConfig.showCellPattern,
-                                      )
-                                }
-                                title={label}
-                                type="button"
-                              >
-                                {colorMode === 'action' ? 'A' : null}
-                              </button>
-                            )
-                          })}
+                            },
+                          )}
                         </div>
                         <Button
                           disabled={
@@ -1442,7 +1452,7 @@ export default function OperationShareDialog({
                           <col
                             key={column.key}
                             className={
-                              isMobileDevice && colorMode === 'action'
+                              isMobileDevice
                                 ? column.maxActionsInRound >= 3
                                   ? 'w-[4.5rem]'
                                   : 'w-9'
@@ -1760,13 +1770,13 @@ export default function OperationShareDialog({
                                             : ''
                                         }`}
                                         aria-pressed={cellSelected}
-                                        className={`flex min-h-6 w-full items-center justify-center rounded-sm py-1 transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
+                                        className={`relative flex min-h-6 w-full items-center justify-center rounded-sm transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
                                           isMobileDevice
-                                            ? 'gap-0.5 px-0.5'
-                                            : 'gap-1.5 px-1.5'
+                                            ? 'gap-0 px-0 py-0'
+                                            : 'gap-1.5 px-1.5 py-1'
                                         } ${
                                           cellSelected
-                                            ? 'ring-2 ring-inset ring-sky-500'
+                                            ? 'bg-sky-50/80 ring-1 ring-inset ring-sky-500'
                                             : ''
                                         }`}
                                         onClick={() =>
@@ -1777,21 +1787,71 @@ export default function OperationShareDialog({
                                         }
                                         type="button"
                                       >
+                                        {isMobileDevice ? (
+                                          cellSelected ? (
+                                            <Icon
+                                              aria-hidden="true"
+                                              className="absolute right-0 top-0 z-0 text-sky-600"
+                                              icon="tick"
+                                              size={9}
+                                            />
+                                          ) : null
+                                        ) : (
+                                          <span
+                                            aria-hidden="true"
+                                            className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border ${
+                                              cellSelected
+                                                ? 'border-sky-500 bg-sky-500 text-white'
+                                                : 'border-slate-400 bg-white/70'
+                                            }`}
+                                          >
+                                            {cellSelected ? (
+                                              <Icon icon="tick" size={10} />
+                                            ) : null}
+                                          </span>
+                                        )}
                                         <span
-                                          aria-hidden="true"
-                                          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border ${
-                                            cellSelected
-                                              ? 'border-sky-500 bg-sky-500 text-white'
-                                              : 'border-slate-400 bg-white/70'
+                                          className={`flex min-w-0 flex-wrap items-center justify-center gap-0.5 font-medium leading-4 ${
+                                            isMobileDevice ? 'w-full' : ''
                                           }`}
                                         >
-                                          {cellSelected ? (
-                                            <Icon icon="tick" size={10} />
-                                          ) : null}
-                                        </span>
-                                        <span className="min-w-0 break-words font-medium leading-4">
-                                          {actionLabels.length > 0
-                                            ? actionLabels.join(' ')
+                                          {actions.length > 0
+                                            ? actions.map((action) => {
+                                                const actionKey =
+                                                  buildOperationShareActionKey(
+                                                    round.round,
+                                                    action.order,
+                                                  )
+                                                const actionFill =
+                                                  getOperationShareActionFillColor(
+                                                    cardConfig.actionColors[
+                                                      actionKey
+                                                    ],
+                                                    action.targetIndex,
+                                                  )
+
+                                                return (
+                                                  <span
+                                                    key={actionKey}
+                                                    className="whitespace-nowrap rounded-sm px-0.5 py-0.5 text-[11px]"
+                                                    style={
+                                                      actionFill
+                                                        ? {
+                                                            backgroundColor:
+                                                              actionFill,
+                                                          }
+                                                        : undefined
+                                                    }
+                                                  >
+                                                    {getOperationShareActionLabel(
+                                                      action,
+                                                      displayOrderByActionOrder.get(
+                                                        action.order,
+                                                      ),
+                                                    )}
+                                                  </span>
+                                                )
+                                              })
                                             : '—'}
                                         </span>
                                       </button>

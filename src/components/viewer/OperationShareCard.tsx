@@ -58,6 +58,17 @@ export const OPERATION_SHARE_ACTION_FILL_COLORS: Record<
   ]),
 ) as Record<OperationShareCellColorKey, string>
 
+export const OPERATION_SHARE_ACTION_BORDER_COLORS: Record<
+  OperationShareCellColorKey,
+  string
+> = {
+  yellow: '#fde68a',
+  pink: '#fbcfe8',
+  blue: '#9fcfeb',
+  green: '#c6d8aa',
+  ice: '#bfd5df',
+}
+
 const OPERATION_SHARE_TARGET_ACTION_COLOR_KEYS: Partial<
   Record<number, OperationShareCellColorKey>
 > = {
@@ -82,7 +93,7 @@ export function getOperationShareActionTextColor(style?: string) {
   return /^#[0-9a-f]{3,8}$/i.test(style) ? style : undefined
 }
 
-export function getOperationShareActionFillColor(
+function getOperationShareActionPaletteKey(
   style?: string,
   targetIndex?: number,
 ) {
@@ -94,13 +105,31 @@ export function getOperationShareActionFillColor(
     )
       ? (style as OperationShareCellColorKey)
       : undefined
-  const colorKey =
+
+  return (
     explicitColorKey ??
     (targetIndex === undefined
       ? undefined
       : OPERATION_SHARE_TARGET_ACTION_COLOR_KEYS[targetIndex])
+  )
+}
+
+export function getOperationShareActionFillColor(
+  style?: string,
+  targetIndex?: number,
+) {
+  const colorKey = getOperationShareActionPaletteKey(style, targetIndex)
 
   return colorKey ? OPERATION_SHARE_ACTION_FILL_COLORS[colorKey] : undefined
+}
+
+export function getOperationShareActionBorderColor(
+  style?: string,
+  targetIndex?: number,
+) {
+  const colorKey = getOperationShareActionPaletteKey(style, targetIndex)
+
+  return colorKey ? OPERATION_SHARE_ACTION_BORDER_COLORS[colorKey] : undefined
 }
 
 export function getOperationShareActionColor(
@@ -557,6 +586,13 @@ function ActionList({
                 actionColors[actionKey],
                 action.targetIndex,
               )
+        const actionBorder =
+          variant === 'other'
+            ? undefined
+            : getOperationShareActionBorderColor(
+                actionColors[actionKey],
+                action.targetIndex,
+              )
         const actionStyle =
           variant === 'other'
             ? { whiteSpace: 'nowrap' as const }
@@ -569,6 +605,9 @@ function ActionList({
                       display: 'inline-block',
                       lineHeight: 1.25,
                       padding: '0 4px',
+                      ...(actionBorder
+                        ? { border: `0.5px solid ${actionBorder}` }
+                        : {}),
                     }
                   : {}),
               }
@@ -868,7 +907,7 @@ export function OperationShareCard({
                   className="inline-block h-4 w-4 shrink-0 rounded-[3px]"
                   style={{
                     backgroundColor: getOperationShareActionFillColor(colorKey),
-                    border: `1px solid ${getOperationShareActionTextColor(colorKey)}`,
+                    border: `0.5px solid ${getOperationShareActionBorderColor(colorKey)}`,
                   }}
                 />
                 <span>{note}</span>

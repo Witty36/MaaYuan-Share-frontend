@@ -75,6 +75,19 @@ const singleRoundActions = [
   },
 ]
 
+const multiActionRoundActions = [
+  {
+    type: CopilotDocV1.Type.Skill,
+    name: '测试密探',
+    doc: '第1回合·动作1：测试密探 A [1普]',
+  },
+  {
+    type: CopilotDocV1.Type.Skill,
+    name: '测试密探',
+    doc: '第1回合·动作2：测试密探 ↑ [1大]',
+  },
+]
+
 /** Blueprint 把 label 文本和 input 放在同一个 <label> 里，按文案定位开关。 */
 function findSwitch(labelText: string) {
   const labels = Array.from(document.querySelectorAll('label'))
@@ -205,7 +218,7 @@ describe('operation share dialog short code switch', () => {
     expect(findSwitch('分享二维码')?.disabled).toBe(false)
   })
 
-  it('offers one swatch per color plus an 增加底纹 switch', async () => {
+  it('uses the same action color swatches in cell shortcut mode', async () => {
     await renderDialog(
       createOperation(
         CopilotInfoStatusEnum.Public,
@@ -237,8 +250,14 @@ describe('operation share dialog short code switch', () => {
       await new Promise((resolve) => window.setTimeout(resolve, 0))
     })
 
-    // 底纹是全局开关，默认打开
-    expect(findSwitch('增加底纹')?.checked).toBe(true)
+    expect(findSwitch('增加底纹')).toBeUndefined()
+    expect(
+      Array.from(
+        document.querySelectorAll(
+          '[role="group"][aria-label="动作文字颜色"] button',
+        ),
+      ).map((button) => button.getAttribute('aria-label')),
+    ).toEqual(['应用无操作色', '应用粉色', '应用蓝色', '应用黄色', '应用绿色'])
   })
 
   it('clears an action color when the no-color swatch is applied', async () => {
@@ -309,12 +328,12 @@ describe('operation share dialog short code switch', () => {
     })
   })
 
-  it('applies the chosen color to the selected cell', async () => {
+  it('applies the chosen color to every action in the selected cell', async () => {
     await renderDialog(
       createOperation(
         CopilotInfoStatusEnum.Public,
         undefined,
-        singleRoundActions,
+        multiActionRoundActions,
       ),
     )
 
@@ -331,9 +350,11 @@ describe('operation share dialog short code switch', () => {
       await new Promise((resolve) => window.setTimeout(resolve, 0))
     })
 
-    expect(readOperationShareCardConfig(100)?.cellColors).toEqual({
-      '1:slot-1': 'yellow',
+    expect(readOperationShareCardConfig(100)?.actionColors).toEqual({
+      '1:1': 'yellow',
+      '1:2': 'yellow',
     })
+    expect(readOperationShareCardConfig(100)?.cellColors).toEqual({})
   })
 
   it('selects every action from the round header', async () => {
@@ -670,27 +691,5 @@ describe('operation share dialog short code switch', () => {
     ).toBeUndefined()
     expect(document.body.textContent).toContain('当前：原生')
     expect(findSwatch('展开高级自定义')).toBeDefined()
-  })
-
-  it('toggles the cell pattern switch and persists it', async () => {
-    await renderDialog(
-      createOperation(
-        CopilotInfoStatusEnum.Public,
-        undefined,
-        singleRoundActions,
-      ),
-    )
-
-    await act(async () => {
-      findButtonByAriaLabelPrefix('按单元格标色')?.click()
-      await new Promise((resolve) => window.setTimeout(resolve, 0))
-    })
-    await act(async () => {
-      findSwitch('增加底纹')?.click()
-      await new Promise((resolve) => window.setTimeout(resolve, 0))
-    })
-
-    expect(findSwitch('增加底纹')?.checked).toBe(false)
-    expect(readOperationShareCardConfig(100)?.showCellPattern).toBe(false)
   })
 })
