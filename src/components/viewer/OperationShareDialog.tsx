@@ -31,7 +31,6 @@ import {
   getOperationShareNoteActionLabel,
   getOperationShareRoundDisplay,
   getOperationShareRoundNoteText,
-  getOperationShareUsedActionColorKeys,
 } from './OperationShareCard'
 import {
   createOperationShareQrDataUrl,
@@ -83,6 +82,14 @@ type GenerationStatus = 'idle' | 'generating' | 'ready' | 'error'
 type ColorMode = 'action' | 'cell'
 type EditMode = 'color' | 'note'
 
+function isMobileDeviceUserAgent() {
+  if (typeof navigator === 'undefined') return false
+
+  return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+    navigator.userAgent,
+  )
+}
+
 function appendOperationShareNoteText(note: string, text: string) {
   const trimmed = note.trim()
   if (!trimmed) return text
@@ -106,19 +113,31 @@ function OperationShareSelectionCheckbox({
   indeterminate,
   label,
   onChange,
+  stacked = false,
 }: {
   ariaLabel: string
   checked: boolean
   indeterminate: boolean
   label: string
   onChange: (checked: boolean) => void
+  stacked?: boolean
 }) {
   return (
-    <label className="inline-flex h-6 cursor-pointer select-none items-center justify-center gap-1 whitespace-nowrap leading-none">
+    <label
+      className={`inline-flex cursor-pointer select-none items-center justify-center whitespace-nowrap leading-none ${
+        stacked
+          ? 'h-auto flex-col gap-0.5 py-0.5'
+          : 'h-6 gap-1 max-sm:h-auto max-sm:flex-col max-sm:gap-0 max-sm:py-0'
+      }`}
+    >
       <input
         aria-label={ariaLabel}
         checked={checked}
-        className="m-0 h-3.5 w-3.5 shrink-0 cursor-pointer accent-sky-600"
+        className={`m-0 shrink-0 cursor-pointer accent-sky-600 ${
+          stacked
+            ? 'order-2 h-3 w-3'
+            : 'h-3.5 w-3.5 max-sm:order-2 max-sm:h-3 max-sm:w-3'
+        }`}
         onChange={(event) => onChange(event.currentTarget.checked)}
         ref={(input) => {
           if (input) {
@@ -127,7 +146,13 @@ function OperationShareSelectionCheckbox({
         }}
         type="checkbox"
       />
-      <span className="leading-none">{label}</span>
+      <span
+        className={`leading-none ${
+          stacked ? 'order-1 text-[10px]' : 'max-sm:order-1 max-sm:text-[10px]'
+        }`}
+      >
+        {label}
+      </span>
     </label>
   )
 }
@@ -186,6 +211,7 @@ export default function OperationShareDialog({
   )
   const [colorMode, setColorMode] = useState<ColorMode>('action')
   const [editMode, setEditMode] = useState<EditMode>('color')
+  const isMobileDevice = useMemo(isMobileDeviceUserAgent, [])
   const showRoundNoteColumn =
     cardConfig.showNotes || cardConfig.showOtherActions
   const effectiveEditMode: EditMode = showRoundNoteColumn ? editMode : 'color'
@@ -293,18 +319,8 @@ export default function OperationShareDialog({
     ...cellColorNames,
     ice: t.components.viewer.OperationViewer.share_cell_color_none,
   }
-  const usedActionColorKeys = getOperationShareUsedActionColorKeys(
-    model,
-    cardConfig,
-  )
   const actionColorNoteKeys = OPERATION_SHARE_ACTION_COLOR_ORDER.filter(
-    (colorKey) =>
-      colorKey !== 'ice' ||
-      usedActionColorKeys.includes(colorKey) ||
-      Object.prototype.hasOwnProperty.call(
-        cardConfig.actionColorNotes,
-        colorKey,
-      ),
+    (colorKey) => colorKey !== 'ice',
   )
 
   const editableColumns = useMemo<
@@ -322,6 +338,11 @@ export default function OperationShareDialog({
     () =>
       editableColumns.map((column) => ({
         ...column,
+        maxActionsInRound: model.rounds.reduce(
+          (maximum, round) =>
+            Math.max(maximum, round.slots[column.slot]?.length ?? 0),
+          0,
+        ),
         actionKeys: model.rounds.flatMap((round) =>
           (round.slots[column.slot] ?? []).map((action) =>
             buildOperationShareActionKey(round.round, action.order),
@@ -823,1200 +844,1285 @@ export default function OperationShareDialog({
     <Dialog
       canEscapeKeyClose
       canOutsideClickClose
-      className="w-[min(96vw,960px)]"
+      className="w-[min(96vw,960px)] max-h-[calc(100vh-60px)]"
       icon="media"
       isOpen
       onClose={onClose}
+      style={{
+        maxHeight: isMobileDevice
+          ? 'calc(100dvh - 38px)'
+          : 'calc(100dvh - 60px)',
+        ...(isMobileDevice ? { marginBottom: '8px' } : {}),
+      }}
       title={t.components.viewer.OperationViewer.share_image_dialog_title}
     >
-      <div className="max-h-[76vh] overflow-auto bg-slate-100 p-4 md:p-6">
-        <div
-          aria-label="分享图片类型"
-          className="mb-5 grid grid-cols-2 gap-2 rounded border border-slate-200 bg-white p-2"
-          role="tablist"
-        >
-          <Button
-            active={cardKind === 'actions'}
-            aria-selected={cardKind === 'actions'}
-            icon="timeline-events"
-            onClick={() => changeCardKind('actions')}
-            role="tab"
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 min-w-0 max-w-full flex-1 overflow-x-hidden overflow-y-auto bg-slate-100 px-2 py-4 md:p-6">
+          <div
+            aria-label="分享图片类型"
+            className="mb-5 grid grid-cols-2 gap-2 rounded border border-slate-200 bg-white p-2"
+            role="tablist"
           >
-            动作序列
-          </Button>
-          <Button
-            active={cardKind === 'operators'}
-            aria-selected={cardKind === 'operators'}
-            icon="people"
-            onClick={() => changeCardKind('operators')}
-            role="tab"
-          >
-            上阵密探
-          </Button>
-        </div>
-
-        {authorConfigStatus === 'error' ? (
-          <Callout className="mb-5" intent="warning" title="作者配置加载失败">
-            {authorConfigError}
-          </Callout>
-        ) : null}
-        {hasUnsupportedRemoteConfig ? (
-          <Callout className="mb-5" intent="warning" title="作者配置版本较新">
-            当前页面版本无法编辑这份作者配置，请刷新或升级后重试。
-          </Callout>
-        ) : null}
-
-        <div className="mb-3 flex flex-col items-end gap-1">
-          <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-2">
-            <Switch
-              checked={showShortCode}
-              className="m-0"
-              disabled={status === 'generating'}
-              label={
-                t.components.viewer.OperationViewer.share_image_share_short_code
-              }
-              onChange={(event) =>
-                updateShortCodeVisibility(event.currentTarget.checked)
-              }
-            />
-            <Switch
-              checked={!effectiveHideQrCode}
-              className="m-0"
-              disabled={status === 'generating' || qrFollowsShortCode}
-              label={
-                t.components.viewer.OperationViewer.share_image_share_qr_code
-              }
-              onChange={(event) =>
-                updateQrCodeVisibility(!event.currentTarget.checked)
-              }
-            />
+            <Button
+              active={cardKind === 'actions'}
+              aria-selected={cardKind === 'actions'}
+              icon="timeline-events"
+              onClick={() => changeCardKind('actions')}
+              role="tab"
+            >
+              动作序列
+            </Button>
+            <Button
+              active={cardKind === 'operators'}
+              aria-selected={cardKind === 'operators'}
+              icon="people"
+              onClick={() => changeCardKind('operators')}
+              role="tab"
+            >
+              上阵密探
+            </Button>
           </div>
-          {shortCodeHint ? (
-            <p className="m-0 text-xs text-slate-500">{shortCodeHint}</p>
+
+          {authorConfigStatus === 'error' ? (
+            <Callout className="mb-5" intent="warning" title="作者配置加载失败">
+              {authorConfigError}
+            </Callout>
           ) : null}
-        </div>
+          {hasUnsupportedRemoteConfig ? (
+            <Callout className="mb-5" intent="warning" title="作者配置版本较新">
+              当前页面版本无法编辑这份作者配置，请刷新或升级后重试。
+            </Callout>
+          ) : null}
 
-        {cardKind === 'actions' ? (
-          <fieldset
-            className="mb-5 rounded border border-slate-200 bg-white p-4"
-            disabled={
-              status === 'generating' || authorConfigStatus === 'loading'
-            }
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-base font-semibold text-slate-800">
-                    生成前编辑
-                  </h3>
-                  <Button icon="reset" minimal onClick={restoreDefaults} small>
-                    恢复至默认
-                  </Button>
-                  <Button
-                    disabled={
-                      !currentRemoteConfig || hasUnsupportedRemoteConfig
-                    }
-                    icon="cloud-download"
-                    minimal
-                    onClick={restoreAuthorConfig}
-                    small
-                  >
-                    恢复作者配置
-                  </Button>
-                </div>
-                <p className="mt-1 text-sm text-slate-500">
-                  配置会自动保存到当前作业。
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                <Checkbox
-                  checked={cardConfig.showTargetSwitches}
-                  label="显示左滑 / 右滑"
-                  onChange={(event) =>
-                    updateOption(
-                      'showTargetSwitches',
-                      event.currentTarget.checked,
-                    )
-                  }
-                />
-                <Checkbox
-                  checked={cardConfig.showNotes || cardConfig.showOtherActions}
-                  label="显示备注与其他动作"
-                  onChange={(event) =>
-                    updateNotesColumnVisibility(event.currentTarget.checked)
-                  }
-                />
-                <Checkbox
-                  checked={cardConfig.showOtherActions}
-                  label="显示其他动作"
-                  onChange={(event) =>
-                    updateOtherActionsVisibility(event.currentTarget.checked)
-                  }
-                />
-              </div>
+          <div className="mb-3 flex flex-col items-end gap-1">
+            <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-2">
+              <Switch
+                checked={showShortCode}
+                className="m-0"
+                disabled={status === 'generating'}
+                label={
+                  t.components.viewer.OperationViewer
+                    .share_image_share_short_code
+                }
+                onChange={(event) =>
+                  updateShortCodeVisibility(event.currentTarget.checked)
+                }
+              />
+              <Switch
+                checked={!effectiveHideQrCode}
+                className="m-0"
+                disabled={status === 'generating' || qrFollowsShortCode}
+                label={
+                  t.components.viewer.OperationViewer.share_image_share_qr_code
+                }
+                onChange={(event) =>
+                  updateQrCodeVisibility(!event.currentTarget.checked)
+                }
+              />
             </div>
+            {shortCodeHint ? (
+              <p className="m-0 text-xs text-slate-500">{shortCodeHint}</p>
+            ) : null}
+          </div>
 
-            {model.rounds.length > 0 ? (
-              <div className="mt-4 border-t border-slate-200 pt-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h4 className="text-sm font-semibold text-slate-700">
-                    表格配色
-                  </h4>
-                  <Button
-                    aria-label="恢复预设表格配色"
-                    disabled={!normalizedTableColor && !hasTableThemeOverrides}
-                    icon="reset"
-                    minimal
-                    onClick={resetTableTheme}
-                    small
-                  >
-                    恢复预设
-                  </Button>
+          {cardKind === 'actions' ? (
+            <fieldset
+              className="mb-5 min-w-0 max-w-full overflow-hidden rounded border border-slate-200 bg-white px-1 py-4 md:p-4"
+              disabled={
+                status === 'generating' || authorConfigStatus === 'loading'
+              }
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base font-semibold text-slate-800">
+                      生成前编辑
+                    </h3>
+                    <Button
+                      icon="reset"
+                      minimal
+                      onClick={restoreDefaults}
+                      small
+                    >
+                      恢复至默认
+                    </Button>
+                    <Button
+                      disabled={
+                        !currentRemoteConfig || hasUnsupportedRemoteConfig
+                      }
+                      icon="cloud-download"
+                      minimal
+                      onClick={restoreAuthorConfig}
+                      small
+                    >
+                      恢复作者配置
+                    </Button>
+                  </div>
+                  <p className="mt-1 text-sm text-slate-500">
+                    配置会自动保存到当前作业。
+                  </p>
                 </div>
-                <p className="mt-1 text-xs text-slate-400">
-                  选择生成作业分享图整体的主题色，可自定义颜色。
-                  <span aria-live="polite" className="ml-2 text-slate-500">
-                    {tableThemeStatus}
-                  </span>
-                </p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                  <span className="mr-0.5 text-xs text-slate-400">预设</span>
-                  {OPERATION_SHARE_TABLE_THEME_PRESETS.map((preset) => {
-                    const presetTheme = getOperationShareTableTheme(
-                      preset.baseColor,
-                    )
-                    const selected =
-                      selectedTableThemePreset.id === preset.id &&
-                      (preset.baseColor !== undefined ||
-                        cardConfig.tableColor === undefined)
-                    const previewColor = presetTheme.bodyBackgrounds[1]
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                  <Checkbox
+                    checked={cardConfig.showTargetSwitches}
+                    label="显示左滑 / 右滑"
+                    onChange={(event) =>
+                      updateOption(
+                        'showTargetSwitches',
+                        event.currentTarget.checked,
+                      )
+                    }
+                  />
+                  <Checkbox
+                    checked={
+                      cardConfig.showNotes || cardConfig.showOtherActions
+                    }
+                    label="显示备注与其他动作"
+                    onChange={(event) =>
+                      updateNotesColumnVisibility(event.currentTarget.checked)
+                    }
+                  />
+                  <Checkbox
+                    checked={cardConfig.showOtherActions}
+                    label="显示其他动作"
+                    onChange={(event) =>
+                      updateOtherActionsVisibility(event.currentTarget.checked)
+                    }
+                  />
+                </div>
+              </div>
 
-                    return (
-                      <button
-                        key={preset.id}
-                        aria-label={`应用${preset.label}表格配色`}
-                        aria-pressed={selected}
-                        className={`flex h-7 items-center gap-1.5 rounded border px-1.5 text-xs transition-colors ${
-                          selected
-                            ? 'border-sky-500 bg-sky-50 text-sky-800'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
-                        }`}
-                        onClick={() => updateTableColor(preset.baseColor)}
-                        type="button"
-                      >
-                        <span
-                          aria-hidden
-                          className="flex h-3 w-3 shrink-0 overflow-hidden rounded-[2px] border border-black/10"
+              {model.rounds.length > 0 ? (
+                <div className="mt-4 border-t border-slate-200 pt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h4 className="text-sm font-semibold text-slate-700">
+                      表格配色
+                    </h4>
+                    <Button
+                      aria-label="恢复预设表格配色"
+                      disabled={
+                        !normalizedTableColor && !hasTableThemeOverrides
+                      }
+                      icon="reset"
+                      minimal
+                      onClick={resetTableTheme}
+                      small
+                    >
+                      恢复预设
+                    </Button>
+                  </div>
+                  <p className="mt-1 text-xs text-slate-400">
+                    选择生成作业分享图整体的主题色，可自定义颜色。
+                    <span aria-live="polite" className="ml-2 text-slate-500">
+                      {tableThemeStatus}
+                    </span>
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <span className="mr-0.5 text-xs text-slate-400">预设</span>
+                    {OPERATION_SHARE_TABLE_THEME_PRESETS.map((preset) => {
+                      const presetTheme = getOperationShareTableTheme(
+                        preset.baseColor,
+                      )
+                      const selected =
+                        selectedTableThemePreset.id === preset.id &&
+                        (preset.baseColor !== undefined ||
+                          cardConfig.tableColor === undefined)
+                      const previewColor = presetTheme.bodyBackgrounds[1]
+
+                      return (
+                        <button
+                          key={preset.id}
+                          aria-label={`应用${preset.label}表格配色`}
+                          aria-pressed={selected}
+                          className={`flex h-7 items-center gap-1.5 rounded border px-1.5 text-xs transition-colors ${
+                            selected
+                              ? 'border-sky-500 bg-sky-50 text-sky-800'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                          onClick={() => updateTableColor(preset.baseColor)}
+                          type="button"
                         >
                           <span
-                            className="h-full w-full"
-                            style={{ backgroundColor: previewColor }}
-                          />
-                        </span>
-                        <span>{preset.label}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-                <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                  <label className="flex h-7 items-center gap-2 rounded border border-slate-200 bg-slate-50 px-2 text-xs text-slate-600">
-                    <span>自定义</span>
-                    <input
-                      aria-label="选择表格主题色"
-                      className="h-5 w-7 cursor-pointer rounded-sm border-0 bg-transparent p-0"
-                      onChange={(event) =>
-                        updateTableColor(event.currentTarget.value)
-                      }
-                      type="color"
-                      value={
-                        cardConfig.tableColor ??
-                        DEFAULT_OPERATION_SHARE_TABLE_BASE_COLOR
-                      }
-                    />
-                    <span className="tabular-nums text-slate-500">
-                      {cardConfig.tableColor ?? '默认'}
-                    </span>
-                  </label>
-                  <Button
-                    aria-controls="operation-share-table-theme-advanced"
-                    aria-expanded={isTableThemeAdvancedOpen}
-                    aria-label={
-                      isTableThemeAdvancedOpen
-                        ? '收起高级自定义'
-                        : '展开高级自定义'
-                    }
-                    className="!text-xs !font-normal !text-slate-500 hover:!text-slate-700"
-                    icon={
-                      <Icon
-                        icon={
-                          isTableThemeAdvancedOpen
-                            ? 'chevron-up'
-                            : 'chevron-down'
-                        }
-                        size={12}
-                      />
-                    }
-                    minimal
-                    onClick={() =>
-                      setIsTableThemeAdvancedOpen((current) => !current)
-                    }
-                    small
-                  >
-                    高级自定义
-                    {hasTableThemeOverrides
-                      ? `（已修改 ${tableThemeOverrideCount} 项）`
-                      : ''}
-                  </Button>
-                </div>
-                {isTableThemeAdvancedOpen ? (
-                  <div
-                    className="mt-2 w-fit max-w-full rounded border border-slate-200 bg-slate-50 p-2"
-                    id="operation-share-table-theme-advanced"
-                  >
-                    <div className="flex flex-wrap items-center gap-1 text-xs text-slate-600">
-                      {tableThemeColorFields.map(({ key, label, value }) => (
-                        <label
-                          key={key}
-                          className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded border border-slate-200 bg-white px-1.5"
-                        >
-                          <input
-                            aria-label={`${label}颜色`}
-                            className="h-4 w-6 shrink-0 cursor-pointer rounded-sm border border-black/10 bg-transparent p-0"
-                            onChange={(event) =>
-                              updateTableThemeOverride(
-                                key,
-                                event.currentTarget.value,
-                              )
-                            }
-                            type="color"
-                            value={value}
-                          />
-                          <span>{label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {model.rounds.length > 0 ? (
-              <div className="mt-4 border-t border-slate-200 pt-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="text-sm font-semibold text-slate-700">
-                        {
-                          t.components.viewer.OperationViewer
-                            .share_cell_color_section_title
-                        }
-                      </h4>
-                      <div
-                        aria-label="表格编辑模式"
-                        className="inline-flex overflow-hidden rounded border border-slate-200 bg-white p-0.5"
-                        role="group"
-                      >
-                        <Button
-                          active={effectiveEditMode === 'color'}
-                          className="!inline-flex !h-6 !min-h-0 !items-center !justify-center !px-2 !py-0 !text-xs !font-normal !leading-none"
-                          minimal
-                          onClick={() => setEditMode('color')}
-                          small
-                        >
-                          标注模式
-                        </Button>
-                        {showRoundNoteColumn ? (
-                          <Button
-                            active={effectiveEditMode === 'note'}
-                            className="!inline-flex !h-6 !min-h-0 !items-center !justify-center !px-2 !py-0 !text-xs !font-normal !leading-none"
-                            minimal
-                            onClick={() => setEditMode('note')}
-                            small
+                            aria-hidden
+                            className="flex h-3 w-3 shrink-0 overflow-hidden rounded-[2px] border border-black/10"
                           >
-                            备注模式
-                          </Button>
-                        ) : null}
-                      </div>
-                      {effectiveEditMode === 'color' ? (
-                        <div
-                          aria-label={
-                            t.components.viewer.OperationViewer
-                              .share_cell_color_section_title
-                          }
-                          className="flex items-center gap-0.5 text-xs text-slate-400"
-                          role="group"
-                        >
-                          <span className="mr-0.5">配色对象</span>
-                          <button
-                            aria-label={
-                              t.components.viewer.OperationViewer
-                                .share_cell_color_mode_action
-                            }
-                            aria-pressed={colorMode === 'action'}
-                            className={`h-6 rounded px-1.5 transition ${
-                              colorMode === 'action'
-                                ? 'bg-sky-50 font-medium text-sky-700'
-                                : 'hover:text-slate-600'
-                            }`}
-                            onClick={() => setColorMode('action')}
-                            type="button"
-                          >
-                            操作
-                          </button>
-                          <span aria-hidden="true" className="text-slate-300">
-                            /
+                            <span
+                              className="h-full w-full"
+                              style={{ backgroundColor: previewColor }}
+                            />
                           </span>
-                          <button
-                            aria-label={
-                              t.components.viewer.OperationViewer
-                                .share_cell_color_mode_cell
-                            }
-                            aria-pressed={colorMode === 'cell'}
-                            className={`h-6 rounded px-1.5 transition ${
-                              colorMode === 'cell'
-                                ? 'bg-sky-50 font-medium text-sky-700'
-                                : 'hover:text-slate-600'
-                            }`}
-                            onClick={() => setColorMode('cell')}
-                            type="button"
-                          >
-                            单元格
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                    <p className="mt-1 text-xs text-slate-500">
-                      {effectiveEditMode === 'note'
-                        ? '当前编辑备注，动作仅供查看。'
-                        : colorMode === 'action'
-                          ? t.components.viewer.OperationViewer
-                              .share_cell_color_section_hint_action
-                          : t.components.viewer.OperationViewer
-                              .share_cell_color_section_hint_cell}
-                    </p>
+                          <span>{preset.label}</span>
+                        </button>
+                      )
+                    })}
                   </div>
-                  {effectiveEditMode === 'color' ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      {colorMode === 'cell' ? (
-                        <Switch
-                          checked={cardConfig.showCellPattern}
-                          className="m-0 mr-1"
-                          label={
-                            t.components.viewer.OperationViewer
-                              .share_cell_pattern
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <label className="flex h-7 items-center gap-2 rounded border border-slate-200 bg-slate-50 px-2 text-xs text-slate-600">
+                      <span>自定义</span>
+                      <input
+                        aria-label="选择表格主题色"
+                        className="h-5 w-7 cursor-pointer rounded-sm border-0 bg-transparent p-0"
+                        onChange={(event) =>
+                          updateTableColor(event.currentTarget.value)
+                        }
+                        type="color"
+                        value={
+                          cardConfig.tableColor ??
+                          DEFAULT_OPERATION_SHARE_TABLE_BASE_COLOR
+                        }
+                      />
+                      <span className="tabular-nums text-slate-500">
+                        {cardConfig.tableColor ?? '默认'}
+                      </span>
+                    </label>
+                    <Button
+                      aria-controls="operation-share-table-theme-advanced"
+                      aria-expanded={isTableThemeAdvancedOpen}
+                      aria-label={
+                        isTableThemeAdvancedOpen
+                          ? '收起高级自定义'
+                          : '展开高级自定义'
+                      }
+                      className="!text-xs !font-normal !text-slate-500 hover:!text-slate-700"
+                      icon={
+                        <Icon
+                          icon={
+                            isTableThemeAdvancedOpen
+                              ? 'chevron-up'
+                              : 'chevron-down'
                           }
-                          onChange={(event) =>
-                            updateOption(
-                              'showCellPattern',
-                              event.currentTarget.checked,
-                            )
-                          }
+                          size={12}
                         />
-                      ) : null}
-                      <div
-                        aria-label={
-                          colorMode === 'action'
-                            ? t.components.viewer.OperationViewer
-                                .share_cell_color_group_action
-                            : t.components.viewer.OperationViewer
-                                .share_cell_color_group_cell
-                        }
-                        className="flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 p-1"
-                        role="group"
-                      >
-                        {(colorMode === 'action'
-                          ? OPERATION_SHARE_ACTION_COLOR_ORDER
-                          : OPERATION_SHARE_CELL_COLOR_KEYS
-                        ).map((colorKey) => {
-                          const label =
-                            t.components.viewer.OperationViewer.share_cell_color_apply(
-                              {
-                                label:
-                                  colorMode === 'action'
-                                    ? actionColorNames[colorKey]
-                                    : cellColorNames[colorKey],
-                              },
-                            )
-                          return (
-                            <button
-                              key={colorKey}
-                              aria-label={label}
-                              className={`h-8 w-8 rounded text-base font-bold transition-transform enabled:hover:scale-105 enabled:focus:outline-none enabled:focus:ring-2 enabled:focus:ring-sky-500 enabled:focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40 ${
-                                colorMode === 'cell'
-                                  ? 'border border-slate-300'
-                                  : 'bg-white'
-                              }`}
-                              disabled={
-                                (colorMode === 'action'
-                                  ? selectedActionKeys.size
-                                  : selectedCellKeys.size) === 0
+                      }
+                      minimal
+                      onClick={() =>
+                        setIsTableThemeAdvancedOpen((current) => !current)
+                      }
+                      small
+                    >
+                      高级自定义
+                      {hasTableThemeOverrides
+                        ? `（已修改 ${tableThemeOverrideCount} 项）`
+                        : ''}
+                    </Button>
+                  </div>
+                  {isTableThemeAdvancedOpen ? (
+                    <div
+                      className="mt-2 w-fit max-w-full rounded border border-slate-200 bg-slate-50 p-2"
+                      id="operation-share-table-theme-advanced"
+                    >
+                      <div className="flex flex-wrap items-center gap-1 text-xs text-slate-600">
+                        {tableThemeColorFields.map(({ key, label, value }) => (
+                          <label
+                            key={key}
+                            className="flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded border border-slate-200 bg-white px-1.5"
+                          >
+                            <input
+                              aria-label={`${label}颜色`}
+                              className="h-4 w-6 shrink-0 cursor-pointer rounded-sm border border-black/10 bg-transparent p-0"
+                              onChange={(event) =>
+                                updateTableThemeOverride(
+                                  key,
+                                  event.currentTarget.value,
+                                )
                               }
-                              onClick={() =>
-                                colorMode === 'action'
-                                  ? applyActionColor(colorKey)
-                                  : applyCellColor(colorKey)
-                              }
-                              style={
-                                colorMode === 'action'
-                                  ? {
-                                      backgroundColor:
-                                        getOperationShareActionFillColor(
-                                          colorKey,
-                                        ),
-                                      color:
-                                        getOperationShareActionTextColor(
-                                          colorKey,
-                                        ),
-                                    }
-                                  : getOperationShareCellVisualStyle(
-                                      colorKey,
-                                      cardConfig.showCellPattern,
-                                    )
-                              }
-                              title={label}
-                              type="button"
-                            >
-                              {colorMode === 'action' ? 'A' : null}
-                            </button>
-                          )
-                        })}
+                              type="color"
+                              value={value}
+                            />
+                            <span>{label}</span>
+                          </label>
+                        ))}
                       </div>
-                      <Button
-                        disabled={
-                          (colorMode === 'action'
-                            ? selectedActionKeys.size
-                            : selectedCellKeys.size) === 0
-                        }
-                        icon="eraser"
-                        onClick={() =>
-                          colorMode === 'action'
-                            ? clearActionColor()
-                            : clearCellColor()
-                        }
-                        small
-                      >
-                        {colorMode === 'action'
-                          ? t.components.viewer.OperationViewer
-                              .share_cell_color_clear
-                          : t.components.viewer.OperationViewer
-                              .share_cell_color_clear_cell}
-                      </Button>
-                      <Button
-                        disabled={
-                          (colorMode === 'action'
-                            ? selectedActionKeys.size
-                            : selectedCellKeys.size) === 0
-                        }
-                        minimal
-                        onClick={() =>
-                          colorMode === 'action'
-                            ? setSelectedActionKeys(new Set())
-                            : setSelectedCellKeys(new Set())
-                        }
-                        small
-                      >
-                        {t.components.viewer.OperationViewer.share_cell_color_clear_selection(
-                          {
-                            count:
-                              colorMode === 'action'
-                                ? selectedActionKeys.size
-                                : selectedCellKeys.size,
-                          },
-                        )}
-                      </Button>
                     </div>
                   ) : null}
                 </div>
-                {effectiveEditMode === 'color' && colorMode === 'action' ? (
-                  <div className="mt-3 rounded border border-slate-200 bg-slate-50 px-2.5 py-1.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="shrink-0 text-xs font-medium text-slate-600">
-                        {
-                          t.components.viewer.OperationViewer
-                            .share_action_color_notes_title
-                        }
-                      </span>
-                      <span className="min-w-0 truncate text-[11px] leading-4 text-slate-400">
-                        {
-                          t.components.viewer.OperationViewer
-                            .share_action_color_notes_hint
-                        }
-                      </span>
-                    </div>
-                    <div className="mt-1.5 grid gap-1.5 md:grid-cols-4">
-                      {actionColorNoteKeys.map((colorKey) => (
-                        <label
-                          key={colorKey}
-                          className="flex min-w-0 items-center gap-1"
+              ) : null}
+
+              {model.rounds.length > 0 ? (
+                <div className="mt-4 border-t border-slate-200 pt-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h4 className="text-sm font-semibold text-slate-700">
+                          {
+                            t.components.viewer.OperationViewer
+                              .share_cell_color_section_title
+                          }
+                        </h4>
+                        <div
+                          aria-label="表格编辑模式"
+                          className="inline-flex overflow-hidden rounded border border-slate-200 bg-white p-0.5"
+                          role="group"
                         >
-                          <span
-                            aria-hidden="true"
-                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-xs font-bold"
-                            style={{
-                              backgroundColor:
-                                getOperationShareActionFillColor(colorKey),
-                              color: getOperationShareActionTextColor(colorKey),
-                            }}
+                          <Button
+                            active={effectiveEditMode === 'color'}
+                            className="!inline-flex !h-6 !min-h-0 !items-center !justify-center !px-2 !py-0 !text-xs !font-normal !leading-none"
+                            minimal
+                            onClick={() => setEditMode('color')}
+                            small
                           >
-                            A
-                          </span>
-                          <span className="w-7 shrink-0 text-[11px] text-slate-500">
-                            {actionColorNames[colorKey]}
-                          </span>
-                          <input
-                            aria-label={t.components.viewer.OperationViewer.share_action_color_note_label(
-                              {
-                                color: actionColorNames[colorKey],
-                              },
-                            )}
-                            className="h-7 min-w-0 flex-1 rounded border border-slate-300 bg-white px-1.5 text-xs text-slate-700 outline-none transition focus:border-sky-400 focus:ring-1 focus:ring-sky-200"
-                            maxLength={80}
+                            标注模式
+                          </Button>
+                          {showRoundNoteColumn ? (
+                            <Button
+                              active={effectiveEditMode === 'note'}
+                              className="!inline-flex !h-6 !min-h-0 !items-center !justify-center !px-2 !py-0 !text-xs !font-normal !leading-none"
+                              minimal
+                              onClick={() => setEditMode('note')}
+                              small
+                            >
+                              备注模式
+                            </Button>
+                          ) : null}
+                        </div>
+                        {effectiveEditMode === 'color' ? (
+                          <div
+                            aria-label={
+                              t.components.viewer.OperationViewer
+                                .share_cell_color_section_title
+                            }
+                            className="flex items-center gap-0.5 text-xs text-slate-400"
+                            role="group"
+                          >
+                            <span className="mr-0.5">配色对象</span>
+                            <button
+                              aria-label={
+                                t.components.viewer.OperationViewer
+                                  .share_cell_color_mode_action
+                              }
+                              aria-pressed={colorMode === 'action'}
+                              className={`h-6 rounded px-1.5 transition ${
+                                colorMode === 'action'
+                                  ? 'bg-sky-50 font-medium text-sky-700'
+                                  : 'hover:text-slate-600'
+                              }`}
+                              onClick={() => setColorMode('action')}
+                              type="button"
+                            >
+                              操作
+                            </button>
+                            <span aria-hidden="true" className="text-slate-300">
+                              /
+                            </span>
+                            <button
+                              aria-label={
+                                t.components.viewer.OperationViewer
+                                  .share_cell_color_mode_cell
+                              }
+                              aria-pressed={colorMode === 'cell'}
+                              className={`h-6 rounded px-1.5 transition ${
+                                colorMode === 'cell'
+                                  ? 'bg-sky-50 font-medium text-sky-700'
+                                  : 'hover:text-slate-600'
+                              }`}
+                              onClick={() => setColorMode('cell')}
+                              type="button"
+                            >
+                              单元格
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {effectiveEditMode === 'note'
+                          ? '当前编辑备注，动作仅供查看。'
+                          : colorMode === 'action'
+                            ? t.components.viewer.OperationViewer
+                                .share_cell_color_section_hint_action
+                            : t.components.viewer.OperationViewer
+                                .share_cell_color_section_hint_cell}
+                      </p>
+                    </div>
+                    {effectiveEditMode === 'color' ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {colorMode === 'cell' ? (
+                          <Switch
+                            checked={cardConfig.showCellPattern}
+                            className="m-0 mr-1"
+                            label={
+                              t.components.viewer.OperationViewer
+                                .share_cell_pattern
+                            }
                             onChange={(event) =>
-                              updateActionColorNote(
-                                colorKey,
-                                event.currentTarget.value,
+                              updateOption(
+                                'showCellPattern',
+                                event.currentTarget.checked,
                               )
                             }
-                            placeholder={
-                              t.components.viewer.OperationViewer
-                                .share_action_color_note_placeholder
-                            }
-                            type="text"
-                            value={
-                              getOperationShareActionColorNote(
-                                colorKey,
-                                cardConfig.actionColorNotes,
-                              ) ?? ''
-                            }
                           />
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-                <div className="mt-3 max-h-56 overflow-auto rounded border border-slate-200">
-                  <table
-                    className="w-full table-fixed border-collapse bg-white text-center text-xs"
-                    data-edit-mode={effectiveEditMode}
-                  >
-                    <colgroup>
-                      <col style={{ width: '3.5rem' }} />
-                      {editableColumns.map((column) => (
-                        <col key={column.key} />
-                      ))}
-                      {showRoundNoteColumn ? (
-                        <col
-                          style={{
-                            width: effectiveEditMode === 'note' ? '56%' : '16%',
-                          }}
-                        />
-                      ) : null}
-                    </colgroup>
-                    <thead className="text-slate-600">
-                      <tr>
-                        <th className="sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 px-1 py-1.5 shadow-[0_1px_0_rgba(148,163,184,0.35)]">
-                          {effectiveEditMode === 'color' ? (
-                            <OperationShareSelectionCheckbox
-                              ariaLabel="选择整个表格"
-                              checked={allTableSelection.checked}
-                              indeterminate={allTableSelection.indeterminate}
-                              label="回合"
-                              onChange={(checked) =>
+                        ) : null}
+                        <div
+                          aria-label={
+                            colorMode === 'action'
+                              ? t.components.viewer.OperationViewer
+                                  .share_cell_color_group_action
+                              : t.components.viewer.OperationViewer
+                                  .share_cell_color_group_cell
+                          }
+                          className="flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 p-1"
+                          role="group"
+                        >
+                          {(colorMode === 'action'
+                            ? OPERATION_SHARE_ACTION_COLOR_ORDER
+                            : OPERATION_SHARE_CELL_COLOR_KEYS
+                          ).map((colorKey) => {
+                            const label =
+                              t.components.viewer.OperationViewer.share_cell_color_apply(
+                                {
+                                  label:
+                                    colorMode === 'action'
+                                      ? actionColorNames[colorKey]
+                                      : cellColorNames[colorKey],
+                                },
+                              )
+                            return (
+                              <button
+                                key={colorKey}
+                                aria-label={label}
+                                className={`h-8 w-8 rounded text-base font-bold transition-transform enabled:hover:scale-105 enabled:focus:outline-none enabled:focus:ring-2 enabled:focus:ring-sky-500 enabled:focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-40 ${
+                                  colorMode === 'cell'
+                                    ? 'border border-slate-300'
+                                    : 'bg-white'
+                                }`}
+                                disabled={
+                                  (colorMode === 'action'
+                                    ? selectedActionKeys.size
+                                    : selectedCellKeys.size) === 0
+                                }
+                                onClick={() =>
+                                  colorMode === 'action'
+                                    ? colorKey === 'ice'
+                                      ? clearActionColor()
+                                      : applyActionColor(colorKey)
+                                    : applyCellColor(colorKey)
+                                }
+                                style={
+                                  colorMode === 'action'
+                                    ? {
+                                        backgroundColor:
+                                          getOperationShareActionFillColor(
+                                            colorKey,
+                                          ),
+                                        color:
+                                          getOperationShareActionTextColor(
+                                            colorKey,
+                                          ),
+                                      }
+                                    : getOperationShareCellVisualStyle(
+                                        colorKey,
+                                        cardConfig.showCellPattern,
+                                      )
+                                }
+                                title={label}
+                                type="button"
+                              >
+                                {colorMode === 'action' ? 'A' : null}
+                              </button>
+                            )
+                          })}
+                        </div>
+                        <Button
+                          disabled={
+                            (colorMode === 'action'
+                              ? selectedActionKeys.size
+                              : selectedCellKeys.size) === 0
+                          }
+                          icon="eraser"
+                          onClick={() =>
+                            colorMode === 'action'
+                              ? clearActionColor()
+                              : clearCellColor()
+                          }
+                          small
+                        >
+                          {colorMode === 'action'
+                            ? t.components.viewer.OperationViewer
+                                .share_cell_color_clear
+                            : t.components.viewer.OperationViewer
+                                .share_cell_color_clear_cell}
+                        </Button>
+                        <Button
+                          disabled={
+                            (colorMode === 'action'
+                              ? selectedActionKeys.size
+                              : selectedCellKeys.size) === 0
+                          }
+                          minimal
+                          onClick={() =>
+                            colorMode === 'action'
+                              ? setSelectedActionKeys(new Set())
+                              : setSelectedCellKeys(new Set())
+                          }
+                          small
+                        >
+                          {t.components.viewer.OperationViewer.share_cell_color_clear_selection(
+                            {
+                              count:
                                 colorMode === 'action'
-                                  ? toggleActionGroupSelection(
-                                      allActionKeys,
-                                      checked,
-                                    )
-                                  : toggleCellGroupSelection(
-                                      allCellKeys,
-                                      checked,
-                                    )
+                                  ? selectedActionKeys.size
+                                  : selectedCellKeys.size,
+                            },
+                          )}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                  {effectiveEditMode === 'color' && colorMode === 'action' ? (
+                    <div className="mt-3 rounded bg-slate-50 px-2 py-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="shrink-0 text-xs font-medium text-slate-600">
+                          {
+                            t.components.viewer.OperationViewer
+                              .share_action_color_notes_title
+                          }
+                        </span>
+                        <span className="min-w-0 truncate text-[10px] leading-4 text-slate-400">
+                          {
+                            t.components.viewer.OperationViewer
+                              .share_action_color_notes_hint
+                          }
+                        </span>
+                      </div>
+                      <div className="mt-1.5 grid grid-cols-2 gap-1.5 md:grid-cols-4">
+                        {actionColorNoteKeys.map((colorKey) => (
+                          <label
+                            key={colorKey}
+                            className="flex min-w-0 items-center gap-1.5"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold"
+                              style={{
+                                backgroundColor:
+                                  getOperationShareActionFillColor(colorKey),
+                                color:
+                                  getOperationShareActionTextColor(colorKey),
+                              }}
+                            >
+                              A
+                            </span>
+                            <span className="w-7 shrink-0 text-[11px] text-slate-500">
+                              {actionColorNames[colorKey]}
+                            </span>
+                            <input
+                              aria-label={t.components.viewer.OperationViewer.share_action_color_note_label(
+                                {
+                                  color: actionColorNames[colorKey],
+                                },
+                              )}
+                              className="h-7 min-w-0 flex-1 rounded bg-white/90 px-1.5 text-xs text-slate-700 outline-none transition placeholder:text-slate-300 focus:bg-white focus:ring-1 focus:ring-sky-200"
+                              maxLength={80}
+                              onChange={(event) =>
+                                updateActionColorNote(
+                                  colorKey,
+                                  event.currentTarget.value,
+                                )
+                              }
+                              placeholder={
+                                t.components.viewer.OperationViewer
+                                  .share_action_color_note_placeholder
+                              }
+                              type="text"
+                              value={
+                                getOperationShareActionColorNote(
+                                  colorKey,
+                                  cardConfig.actionColorNotes,
+                                ) ?? ''
                               }
                             />
-                          ) : (
-                            '回合'
-                          )}
-                        </th>
-                        {editableColumnGroups.map((column) => {
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="mt-3 max-h-80 w-full min-w-0 max-w-full overflow-x-auto overflow-y-auto overscroll-x-contain rounded border border-slate-200">
+                    <table
+                      className={`border-collapse bg-white text-center text-xs ${
+                        isMobileDevice
+                          ? 'w-max min-w-0 table-auto'
+                          : 'w-full table-fixed'
+                      }`}
+                      data-edit-mode={effectiveEditMode}
+                    >
+                      <colgroup>
+                        <col
+                          style={{ width: isMobileDevice ? '24px' : '3.5rem' }}
+                        />
+                        {editableColumnGroups.map((column) => (
+                          <col
+                            key={column.key}
+                            className={
+                              isMobileDevice && colorMode === 'action'
+                                ? column.maxActionsInRound >= 3
+                                  ? 'w-[4.5rem]'
+                                  : 'w-9'
+                                : undefined
+                            }
+                          />
+                        ))}
+                        {showRoundNoteColumn ? (
+                          <col
+                            style={{
+                              width:
+                                effectiveEditMode === 'note' ? '56%' : '16%',
+                            }}
+                          />
+                        ) : null}
+                      </colgroup>
+                      <thead className="text-slate-600">
+                        <tr>
+                          <th
+                            className={`sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 shadow-[0_1px_0_rgba(148,163,184,0.35)] ${
+                              isMobileDevice ? 'px-0 py-1' : 'px-1 py-1.5'
+                            }`}
+                            style={
+                              isMobileDevice
+                                ? {
+                                    width: '24px',
+                                    minWidth: '24px',
+                                    maxWidth: '24px',
+                                  }
+                                : undefined
+                            }
+                          >
+                            {effectiveEditMode === 'color' ? (
+                              <OperationShareSelectionCheckbox
+                                ariaLabel="选择整个表格"
+                                checked={allTableSelection.checked}
+                                indeterminate={allTableSelection.indeterminate}
+                                label="回合"
+                                onChange={(checked) =>
+                                  colorMode === 'action'
+                                    ? toggleActionGroupSelection(
+                                        allActionKeys,
+                                        checked,
+                                      )
+                                    : toggleCellGroupSelection(
+                                        allCellKeys,
+                                        checked,
+                                      )
+                                }
+                                stacked={isMobileDevice}
+                              />
+                            ) : (
+                              '回合'
+                            )}
+                          </th>
+                          {editableColumnGroups.map((column) => {
+                            const keySet =
+                              colorMode === 'action'
+                                ? selectedActionKeys
+                                : selectedCellKeys
+                            const keys =
+                              colorMode === 'action'
+                                ? column.actionKeys
+                                : column.cellKeys
+                            const selection =
+                              getOperationShareCellSelectionState(keySet, keys)
+                            return (
+                              <th
+                                key={column.key}
+                                className={`sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 shadow-[0_1px_0_rgba(148,163,184,0.35)] last:border-r-0 ${
+                                  effectiveEditMode === 'note'
+                                    ? isMobileDevice
+                                      ? 'px-0 py-1'
+                                      : 'px-1 py-1'
+                                    : isMobileDevice
+                                      ? 'px-0 py-1'
+                                      : 'px-2 py-2'
+                                }`}
+                              >
+                                {effectiveEditMode === 'color' ? (
+                                  <OperationShareSelectionCheckbox
+                                    ariaLabel={`选择${column.label}整列`}
+                                    checked={selection.checked}
+                                    indeterminate={selection.indeterminate}
+                                    label={column.label}
+                                    onChange={(checked) =>
+                                      colorMode === 'action'
+                                        ? toggleActionGroupSelection(
+                                            column.actionKeys,
+                                            checked,
+                                          )
+                                        : toggleCellGroupSelection(
+                                            column.cellKeys,
+                                            checked,
+                                          )
+                                    }
+                                    stacked={isMobileDevice}
+                                  />
+                                ) : (
+                                  <span>{column.label}</span>
+                                )}
+                              </th>
+                            )
+                          })}
+                          {showRoundNoteColumn ? (
+                            <th
+                              className={`sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 text-left shadow-[0_1px_0_rgba(148,163,184,0.35)] last:border-r-0 ${
+                                effectiveEditMode === 'note'
+                                  ? 'px-2 py-2'
+                                  : 'px-1 py-1 text-[11px] text-slate-500'
+                              }`}
+                            >
+                              回合备注
+                            </th>
+                          ) : null}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {editableRoundGroups.map((round) => {
                           const keySet =
                             colorMode === 'action'
                               ? selectedActionKeys
                               : selectedCellKeys
                           const keys =
                             colorMode === 'action'
-                              ? column.actionKeys
-                              : column.cellKeys
+                              ? round.actionKeys
+                              : round.cellKeys
                           const selection = getOperationShareCellSelectionState(
                             keySet,
                             keys,
                           )
-                          return (
-                            <th
-                              key={column.key}
-                              className={`sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 shadow-[0_1px_0_rgba(148,163,184,0.35)] last:border-r-0 ${
-                                effectiveEditMode === 'note'
-                                  ? 'px-1 py-1'
-                                  : 'px-2 py-2'
-                              }`}
-                            >
-                              {effectiveEditMode === 'color' ? (
-                                <OperationShareSelectionCheckbox
-                                  ariaLabel={`选择${column.label}整列`}
-                                  checked={selection.checked}
-                                  indeterminate={selection.indeterminate}
-                                  label={column.label}
-                                  onChange={(checked) =>
-                                    colorMode === 'action'
-                                      ? toggleActionGroupSelection(
-                                          column.actionKeys,
-                                          checked,
-                                        )
-                                      : toggleCellGroupSelection(
-                                          column.cellKeys,
-                                          checked,
-                                        )
-                                  }
-                                />
-                              ) : (
-                                <span>{column.label}</span>
-                              )}
-                            </th>
-                          )
-                        })}
-                        {showRoundNoteColumn ? (
-                          <th
-                            className={`sticky top-0 z-10 border-b border-r border-slate-200 bg-slate-100 text-left shadow-[0_1px_0_rgba(148,163,184,0.35)] last:border-r-0 ${
-                              effectiveEditMode === 'note'
-                                ? 'px-2 py-2'
-                                : 'px-1 py-1 text-[11px] text-slate-500'
-                            }`}
-                          >
-                            回合备注
-                          </th>
-                        ) : null}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {editableRoundGroups.map((round) => {
-                        const keySet =
-                          colorMode === 'action'
-                            ? selectedActionKeys
-                            : selectedCellKeys
-                        const keys =
-                          colorMode === 'action'
-                            ? round.actionKeys
-                            : round.cellKeys
-                        const selection = getOperationShareCellSelectionState(
-                          keySet,
-                          keys,
-                        )
-                        const { displayOrderByActionOrder } =
-                          getOperationShareRoundDisplay(
+                          const { displayOrderByActionOrder } =
+                            getOperationShareRoundDisplay(
+                              round.sourceRound,
+                              cardConfig,
+                            )
+                          const note = getOperationShareRoundNoteText(
                             round.sourceRound,
                             cardConfig,
                           )
-                        const note = getOperationShareRoundNoteText(
-                          round.sourceRound,
-                          cardConfig,
-                        )
-                        const noteActions = getOperationShareOtherActions(
-                          round.sourceRound,
-                          {
-                            ...cardConfig,
-                            hiddenOtherActionKeys: {},
-                          },
-                        ).filter(
-                          (action) =>
-                            !isOperationShareTargetSwitchAction(action.raw),
-                        )
-                        const hasNoteOverride =
-                          Object.prototype.hasOwnProperty.call(
-                            cardConfig.roundNoteOverrides ?? {},
-                            round.round,
+                          const noteActions = getOperationShareOtherActions(
+                            round.sourceRound,
+                            {
+                              ...cardConfig,
+                              hiddenOtherActionKeys: {},
+                            },
+                          ).filter(
+                            (action) =>
+                              !isOperationShareTargetSwitchAction(action.raw),
                           )
-                        const hasHiddenOtherActions = Object.keys(
-                          cardConfig.hiddenOtherActionKeys ?? {},
-                        ).some((key) => key.startsWith(`${round.round}:`))
-                        return (
-                          <tr key={round.round}>
-                            <th className="border-b border-r border-slate-200 px-1 py-1.5 font-medium text-slate-600">
-                              {effectiveEditMode === 'color' ? (
-                                <OperationShareSelectionCheckbox
-                                  ariaLabel={`选择第 ${round.round} 回合整行`}
-                                  checked={selection.checked}
-                                  indeterminate={selection.indeterminate}
-                                  label={`${round.round}`}
-                                  onChange={(checked) =>
-                                    colorMode === 'action'
-                                      ? toggleActionGroupSelection(
-                                          round.actionKeys,
-                                          checked,
-                                        )
-                                      : toggleCellGroupSelection(
-                                          round.cellKeys,
-                                          checked,
-                                        )
-                                  }
-                                />
-                              ) : (
-                                round.round
-                              )}
-                            </th>
-                            {editableColumns.map((column) => {
-                              const cellKey = buildOperationShareCellKey(
-                                round.round,
-                                column.key,
-                              )
-                              const actions =
-                                round.sourceRound.slots[column.slot] ?? []
-                              const actionLabels = actions.map((action) =>
-                                getOperationShareActionLabel(
-                                  action,
-                                  displayOrderByActionOrder.get(action.order),
-                                ),
-                              )
-                              const cellSelected = selectedCellKeys.has(cellKey)
-                              return (
-                                <td
-                                  key={column.key}
-                                  className={`border-b border-r border-slate-200 last:border-r-0 ${
-                                    effectiveEditMode === 'note'
-                                      ? 'p-0.5'
-                                      : 'p-1'
-                                  }`}
-                                  style={getOperationShareCellVisualStyle(
-                                    cardConfig.cellColors[cellKey],
-                                    cardConfig.showCellPattern,
-                                  )}
-                                >
-                                  {colorMode === 'action' ? (
-                                    <div
-                                      className={
-                                        effectiveEditMode === 'note'
-                                          ? 'flex min-h-6 flex-wrap items-center justify-center gap-0.5'
-                                          : 'flex min-h-8 flex-wrap items-center justify-center gap-1'
+                          const hasNoteOverride =
+                            Object.prototype.hasOwnProperty.call(
+                              cardConfig.roundNoteOverrides ?? {},
+                              round.round,
+                            )
+                          const hasHiddenOtherActions = Object.keys(
+                            cardConfig.hiddenOtherActionKeys ?? {},
+                          ).some((key) => key.startsWith(`${round.round}:`))
+                          return (
+                            <tr key={round.round}>
+                              <th
+                                className="border-b border-r border-slate-200 px-1 py-0.5 font-medium text-slate-600 max-sm:px-0 max-sm:py-0"
+                                style={
+                                  isMobileDevice
+                                    ? {
+                                        width: '24px',
+                                        minWidth: '24px',
+                                        maxWidth: '24px',
                                       }
-                                    >
-                                      {actions.length > 0 ? (
-                                        actions.map((action) => {
-                                          const actionKey =
-                                            buildOperationShareActionKey(
-                                              round.round,
-                                              action.order,
-                                            )
-                                          const selected =
-                                            selectedActionKeys.has(actionKey)
-                                          const label =
-                                            getOperationShareActionLabel(
-                                              action,
-                                              displayOrderByActionOrder.get(
-                                                action.order,
-                                              ),
-                                            )
-                                          const actionColor =
-                                            getOperationShareActionColor(
-                                              action,
-                                              cardConfig.actionColors,
-                                              round.round,
-                                            )
-                                          const actionFill =
-                                            getOperationShareActionFillColor(
-                                              cardConfig.actionColors[
-                                                actionKey
-                                              ],
-                                              action.targetIndex,
-                                            )
-                                          return effectiveEditMode ===
-                                            'color' ? (
-                                            <button
-                                              key={actionKey}
-                                              aria-label={`${round.round} 回合 ${column.label}：${label}`}
-                                              aria-pressed={selected}
-                                              className={`whitespace-nowrap rounded-sm px-1.5 py-1 font-medium leading-4 transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
-                                                selected
-                                                  ? 'bg-sky-50 ring-1 ring-inset ring-sky-500'
-                                                  : ''
-                                              }`}
-                                              onClick={() =>
-                                                toggleActionSelection(
-                                                  actionKey,
-                                                  !selected,
-                                                )
-                                              }
-                                              style={
-                                                actionColor
-                                                  ? {
-                                                      color: actionColor,
-                                                      ...(actionFill
-                                                        ? {
-                                                            backgroundColor:
-                                                              actionFill,
-                                                            paddingInline:
-                                                              '6px',
-                                                          }
-                                                        : {}),
-                                                    }
-                                                  : undefined
-                                              }
-                                              type="button"
-                                            >
-                                              {label}
-                                            </button>
-                                          ) : (
-                                            <span
-                                              key={actionKey}
-                                              className="whitespace-nowrap rounded-sm px-0.5 py-0.5 text-[11px] font-medium leading-4"
-                                              style={
-                                                actionColor
-                                                  ? { color: actionColor }
-                                                  : undefined
-                                              }
-                                            >
-                                              {label}
-                                            </span>
-                                          )
-                                        })
-                                      ) : (
-                                        <span className="text-slate-400">
-                                          —
-                                        </span>
-                                      )}
-                                    </div>
-                                  ) : effectiveEditMode === 'color' ? (
-                                    <button
-                                      aria-label={`${round.round} 回合 ${column.label}${
-                                        actionLabels.length > 0
-                                          ? `：${actionLabels.join(' ')}`
-                                          : ''
-                                      }`}
-                                      aria-pressed={cellSelected}
-                                      className={`flex min-h-8 w-full items-center justify-center gap-1.5 rounded-sm px-1.5 py-1 transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
-                                        cellSelected
-                                          ? 'ring-2 ring-inset ring-sky-500'
-                                          : ''
-                                      }`}
-                                      onClick={() =>
-                                        toggleCellSelection(
-                                          cellKey,
-                                          !cellSelected,
-                                        )
-                                      }
-                                      type="button"
-                                    >
-                                      <span
-                                        aria-hidden="true"
-                                        className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border ${
-                                          cellSelected
-                                            ? 'border-sky-500 bg-sky-500 text-white'
-                                            : 'border-slate-400 bg-white/70'
-                                        }`}
-                                      >
-                                        {cellSelected ? (
-                                          <Icon icon="tick" size={10} />
-                                        ) : null}
-                                      </span>
-                                      <span className="min-w-0 break-words font-medium leading-4">
-                                        {actionLabels.length > 0
-                                          ? actionLabels.join(' ')
-                                          : '—'}
-                                      </span>
-                                    </button>
-                                  ) : (
-                                    <div className="flex min-h-6 items-center justify-center px-0.5 py-0.5">
-                                      <span className="min-w-0 break-words text-[11px] font-medium leading-4">
-                                        {actionLabels.length > 0
-                                          ? actionLabels.join(' ')
-                                          : '—'}
-                                      </span>
-                                    </div>
-                                  )}
-                                </td>
-                              )
-                            })}
-                            {showRoundNoteColumn ? (
-                              <td
-                                className={`border-b border-slate-200 text-left align-top ${
-                                  effectiveEditMode === 'note' ? 'p-2' : 'p-1'
-                                }`}
+                                    : undefined
+                                }
                               >
-                                <textarea
-                                  aria-label={`${round.round} 回合备注`}
-                                  className={`w-full resize-y rounded border border-slate-300 text-slate-800 outline-none focus:border-sky-500 ${
-                                    effectiveEditMode === 'note'
-                                      ? 'min-h-14 px-2 py-1.5 text-xs leading-5'
-                                      : 'max-h-24 min-h-8 px-1 py-0.5 text-[11px] leading-4'
-                                  }`}
-                                  maxLength={500}
-                                  onChange={(event) =>
-                                    updateRoundNote(
-                                      round.round,
-                                      event.currentTarget.value,
-                                    )
-                                  }
-                                  placeholder="可直接修改本回合备注"
-                                  value={note}
-                                />
-                                {effectiveEditMode === 'note' &&
-                                noteActions.length > 0 ? (
-                                  <div className="mt-1 flex flex-wrap items-center gap-0.5">
-                                    <span className="mr-0.5 text-[10px] text-slate-400">
-                                      快捷填入
-                                    </span>
-                                    {noteActions.map((action) => {
-                                      const label =
-                                        getOperationShareNoteActionLabel(
-                                          round.sourceRound,
-                                          action,
-                                          displayOrderByActionOrder,
-                                        )
-                                      const included = note.includes(label)
-
-                                      return (
-                                        <Button
-                                          key={`${action.order}-${action.raw}`}
-                                          aria-label={
-                                            included
-                                              ? `从备注移除${label}`
-                                              : `填入备注${label}`
-                                          }
-                                          className={`!inline-flex !h-5 !min-h-0 !items-center !gap-0.5 !px-1 !py-0 !text-[10px] !font-normal !leading-none ${
-                                            included
-                                              ? '!bg-slate-100 !text-slate-700'
-                                              : '!text-slate-400'
+                                {effectiveEditMode === 'color' ? (
+                                  <OperationShareSelectionCheckbox
+                                    ariaLabel={`选择第 ${round.round} 回合整行`}
+                                    checked={selection.checked}
+                                    indeterminate={selection.indeterminate}
+                                    label={`${round.round}`}
+                                    onChange={(checked) =>
+                                      colorMode === 'action'
+                                        ? toggleActionGroupSelection(
+                                            round.actionKeys,
+                                            checked,
+                                          )
+                                        : toggleCellGroupSelection(
+                                            round.cellKeys,
+                                            checked,
+                                          )
+                                    }
+                                  />
+                                ) : (
+                                  round.round
+                                )}
+                              </th>
+                              {editableColumns.map((column) => {
+                                const cellKey = buildOperationShareCellKey(
+                                  round.round,
+                                  column.key,
+                                )
+                                const actions =
+                                  round.sourceRound.slots[column.slot] ?? []
+                                const actionLabels = actions.map((action) =>
+                                  getOperationShareActionLabel(
+                                    action,
+                                    displayOrderByActionOrder.get(action.order),
+                                  ),
+                                )
+                                const cellSelected =
+                                  selectedCellKeys.has(cellKey)
+                                return (
+                                  <td
+                                    key={column.key}
+                                    className={`border-b border-r border-slate-200 last:border-r-0 ${
+                                      effectiveEditMode === 'note'
+                                        ? 'p-0.5'
+                                        : isMobileDevice
+                                          ? 'p-0'
+                                          : 'p-1'
+                                    }`}
+                                    style={getOperationShareCellVisualStyle(
+                                      cardConfig.cellColors[cellKey],
+                                      cardConfig.showCellPattern,
+                                    )}
+                                  >
+                                    {colorMode === 'action' ? (
+                                      <div
+                                        className={
+                                          effectiveEditMode === 'note'
+                                            ? 'flex min-h-6 flex-wrap items-center justify-center gap-0.5'
+                                            : 'flex min-h-6 flex-wrap items-center justify-center gap-0.5'
+                                        }
+                                      >
+                                        {actions.length > 0 ? (
+                                          actions.map((action) => {
+                                            const actionKey =
+                                              buildOperationShareActionKey(
+                                                round.round,
+                                                action.order,
+                                              )
+                                            const selected =
+                                              selectedActionKeys.has(actionKey)
+                                            const label =
+                                              getOperationShareActionLabel(
+                                                action,
+                                                displayOrderByActionOrder.get(
+                                                  action.order,
+                                                ),
+                                              )
+                                            const actionColor =
+                                              getOperationShareActionColor(
+                                                action,
+                                                cardConfig.actionColors,
+                                                round.round,
+                                              )
+                                            const actionFill =
+                                              getOperationShareActionFillColor(
+                                                cardConfig.actionColors[
+                                                  actionKey
+                                                ],
+                                                action.targetIndex,
+                                              )
+                                            return effectiveEditMode ===
+                                              'color' ? (
+                                              <button
+                                                key={actionKey}
+                                                aria-label={`${round.round} 回合 ${column.label}：${label}`}
+                                                aria-pressed={selected}
+                                                className={`whitespace-nowrap rounded-sm py-0.5 font-medium leading-4 transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
+                                                  isMobileDevice
+                                                    ? 'px-0.5'
+                                                    : 'px-1'
+                                                } ${
+                                                  selected
+                                                    ? 'bg-sky-50 ring-1 ring-inset ring-sky-500'
+                                                    : ''
+                                                }`}
+                                                onClick={() =>
+                                                  toggleActionSelection(
+                                                    actionKey,
+                                                    !selected,
+                                                  )
+                                                }
+                                                style={
+                                                  actionColor
+                                                    ? {
+                                                        color: actionColor,
+                                                        ...(actionFill
+                                                          ? {
+                                                              backgroundColor:
+                                                                actionFill,
+                                                              ...(isMobileDevice
+                                                                ? {}
+                                                                : {
+                                                                    paddingInline:
+                                                                      '4px',
+                                                                  }),
+                                                            }
+                                                          : {}),
+                                                      }
+                                                    : undefined
+                                                }
+                                                type="button"
+                                              >
+                                                {label}
+                                              </button>
+                                            ) : (
+                                              <span
+                                                key={actionKey}
+                                                className="whitespace-nowrap rounded-sm px-0.5 py-0.5 text-[11px] font-medium leading-4"
+                                                style={
+                                                  actionColor
+                                                    ? { color: actionColor }
+                                                    : undefined
+                                                }
+                                              >
+                                                {label}
+                                              </span>
+                                            )
+                                          })
+                                        ) : (
+                                          <span className="text-slate-400">
+                                            —
+                                          </span>
+                                        )}
+                                      </div>
+                                    ) : effectiveEditMode === 'color' ? (
+                                      <button
+                                        aria-label={`${round.round} 回合 ${column.label}${
+                                          actionLabels.length > 0
+                                            ? `：${actionLabels.join(' ')}`
+                                            : ''
+                                        }`}
+                                        aria-pressed={cellSelected}
+                                        className={`flex min-h-6 w-full items-center justify-center rounded-sm py-1 transition enabled:hover:bg-black/5 enabled:focus:outline-none ${
+                                          isMobileDevice
+                                            ? 'gap-0.5 px-0.5'
+                                            : 'gap-1.5 px-1.5'
+                                        } ${
+                                          cellSelected
+                                            ? 'ring-2 ring-inset ring-sky-500'
+                                            : ''
+                                        }`}
+                                        onClick={() =>
+                                          toggleCellSelection(
+                                            cellKey,
+                                            !cellSelected,
+                                          )
+                                        }
+                                        type="button"
+                                      >
+                                        <span
+                                          aria-hidden="true"
+                                          className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-sm border ${
+                                            cellSelected
+                                              ? 'border-sky-500 bg-sky-500 text-white'
+                                              : 'border-slate-400 bg-white/70'
                                           }`}
-                                          icon={
-                                            <Icon
-                                              icon={included ? 'cross' : 'plus'}
-                                              size={9}
-                                            />
-                                          }
+                                        >
+                                          {cellSelected ? (
+                                            <Icon icon="tick" size={10} />
+                                          ) : null}
+                                        </span>
+                                        <span className="min-w-0 break-words font-medium leading-4">
+                                          {actionLabels.length > 0
+                                            ? actionLabels.join(' ')
+                                            : '—'}
+                                        </span>
+                                      </button>
+                                    ) : (
+                                      <div className="flex min-h-6 items-center justify-center px-0.5 py-0.5">
+                                        <span className="min-w-0 break-words text-[11px] font-medium leading-4">
+                                          {actionLabels.length > 0
+                                            ? actionLabels.join(' ')
+                                            : '—'}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </td>
+                                )
+                              })}
+                              {showRoundNoteColumn ? (
+                                <td
+                                  className={`border-b border-slate-200 text-left align-top ${
+                                    effectiveEditMode === 'note' ? 'p-2' : 'p-1'
+                                  }`}
+                                >
+                                  <textarea
+                                    aria-label={`${round.round} 回合备注`}
+                                    className={`w-full resize-y rounded border border-slate-300 text-slate-800 outline-none focus:border-sky-500 ${
+                                      effectiveEditMode === 'note'
+                                        ? 'min-h-14 px-2 py-1.5 text-xs leading-5'
+                                        : 'max-h-24 min-h-6 px-1 py-0.5 text-[11px] leading-4'
+                                    }`}
+                                    maxLength={500}
+                                    onChange={(event) =>
+                                      updateRoundNote(
+                                        round.round,
+                                        event.currentTarget.value,
+                                      )
+                                    }
+                                    placeholder="可直接修改本回合备注"
+                                    value={note}
+                                  />
+                                  {effectiveEditMode === 'note' &&
+                                  noteActions.length > 0 ? (
+                                    <div className="mt-1 flex flex-wrap items-center gap-0.5">
+                                      <span className="mr-0.5 text-[10px] text-slate-400">
+                                        快捷填入
+                                      </span>
+                                      {noteActions.map((action) => {
+                                        const label =
+                                          getOperationShareNoteActionLabel(
+                                            round.sourceRound,
+                                            action,
+                                            displayOrderByActionOrder,
+                                          )
+                                        const included = note.includes(label)
+
+                                        return (
+                                          <Button
+                                            key={`${action.order}-${action.raw}`}
+                                            aria-label={
+                                              included
+                                                ? `从备注移除${label}`
+                                                : `填入备注${label}`
+                                            }
+                                            className={`!inline-flex !h-5 !min-h-0 !items-center !gap-0.5 !px-1 !py-0 !text-[10px] !font-normal !leading-none ${
+                                              included
+                                                ? '!bg-slate-100 !text-slate-700'
+                                                : '!text-slate-400'
+                                            }`}
+                                            icon={
+                                              <Icon
+                                                icon={
+                                                  included ? 'cross' : 'plus'
+                                                }
+                                                size={9}
+                                              />
+                                            }
+                                            minimal
+                                            onClick={() =>
+                                              toggleOtherActionInNote(
+                                                round.sourceRound,
+                                                label,
+                                              )
+                                            }
+                                            small
+                                          >
+                                            {label}
+                                          </Button>
+                                        )
+                                      })}
+                                      {hasNoteOverride ||
+                                      hasHiddenOtherActions ? (
+                                        <Button
+                                          className="!inline-flex !h-5 !min-h-0 !items-center !gap-0.5 !px-1 !py-0 !text-[10px] !font-normal !leading-none"
+                                          icon={<Icon icon="reset" size={9} />}
                                           minimal
                                           onClick={() =>
-                                            toggleOtherActionInNote(
-                                              round.sourceRound,
-                                              label,
-                                            )
+                                            restoreRoundNote(round.round)
                                           }
                                           small
                                         >
-                                          {label}
+                                          恢复自动内容
                                         </Button>
-                                      )
-                                    })}
-                                    {hasNoteOverride ||
-                                    hasHiddenOtherActions ? (
-                                      <Button
-                                        className="!inline-flex !h-5 !min-h-0 !items-center !gap-0.5 !px-1 !py-0 !text-[10px] !font-normal !leading-none"
-                                        icon={<Icon icon="reset" size={9} />}
-                                        minimal
-                                        onClick={() =>
-                                          restoreRoundNote(round.round)
-                                        }
-                                        small
-                                      >
-                                        恢复自动内容
-                                      </Button>
-                                    ) : null}
-                                  </div>
-                                ) : effectiveEditMode === 'note' &&
-                                  (hasNoteOverride || hasHiddenOtherActions) ? (
-                                  <Button
-                                    className="!mt-1 !inline-flex !h-5 !min-h-0 !items-center !gap-0.5 !px-1 !py-0 !text-[10px] !font-normal !leading-none"
-                                    icon={<Icon icon="reset" size={9} />}
-                                    minimal
-                                    onClick={() =>
-                                      restoreRoundNote(round.round)
-                                    }
-                                    small
-                                  >
-                                    恢复自动内容
-                                  </Button>
-                                ) : null}
-                              </td>
-                            ) : null}
-                          </tr>
-                        )
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : null}
-          </fieldset>
-        ) : (
-          <fieldset
-            className="mb-5 rounded border border-slate-200 bg-white p-4"
-            disabled={
-              status === 'generating' || authorConfigStatus === 'loading'
-            }
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-base font-semibold text-slate-800">
-                    生成前编辑
-                  </h3>
-                  <Button
-                    disabled={
-                      Object.keys(cardConfig.requiredDiscs).length === 0
-                    }
-                    icon="reset"
-                    minimal
-                    onClick={clearRequiredDiscs}
-                    small
-                  >
-                    清除必须标记
-                  </Button>
-                  <Button
-                    disabled={
-                      !currentRemoteConfig || hasUnsupportedRemoteConfig
-                    }
-                    icon="cloud-download"
-                    minimal
-                    onClick={restoreAuthorConfig}
-                    small
-                  >
-                    恢复作者配置
-                  </Button>
-                </div>
-                <p className="mt-1 text-sm leading-6 text-slate-500">
-                  配置会按当前作业自动缓存；可将关键命盘标记为“必须”，禁用命盘会自动标注为“绝对不能有”。
-                </p>
-              </div>
-            </div>
-
-            {model.operators.some((operator) => operator.discs.length > 0) ? (
-              <div className="mt-4 grid gap-2 border-t border-slate-200 pt-4 sm:grid-cols-2 md:grid-cols-5">
-                {model.operators.map((operator, operatorIndex) => (
-                  <section
-                    key={`${operator.rawName}-${operatorIndex}`}
-                    className="min-w-0 rounded border border-slate-200 bg-slate-50 p-2"
-                  >
-                    <h4 className="break-words text-xs font-semibold leading-5 text-slate-700">
-                      {operator.slot ?? operatorIndex + 1} 号位 {'·'}
-                      {operator.name}
-                    </h4>
-                    {operator.discs.length > 0 ? (
-                      <div className="mt-1.5 grid gap-1">
-                        {operator.discs.map((disc) => {
-                          const key = buildOperationShareDiscKey(
-                            operator.slot ?? operatorIndex + 1,
-                            disc.slot,
-                          )
-                          if (disc.forbidden) {
-                            return (
-                              <div
-                                key={key}
-                                className="flex flex-col items-start gap-1 rounded border border-red-300 bg-red-50 px-2 py-1.5 text-xs font-semibold leading-5 text-red-800"
-                              >
-                                <span className="shrink-0 rounded bg-red-700 px-1.5 py-0.5 text-xs font-bold text-white">
-                                  绝对不能有
-                                </span>
-                                <span>
-                                  {disc.slot} 号命盘：{disc.abbreviation}
-                                </span>
-                              </div>
-                            )
-                          }
-                          return (
-                            <Checkbox
-                              key={key}
-                              checked={cardConfig.requiredDiscs[key] === true}
-                              className="m-0 text-xs leading-5"
-                              label={`${disc.slot} 号命盘：${disc.abbreviation}`}
-                              onChange={(event) =>
-                                updateRequiredDisc(
-                                  key,
-                                  event.currentTarget.checked,
-                                )
-                              }
-                            />
+                                      ) : null}
+                                    </div>
+                                  ) : effectiveEditMode === 'note' &&
+                                    (hasNoteOverride ||
+                                      hasHiddenOtherActions) ? (
+                                    <Button
+                                      className="!mt-1 !inline-flex !h-5 !min-h-0 !items-center !gap-0.5 !px-1 !py-0 !text-[10px] !font-normal !leading-none"
+                                      icon={<Icon icon="reset" size={9} />}
+                                      minimal
+                                      onClick={() =>
+                                        restoreRoundNote(round.round)
+                                      }
+                                      small
+                                    >
+                                      恢复自动内容
+                                    </Button>
+                                  ) : null}
+                                </td>
+                              ) : null}
+                            </tr>
                           )
                         })}
-                      </div>
-                    ) : (
-                      <p className="mt-2 text-sm text-slate-400">未配置命盘</p>
-                    )}
-                  </section>
-                ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              ) : null}
+            </fieldset>
+          ) : (
+            <fieldset
+              className="mb-5 rounded border border-slate-200 bg-white p-4"
+              disabled={
+                status === 'generating' || authorConfigStatus === 'loading'
+              }
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-base font-semibold text-slate-800">
+                      生成前编辑
+                    </h3>
+                    <Button
+                      disabled={
+                        Object.keys(cardConfig.requiredDiscs).length === 0
+                      }
+                      icon="reset"
+                      minimal
+                      onClick={clearRequiredDiscs}
+                      small
+                    >
+                      清除必须标记
+                    </Button>
+                    <Button
+                      disabled={
+                        !currentRemoteConfig || hasUnsupportedRemoteConfig
+                      }
+                      icon="cloud-download"
+                      minimal
+                      onClick={restoreAuthorConfig}
+                      small
+                    >
+                      恢复作者配置
+                    </Button>
+                  </div>
+                  <p className="mt-1 text-sm leading-6 text-slate-500">
+                    配置会按当前作业自动缓存；可将关键命盘标记为“必须”，禁用命盘会自动标注为“绝对不能有”。
+                  </p>
+                </div>
               </div>
-            ) : (
-              <p className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-400">
-                当前上阵密探未配置命盘。
-              </p>
-            )}
-          </fieldset>
-        )}
 
-        {status === 'idle' ? (
-          <div className="flex min-h-48 flex-col items-center justify-center gap-2 rounded border border-dashed border-slate-300 bg-white text-slate-500">
-            <span className="text-base font-medium">图片尚未生成</span>
-            <span className="text-sm">
-              完成上方编辑后，点击“生成图片”预览。
-            </span>
-          </div>
-        ) : null}
-        {status === 'generating' ? (
-          <div className="flex min-h-64 flex-col items-center justify-center gap-4 text-slate-600">
-            <Spinner />
-            <span>
-              {t.components.viewer.OperationViewer.share_image_generating}
-            </span>
-          </div>
-        ) : null}
-        {status === 'error' ? (
-          <Callout
-            intent="danger"
-            title={t.components.viewer.OperationViewer.share_image_failed}
-          >
-            {error}
-          </Callout>
-        ) : null}
-        {status === 'ready' && previewUrl ? (
-          <img
-            alt={t.components.viewer.OperationViewer.share_image_preview_alt}
-            className="mx-auto block h-auto max-w-full shadow"
-            src={previewUrl}
-          />
-        ) : null}
-      </div>
-      <div className="flex flex-wrap justify-end gap-2 border-t border-slate-200 p-4">
-        <Button onClick={onClose}>
-          {t.components.viewer.OperationViewer.share_image_close}
-        </Button>
-        {canManageAuthorConfig ? (
-          <Button
-            disabled={
-              authorConfigStatus === 'loading' ||
-              status === 'generating' ||
-              savingCardKind !== undefined ||
-              hasUnsupportedRemoteConfig
-            }
-            icon="floppy-disk"
-            loading={savingCardKind === cardKind}
-            onClick={() => void saveAuthorConfig()}
-          >
-            保存作者配置
+              {model.operators.some((operator) => operator.discs.length > 0) ? (
+                <div className="mt-4 grid gap-2 border-t border-slate-200 pt-4 sm:grid-cols-2 md:grid-cols-5">
+                  {model.operators.map((operator, operatorIndex) => (
+                    <section
+                      key={`${operator.rawName}-${operatorIndex}`}
+                      className="min-w-0 rounded border border-slate-200 bg-slate-50 p-2"
+                    >
+                      <h4 className="break-words text-xs font-semibold leading-5 text-slate-700">
+                        {operator.slot ?? operatorIndex + 1} 号位 {'·'}
+                        {operator.name}
+                      </h4>
+                      {operator.discs.length > 0 ? (
+                        <div className="mt-1.5 grid gap-1">
+                          {operator.discs.map((disc) => {
+                            const key = buildOperationShareDiscKey(
+                              operator.slot ?? operatorIndex + 1,
+                              disc.slot,
+                            )
+                            if (disc.forbidden) {
+                              return (
+                                <div
+                                  key={key}
+                                  className="flex flex-col items-start gap-1 rounded border border-red-300 bg-red-50 px-2 py-1.5 text-xs font-semibold leading-5 text-red-800"
+                                >
+                                  <span className="shrink-0 rounded bg-red-700 px-1.5 py-0.5 text-xs font-bold text-white">
+                                    绝对不能有
+                                  </span>
+                                  <span>
+                                    {disc.slot} 号命盘：{disc.abbreviation}
+                                  </span>
+                                </div>
+                              )
+                            }
+                            return (
+                              <Checkbox
+                                key={key}
+                                checked={cardConfig.requiredDiscs[key] === true}
+                                className="m-0 text-xs leading-5"
+                                label={`${disc.slot} 号命盘：${disc.abbreviation}`}
+                                onChange={(event) =>
+                                  updateRequiredDisc(
+                                    key,
+                                    event.currentTarget.checked,
+                                  )
+                                }
+                              />
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-sm text-slate-400">
+                          未配置命盘
+                        </p>
+                      )}
+                    </section>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-4 border-t border-slate-200 pt-4 text-sm text-slate-400">
+                  当前上阵密探未配置命盘。
+                </p>
+              )}
+            </fieldset>
+          )}
+
+          {status === 'idle' ? (
+            <div className="flex min-h-48 flex-col items-center justify-center gap-2 rounded border border-dashed border-slate-300 bg-white text-slate-500">
+              <span className="text-base font-medium">图片尚未生成</span>
+              <span className="text-sm">
+                完成上方编辑后，点击“生成图片”预览。
+              </span>
+            </div>
+          ) : null}
+          {status === 'generating' ? (
+            <div className="flex min-h-64 flex-col items-center justify-center gap-4 text-slate-600">
+              <Spinner />
+              <span>
+                {t.components.viewer.OperationViewer.share_image_generating}
+              </span>
+            </div>
+          ) : null}
+          {status === 'error' ? (
+            <Callout
+              intent="danger"
+              title={t.components.viewer.OperationViewer.share_image_failed}
+            >
+              {error}
+            </Callout>
+          ) : null}
+          {status === 'ready' && previewUrl ? (
+            <img
+              alt={t.components.viewer.OperationViewer.share_image_preview_alt}
+              className="mx-auto block h-auto max-w-full shadow"
+              src={previewUrl}
+            />
+          ) : null}
+        </div>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2 rounded-b-lg border-t border-slate-200 bg-white p-4 pb-[max(1rem,env(safe-area-inset-bottom))] md:pb-4">
+          <Button onClick={onClose}>
+            {t.components.viewer.OperationViewer.share_image_close}
           </Button>
-        ) : null}
-        <Button
-          disabled={status === 'generating' || !cardNode || !qrDataUrl}
-          icon={status === 'idle' ? 'media' : 'refresh'}
-          intent={status === 'idle' ? 'primary' : 'none'}
-          onClick={() => void generate()}
-        >
-          {status === 'idle'
-            ? '生成图片'
-            : t.components.viewer.OperationViewer.share_image_regenerate}
-        </Button>
-        <Button
-          disabled={status !== 'ready'}
-          icon="download"
-          intent="primary"
-          onClick={download}
-        >
-          {t.components.viewer.OperationViewer.share_image_download}
-        </Button>
+          {canManageAuthorConfig ? (
+            <Button
+              disabled={
+                authorConfigStatus === 'loading' ||
+                status === 'generating' ||
+                savingCardKind !== undefined ||
+                hasUnsupportedRemoteConfig
+              }
+              icon="floppy-disk"
+              loading={savingCardKind === cardKind}
+              onClick={() => void saveAuthorConfig()}
+            >
+              保存作者配置
+            </Button>
+          ) : null}
+          <Button
+            disabled={status === 'generating' || !cardNode || !qrDataUrl}
+            icon={status === 'idle' ? 'media' : 'refresh'}
+            intent={status === 'idle' ? 'primary' : 'none'}
+            onClick={() => void generate()}
+          >
+            {status === 'idle'
+              ? '生成图片'
+              : t.components.viewer.OperationViewer.share_image_regenerate}
+          </Button>
+          <Button
+            disabled={status !== 'ready'}
+            icon="download"
+            intent="primary"
+            onClick={download}
+          >
+            {t.components.viewer.OperationViewer.share_image_download}
+          </Button>
+        </div>
       </div>
       <div aria-hidden className="fixed left-[-12000px] top-0">
         {qrDataUrl ? (

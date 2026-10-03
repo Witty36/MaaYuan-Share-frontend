@@ -220,6 +220,9 @@ describe('operation share dialog short code switch', () => {
     expect(findSwatch('应用绿色')).toBeDefined()
     expect(findSwatch('应用无操作色')).toBeDefined()
     expect(findSwatch('应用无操作色')?.style.backgroundColor).not.toBe('')
+    expect(
+      document.querySelector('input[aria-label="无操作色颜色说明"]'),
+    ).toBeNull()
     expect(findSwatch('应用黄色（有底纹）')).toBeUndefined()
     expect(
       Array.from(
@@ -236,6 +239,43 @@ describe('operation share dialog short code switch', () => {
 
     // 底纹是全局开关，默认打开
     expect(findSwitch('增加底纹')?.checked).toBe(true)
+  })
+
+  it('clears an action color when the no-color swatch is applied', async () => {
+    await renderDialog(
+      createOperation(
+        CopilotInfoStatusEnum.Public,
+        undefined,
+        singleRoundActions,
+      ),
+    )
+
+    const actionButton = findButtonByAriaLabelPrefix('1 回合')
+    expect(actionButton).not.toBeNull()
+
+    await act(async () => {
+      actionButton?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+    await act(async () => {
+      findSwatch('应用粉色')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(readOperationShareCardConfig(100)?.actionColors).toEqual({
+      '1:1': 'pink',
+    })
+
+    await act(async () => {
+      actionButton?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+    await act(async () => {
+      findSwatch('应用无操作色')?.click()
+      await new Promise((resolve) => window.setTimeout(resolve, 0))
+    })
+
+    expect(readOperationShareCardConfig(100)?.actionColors).toEqual({})
   })
 
   it('edits the action color notes used by the generated share image', async () => {
