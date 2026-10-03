@@ -233,9 +233,12 @@ describe('operation share dialog short code switch', () => {
     expect(findSwatch('应用绿色')).toBeDefined()
     expect(findSwatch('应用无操作色')).toBeDefined()
     expect(findSwatch('应用无操作色')?.style.backgroundColor).not.toBe('')
-    expect(
-      document.querySelector('input[aria-label="无操作色颜色说明"]'),
-    ).toBeNull()
+    const noneNoteInput = document.querySelector(
+      'input[aria-label="无色颜色说明"]',
+    ) as HTMLInputElement | null
+
+    expect(noneNoteInput).not.toBeNull()
+    expect(noneNoteInput?.value).toBe('')
     expect(findSwatch('应用黄色（有底纹）')).toBeUndefined()
     expect(
       Array.from(

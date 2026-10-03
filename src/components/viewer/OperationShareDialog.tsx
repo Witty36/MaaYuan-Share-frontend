@@ -316,9 +316,12 @@ export default function OperationShareDialog({
     ...cellColorNames,
     ice: t.components.viewer.OperationViewer.share_cell_color_none,
   }
-  const actionColorNoteKeys = OPERATION_SHARE_ACTION_COLOR_ORDER.filter(
-    (colorKey) => colorKey !== 'ice',
-  )
+  const actionColorNoteNames: Record<OperationShareCellColorKey, string> = {
+    ...actionColorNames,
+    ice: t.components.viewer.OperationViewer
+      .share_action_color_note_none_label,
+  }
+  const actionColorNoteKeys = OPERATION_SHARE_ACTION_COLOR_ORDER
 
   const editableColumns = useMemo<
     Array<{ key: OperationShareCellColumn; slot: number; label: string }>
@@ -1211,53 +1214,6 @@ export default function OperationShareDialog({
                             </Button>
                           ) : null}
                         </div>
-                        {effectiveEditMode === 'color' ? (
-                          <div
-                            aria-label={
-                              t.components.viewer.OperationViewer
-                                .share_cell_color_section_title
-                            }
-                            className="flex items-center gap-0.5 text-xs text-slate-400"
-                            role="group"
-                          >
-                            <span className="mr-0.5">配色模式</span>
-                            <button
-                              aria-label={
-                                t.components.viewer.OperationViewer
-                                  .share_cell_color_mode_action
-                              }
-                              aria-pressed={colorMode === 'action'}
-                              className={`h-6 rounded px-1.5 transition ${
-                                colorMode === 'action'
-                                  ? 'bg-sky-50 font-medium text-sky-700'
-                                  : 'hover:text-slate-600'
-                              }`}
-                              onClick={() => setColorMode('action')}
-                              type="button"
-                            >
-                              操作
-                            </button>
-                            <span aria-hidden="true" className="text-slate-300">
-                              /
-                            </span>
-                            <button
-                              aria-label={
-                                t.components.viewer.OperationViewer
-                                  .share_cell_color_mode_cell
-                              }
-                              aria-pressed={colorMode === 'cell'}
-                              className={`h-6 rounded px-1.5 transition ${
-                                colorMode === 'cell'
-                                  ? 'bg-sky-50 font-medium text-sky-700'
-                                  : 'hover:text-slate-600'
-                              }`}
-                              onClick={() => setColorMode('cell')}
-                              type="button"
-                            >
-                              单元格
-                            </button>
-                          </div>
-                        ) : null}
                       </div>
                       <p className="mt-1 text-xs text-slate-500">
                         {effectiveEditMode === 'note'
@@ -1269,6 +1225,82 @@ export default function OperationShareDialog({
                                 .share_cell_color_section_hint_cell}
                       </p>
                     </div>
+                    {effectiveEditMode === 'color' ? (
+                      <div className="mt-3 border-y border-slate-200/70 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="shrink-0 text-xs font-medium text-slate-600">
+                            {
+                              t.components.viewer.OperationViewer
+                                .share_action_color_notes_title
+                            }
+                          </span>
+                          <span className="min-w-0 truncate text-[10px] leading-4 text-slate-400">
+                            {
+                              t.components.viewer.OperationViewer
+                                .share_action_color_notes_hint
+                            }
+                          </span>
+                        </div>
+                        <div className="mt-1.5 grid grid-cols-2 gap-1.5 md:grid-cols-5">
+                          {actionColorNoteKeys.map((colorKey) => (
+                            <label
+                              key={colorKey}
+                              className="flex min-w-0 items-center gap-1.5"
+                            >
+                              <span
+                                aria-hidden="true"
+                                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border text-[10px] font-bold ${
+                                  colorKey === 'ice'
+                                    ? 'border-slate-300'
+                                    : 'border-transparent'
+                                }`}
+                                style={{
+                                  backgroundColor:
+                                    colorKey === 'ice'
+                                      ? 'transparent'
+                                      : getOperationShareActionFillColor(
+                                          colorKey,
+                                        ),
+                                }}
+                              >
+                                A
+                              </span>
+                              <span className="w-7 shrink-0 text-[11px] text-slate-500">
+                                {actionColorNoteNames[colorKey]}
+                              </span>
+                              <input
+                                aria-label={t.components.viewer.OperationViewer.share_action_color_note_label(
+                                  {
+                                    color: actionColorNoteNames[colorKey],
+                                  },
+                                )}
+                                className="h-7 min-w-0 flex-1 rounded bg-white/90 px-1.5 text-xs text-slate-700 outline-none transition placeholder:text-slate-300 focus:bg-white focus:ring-1 focus:ring-sky-200"
+                                maxLength={80}
+                                onChange={(event) =>
+                                  updateActionColorNote(
+                                    colorKey,
+                                    event.currentTarget.value,
+                                  )
+                                }
+                                placeholder={
+                                  colorKey === 'ice'
+                                    ? '默认不显示'
+                                    : t.components.viewer.OperationViewer
+                                        .share_action_color_note_placeholder
+                                }
+                                type="text"
+                                value={
+                                  getOperationShareActionColorNote(
+                                    colorKey,
+                                    cardConfig.actionColorNotes,
+                                  ) ?? ''
+                                }
+                              />
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     {effectiveEditMode === 'color' ? (
                       <div className="flex flex-wrap items-center gap-2">
                         <div
@@ -1323,6 +1355,51 @@ export default function OperationShareDialog({
                             },
                           )}
                         </div>
+                        <div
+                          aria-label={
+                            t.components.viewer.OperationViewer
+                              .share_cell_color_section_title
+                          }
+                          className="flex items-center gap-0.5 text-xs text-slate-400"
+                          role="group"
+                        >
+                          <span className="mr-0.5">配色模式</span>
+                          <button
+                            aria-label={
+                              t.components.viewer.OperationViewer
+                                .share_cell_color_mode_action
+                            }
+                            aria-pressed={colorMode === 'action'}
+                            className={`h-6 rounded px-1.5 transition ${
+                              colorMode === 'action'
+                                ? 'bg-sky-50 font-medium text-sky-700'
+                                : 'hover:text-slate-600'
+                            }`}
+                            onClick={() => setColorMode('action')}
+                            type="button"
+                          >
+                            操作
+                          </button>
+                          <span aria-hidden="true" className="text-slate-300">
+                            /
+                          </span>
+                          <button
+                            aria-label={
+                              t.components.viewer.OperationViewer
+                                .share_cell_color_mode_cell
+                            }
+                            aria-pressed={colorMode === 'cell'}
+                            className={`h-6 rounded px-1.5 transition ${
+                              colorMode === 'cell'
+                                ? 'bg-sky-50 font-medium text-sky-700'
+                                : 'hover:text-slate-600'
+                            }`}
+                            onClick={() => setColorMode('cell')}
+                            type="button"
+                          >
+                            单元格
+                          </button>
+                        </div>
                         <Button
                           disabled={
                             (colorMode === 'action'
@@ -1369,72 +1446,6 @@ export default function OperationShareDialog({
                       </div>
                     ) : null}
                   </div>
-                  {effectiveEditMode === 'color' && colorMode === 'action' ? (
-                    <div className="mt-3 rounded bg-slate-50 px-2 py-1.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="shrink-0 text-xs font-medium text-slate-600">
-                          {
-                            t.components.viewer.OperationViewer
-                              .share_action_color_notes_title
-                          }
-                        </span>
-                        <span className="min-w-0 truncate text-[10px] leading-4 text-slate-400">
-                          {
-                            t.components.viewer.OperationViewer
-                              .share_action_color_notes_hint
-                          }
-                        </span>
-                      </div>
-                      <div className="mt-1.5 grid grid-cols-2 gap-1.5 md:grid-cols-4">
-                        {actionColorNoteKeys.map((colorKey) => (
-                          <label
-                            key={colorKey}
-                            className="flex min-w-0 items-center gap-1.5"
-                          >
-                            <span
-                              aria-hidden="true"
-                              className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold"
-                              style={{
-                                backgroundColor:
-                                  getOperationShareActionFillColor(colorKey),
-                              }}
-                            >
-                              A
-                            </span>
-                            <span className="w-7 shrink-0 text-[11px] text-slate-500">
-                              {actionColorNames[colorKey]}
-                            </span>
-                            <input
-                              aria-label={t.components.viewer.OperationViewer.share_action_color_note_label(
-                                {
-                                  color: actionColorNames[colorKey],
-                                },
-                              )}
-                              className="h-7 min-w-0 flex-1 rounded bg-white/90 px-1.5 text-xs text-slate-700 outline-none transition placeholder:text-slate-300 focus:bg-white focus:ring-1 focus:ring-sky-200"
-                              maxLength={80}
-                              onChange={(event) =>
-                                updateActionColorNote(
-                                  colorKey,
-                                  event.currentTarget.value,
-                                )
-                              }
-                              placeholder={
-                                t.components.viewer.OperationViewer
-                                  .share_action_color_note_placeholder
-                              }
-                              type="text"
-                              value={
-                                getOperationShareActionColorNote(
-                                  colorKey,
-                                  cardConfig.actionColorNotes,
-                                ) ?? ''
-                              }
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
                   <div className="mt-3 max-h-80 w-full min-w-0 max-w-full overflow-x-auto overflow-y-auto overscroll-x-contain rounded border border-slate-200">
                     <table
                       className={`border-collapse bg-white text-center text-xs ${

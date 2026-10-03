@@ -3562,6 +3562,10 @@
           "cn": "生成分享图时用灰色小字显示，只展示实际用到的颜色。",
           "zh_tw": "生成分享圖時用灰色小字顯示，只展示實際用到的顏色。"
         },
+        "share_action_color_note_none_label": {
+          "cn": "无色",
+          "zh_tw": "無色"
+        },
         "share_action_color_note_label": {
           "cn": "{{color}}颜色说明",
           "zh_tw": "{{color}}顏色說明"
