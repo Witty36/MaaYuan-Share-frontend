@@ -131,6 +131,40 @@ function ExtraForbiddenDisc({ name }: { name: string }) {
   )
 }
 
+function DiscUsageLegend() {
+  const requiredColor = '#5f4a31'
+
+  return (
+    <div
+      className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] font-medium"
+      style={{ color: palette.muted }}
+    >
+      <span className="inline-flex items-center gap-2">
+        <span
+          className="inline-flex items-center justify-center rounded-md border-2 px-1.5 py-0.5 text-[13px] font-bold leading-none"
+          style={{
+            backgroundColor: 'rgba(255, 255, 255, 0.58)',
+            borderColor: requiredColor,
+            color: requiredColor,
+          }}
+        >
+          命盘
+        </span>
+        <span>代表必须命盘</span>
+      </span>
+      <span className="inline-flex items-center gap-2">
+        <span
+          className="text-[13px] font-bold leading-none line-through decoration-2"
+          style={{ color: '#8f2117' }}
+        >
+          命盘
+        </span>
+        <span>代表禁用命盘</span>
+      </span>
+    </div>
+  )
+}
+
 function DiscStoneValue({ value }: { value?: string }) {
   if (!value) return <span style={{ color: '#9a856d' }}>—</span>
 
@@ -442,6 +476,7 @@ export function DeployedOperatorsShareCard({
             此作业未配置上阵密探
           </div>
         )}
+        {model.operators.length > 0 ? <DiscUsageLegend /> : null}
       </section>
     </ShareCardFrame>
   )
