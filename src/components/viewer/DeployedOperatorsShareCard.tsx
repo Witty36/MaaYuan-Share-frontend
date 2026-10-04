@@ -202,20 +202,25 @@ function AscensionLevel({
     return <span style={{ color: mutedTextColor }}>—</span>
   }
 
+  const starCount = Math.max(0, Math.min(5, Math.floor(value)))
+
   return (
     <div
       aria-label={`化极 ${value}`}
       className="flex items-center justify-center gap-1.5"
     >
-      {[1, 2, 3, 4, 5].map((level) => (
-        <span
-          key={level}
-          aria-hidden
-          className="text-[30px] leading-none"
-          style={{ color: level <= value ? '#e96913' : '#cdb89e' }}
+      {Array.from({ length: starCount }, (_, index) => (
+        <svg
+          key={index}
+          aria-hidden="true"
+          className="block h-[18px] w-[18px] shrink-0"
+          viewBox="0 0 24 24"
         >
-          ◆
-        </span>
+          <path
+            d="M12 0 C12.6 5.2 18.8 11.4 24 12 C18.8 12.6 12.6 18.8 12 24 C11.4 18.8 5.2 12.6 0 12 C5.2 11.4 11.4 5.2 12 0 Z"
+            fill="#e96913"
+          />
+        </svg>
       ))}
     </div>
   )
