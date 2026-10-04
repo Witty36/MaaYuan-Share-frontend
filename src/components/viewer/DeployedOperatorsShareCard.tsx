@@ -90,15 +90,23 @@ function DiscAbbreviation({
   if (required) {
     return (
       <span
-        aria-label={`核心命盘：${disc.abbreviation}`}
-        className="inline-flex max-w-full items-center justify-center gap-1"
+        className="inline-flex max-w-full items-center justify-center rounded-md border-2 px-2 py-0.5"
+        style={{
+          backgroundColor: 'rgba(255, 255, 255, 0.58)',
+          borderColor: color,
+        }}
       >
-        <span aria-hidden className="text-[24px] leading-none"></span>
         <span
-          className="whitespace-nowrap text-[24px] font-black leading-snug"
-          style={{ color }}
+          aria-label={`核心命盘：${disc.abbreviation}`}
+          className="inline-flex max-w-full items-center justify-center gap-1"
         >
-          {disc.abbreviation}
+          <span aria-hidden className="text-[24px] leading-none"></span>
+          <span
+            className="whitespace-nowrap text-[24px] font-black leading-snug"
+            style={{ color }}
+          >
+            {disc.abbreviation}
+          </span>
         </span>
       </span>
     )
