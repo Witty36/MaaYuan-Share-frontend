@@ -17,13 +17,6 @@ import {
   shareCardPalette as palette,
 } from './shareCardComponents'
 
-const DISC_TONES: Record<string, string> = {
-  金: '#7a4d0b',
-  紫: '#6f3b83',
-  蓝: '#315f73',
-  橙: '#9a4d16',
-}
-
 const rowBackground = '#f3e3c9'
 const DISC_SLOTS = [1, 2, 3] as const
 const DISC_FIELDS = [
@@ -38,9 +31,9 @@ function getDiscDisplayPriority(
   disc: OperationShareDisc,
   requiredDiscSlots: ReadonlySet<number>,
 ) {
-  if (disc.forbidden) return 1
   if (requiredDiscSlots.has(disc.slot)) return 0
-  return 2
+  if (disc.forbidden) return 2
+  return 1
 }
 
 export function orderOperationShareDiscs(
@@ -70,7 +63,7 @@ function DiscAbbreviation({
 }) {
   if (disc.abbreviation === '未选择命盘') return null
 
-  const color = DISC_TONES[disc.color ?? ''] ?? '#5f4a31'
+  const color = '#5f4a31'
 
   if (disc.forbidden) {
     return (
@@ -118,6 +111,21 @@ function DiscAbbreviation({
       style={{ color }}
     >
       {disc.abbreviation}
+    </span>
+  )
+}
+
+function ExtraForbiddenDisc({ name }: { name: string }) {
+  return (
+    <span
+      aria-label={`额外禁用命盘：${name}`}
+      className="inline-flex max-w-full items-center justify-center gap-1"
+      style={{ color: '#8f2117' }}
+    >
+      <span aria-hidden className="text-[24px] leading-none"></span>
+      <span className="whitespace-nowrap text-[24px] font-black leading-snug line-through decoration-2">
+        {name}
+      </span>
     </span>
   )
 }
@@ -234,38 +242,71 @@ function DiscRows({
             {label}
           </th>
           {operators.map((operator, operatorIndex) => {
+            const operatorSlot = operator.slot ?? operatorIndex + 1
+            const extraForbiddenDiscs =
+              field === 'disc'
+                ? (config.extraForbiddenDiscs?.[String(operatorSlot)] ?? [])
+                : []
+            const displayDiscs: Array<{
+              key: string
+              node: ReactNode
+            }> =
+              field === 'disc'
+                ? [
+                    ...orderedDiscs[operatorIndex].flatMap((disc, slotIndex) => {
+                      if (!disc || disc.abbreviation === '未选择命盘') return []
+
+                      return [
+                        {
+                          key: `disc-${DISC_SLOTS[slotIndex]}`,
+                          node: (
+                            <DiscAbbreviation
+                              disc={disc}
+                              required={
+                                !disc.forbidden &&
+                                config.requiredDiscs[
+                                  buildOperationShareDiscKey(
+                                    operatorSlot,
+                                    disc.slot,
+                                  )
+                                ] === true
+                              }
+                            />
+                          ),
+                        },
+                      ]
+                    }),
+                    ...extraForbiddenDiscs.map((discName) => ({
+                      key: `extra-forbidden-${operatorSlot}-${discName}`,
+                      node: <ExtraForbiddenDisc name={discName} />,
+                    })),
+                  ]
+                : orderedDiscs[operatorIndex].map((disc, slotIndex) => ({
+                    key: DISC_SLOTS[slotIndex].toString(),
+                    node: disc ? (
+                      <DiscStoneValue value={disc[field]} />
+                    ) : (
+                      <span style={{ color: '#9a856d' }}>—</span>
+                    ),
+                  }))
+
             return (
               <td
                 key={`${field}-${operator.rawName}-${operatorIndex}`}
                 className="border px-2 py-3 text-center align-middle"
                 style={{ borderColor: '#78501f' }}
               >
-                <div className="flex flex-col items-center justify-center gap-1.5">
-                  {orderedDiscs[operatorIndex].map((disc, slotIndex) => (
+                <div
+                  className={`flex flex-col items-center justify-center ${
+                    field === 'disc' ? 'gap-0' : 'gap-1.5'
+                  }`}
+                >
+                  {displayDiscs.map(({ key, node }) => (
                     <div
-                      key={DISC_SLOTS[slotIndex]}
+                      key={key}
                       className="flex min-h-[28px] w-full items-center justify-center"
                     >
-                      {disc ? (
-                        field === 'disc' ? (
-                          <DiscAbbreviation
-                            disc={disc}
-                            required={
-                              !disc.forbidden &&
-                              config.requiredDiscs[
-                                buildOperationShareDiscKey(
-                                  operator.slot ?? operatorIndex + 1,
-                                  disc.slot,
-                                )
-                              ] === true
-                            }
-                          />
-                        ) : (
-                          <DiscStoneValue value={disc[field]} />
-                        )
-                      ) : (
-                        <span style={{ color: '#9a856d' }}>—</span>
-                      )}
+                      {node}
                     </div>
                   ))}
                 </div>

@@ -87,6 +87,7 @@ export interface OperationShareCardConfig {
   actionColorNotes: Partial<Record<OperationShareCellColorKey, string>>
   cellColors: Record<string, string>
   requiredDiscs: Record<string, boolean>
+  extraForbiddenDiscs?: Record<string, string[]>
 }
 
 const OPERATION_SHARE_ROUND_NOTE_MAX_LENGTH = 5000
@@ -365,6 +366,29 @@ export function normalizeOperationShareCardConfig(
     })
   }
 
+  const extraForbiddenDiscs: Record<string, string[]> = {}
+  if (isRecord(value.extraForbiddenDiscs)) {
+    Object.entries(value.extraForbiddenDiscs).forEach(
+      ([operatorSlot, discNames]) => {
+        if (!/^\d+$/.test(operatorSlot) || !Array.isArray(discNames)) return
+
+        const normalizedDiscNames = Array.from(
+          new Set(
+            discNames
+              .filter((discName): discName is string => {
+                return typeof discName === 'string'
+              })
+              .map((discName) => discName.trim().slice(0, 40))
+              .filter(Boolean),
+          ),
+        )
+        if (normalizedDiscNames.length > 0) {
+          extraForbiddenDiscs[operatorSlot] = normalizedDiscNames
+        }
+      },
+    )
+  }
+
   return {
     showTargetSwitches:
       typeof value.showTargetSwitches === 'boolean'
@@ -395,6 +419,9 @@ export function normalizeOperationShareCardConfig(
     actionColorNotes,
     cellColors,
     requiredDiscs,
+    ...(Object.keys(extraForbiddenDiscs).length > 0
+      ? { extraForbiddenDiscs }
+      : {}),
   }
 }
 
@@ -404,7 +431,13 @@ export function buildOperationShareCardConfigPayload(
 ): Record<string, unknown> {
   const normalized = normalizeOperationShareCardConfig(config)
   if (kind === 'operators') {
-    return { requiredDiscs: normalized.requiredDiscs }
+    return {
+      requiredDiscs: normalized.requiredDiscs,
+      ...(normalized.extraForbiddenDiscs &&
+      Object.keys(normalized.extraForbiddenDiscs).length > 0
+        ? { extraForbiddenDiscs: normalized.extraForbiddenDiscs }
+        : {}),
+    }
   }
 
   return {
@@ -486,6 +519,10 @@ export function mergeOperationShareRemoteConfigs(
   return {
     ...actionConfig,
     requiredDiscs: operatorConfig.requiredDiscs,
+    ...(operatorConfig.extraForbiddenDiscs &&
+    Object.keys(operatorConfig.extraForbiddenDiscs).length > 0
+      ? { extraForbiddenDiscs: operatorConfig.extraForbiddenDiscs }
+      : {}),
   }
 }
 
@@ -510,9 +547,11 @@ export function resolveOperationShareCardConfig(
     Object.keys(local.actionColors).length > 0 ||
     Object.keys(local.actionColorNotes).length > 0 ||
     Object.keys(local.cellColors).length > 0
-  const hasLocalOperatorOverrides = Object.keys(local.requiredDiscs).length > 0
+  const hasLocalOperatorOverrides =
+    Object.keys(local.requiredDiscs).length > 0 ||
+    Object.keys(local.extraForbiddenDiscs ?? {}).length > 0
 
-  return {
+  const resolved: OperationShareCardConfig = {
     ...(hasLocalActionOverrides ? local : authorConfig),
     actionColors: {
       ...authorConfig.actionColors,
@@ -526,6 +565,18 @@ export function resolveOperationShareCardConfig(
       ? local.requiredDiscs
       : authorConfig.requiredDiscs,
   }
+  const resolvedExtraForbiddenDiscs = hasLocalOperatorOverrides
+    ? local.extraForbiddenDiscs
+    : authorConfig.extraForbiddenDiscs
+  if (
+    resolvedExtraForbiddenDiscs &&
+    Object.keys(resolvedExtraForbiddenDiscs).length > 0
+  ) {
+    resolved.extraForbiddenDiscs = resolvedExtraForbiddenDiscs
+  } else {
+    delete resolved.extraForbiddenDiscs
+  }
+  return resolved
 }
 
 export function replaceOperationShareCardConfigKind(
@@ -534,7 +585,15 @@ export function replaceOperationShareCardConfigKind(
   replacement: OperationShareCardConfig,
 ) {
   if (kind === 'operators') {
-    return { ...current, requiredDiscs: replacement.requiredDiscs }
+    const next = { ...current, requiredDiscs: replacement.requiredDiscs }
+    delete next.extraForbiddenDiscs
+    if (
+      replacement.extraForbiddenDiscs &&
+      Object.keys(replacement.extraForbiddenDiscs).length > 0
+    ) {
+      next.extraForbiddenDiscs = replacement.extraForbiddenDiscs
+    }
+    return next
   }
 
   return {

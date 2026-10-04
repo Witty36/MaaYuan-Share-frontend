@@ -25,6 +25,7 @@ import {
 } from '../../apis/operation-share-image-config'
 import { languageAtom, useTranslation } from '../../i18n/i18n'
 import type { Operation } from '../../models/operation'
+import { findOperatorByName } from '../../models/operator'
 import { formatError } from '../../utils/error'
 import { AppToaster } from '../Toaster'
 import { DeployedOperatorsShareCard } from './DeployedOperatorsShareCard'
@@ -299,6 +300,8 @@ export default function OperationShareDialog({
   )
   const [colorMode, setColorMode] = useState<ColorMode>('action')
   const [editMode, setEditMode] = useState<EditMode>('color')
+  const [extraForbiddenDiscSelections, setExtraForbiddenDiscSelections] =
+    useState<Record<string, string>>({})
   const isMobileDevice = useMemo(isMobileDeviceUserAgent, [])
   const showRoundNoteColumn =
     cardConfig.showNotes || cardConfig.showOtherActions
@@ -475,6 +478,7 @@ export default function OperationShareDialog({
     noteHistoryGroupRef.current = null
     setNoteHistoryAvailability({ canRedo: false, canUndo: false })
     setNoteEditorRevision((current) => current + 1)
+    setExtraForbiddenDiscSelections({})
   }, [operation.id])
 
   useEffect(() => {
@@ -1102,10 +1106,75 @@ export default function OperationShareDialog({
     })
   }
 
+  const addExtraForbiddenDisc = (
+    operatorSlot: number,
+    discName: string,
+  ) => {
+    const normalizedDiscName = discName.trim()
+    if (!normalizedDiscName) return
+
+    updateCardConfig((current) => {
+      const operatorKey = String(operatorSlot)
+      const currentDiscNames =
+        current.extraForbiddenDiscs?.[operatorKey] ?? []
+      if (currentDiscNames.includes(normalizedDiscName)) return current
+
+      return {
+        ...current,
+        extraForbiddenDiscs: {
+          ...current.extraForbiddenDiscs,
+          [operatorKey]: [...currentDiscNames, normalizedDiscName],
+        },
+      }
+    })
+    invalidatePreview()
+  }
+
+  const removeExtraForbiddenDisc = (
+    operatorSlot: number,
+    discName: string,
+  ) => {
+    updateCardConfig((current) => {
+      const operatorKey = String(operatorSlot)
+      const currentDiscNames =
+        current.extraForbiddenDiscs?.[operatorKey] ?? []
+      const nextDiscNames = currentDiscNames.filter(
+        (currentDiscName) => currentDiscName !== discName,
+      )
+      const nextExtraForbiddenDiscs = {
+        ...current.extraForbiddenDiscs,
+      }
+      if (nextDiscNames.length > 0) {
+        nextExtraForbiddenDiscs[operatorKey] = nextDiscNames
+      } else {
+        delete nextExtraForbiddenDiscs[operatorKey]
+      }
+
+      return {
+        ...current,
+        extraForbiddenDiscs:
+          Object.keys(nextExtraForbiddenDiscs).length > 0
+            ? nextExtraForbiddenDiscs
+            : undefined,
+      }
+    })
+    invalidatePreview()
+  }
+
   const clearRequiredDiscs = () => {
     if (Object.keys(cardConfig.requiredDiscs).length === 0) return
     invalidatePreview()
     updateCardConfig((current) => ({ ...current, requiredDiscs: {} }))
+  }
+
+  const clearExtraForbiddenDiscs = () => {
+    if (Object.keys(cardConfig.extraForbiddenDiscs ?? {}).length === 0) return
+    invalidatePreview()
+    updateCardConfig((current) => ({
+      ...current,
+      extraForbiddenDiscs: undefined,
+    }))
+    setExtraForbiddenDiscSelections({})
   }
 
   const generate = useCallback(async () => {
@@ -2633,7 +2702,7 @@ export default function OperationShareDialog({
                     </Button>
                   </div>
                   <p className="mt-1 text-sm leading-6 text-slate-500 dark:text-slate-400">
-                    配置会按当前作业自动缓存；可将关键命盘标记为“必须”，禁用命盘会自动标注为“绝对不能有”。
+                    配置会按当前作业自动缓存；可将关键命盘标记为“必须”，也可额外禁用其他命盘。
                   </p>
                 </div>
               </div>
@@ -2700,6 +2769,140 @@ export default function OperationShareDialog({
                   当前上阵密探未配置命盘。
                 </p>
               )}
+
+              {model.operators.length > 0 ? (
+                <div className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-600">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                        额外禁用命盘
+                      </h4>
+                      <p className="mt-1 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                        从该密探的完整命盘列表中添加。只影响分享图，不修改作业或编辑器中的禁用设置。
+                      </p>
+                    </div>
+                    <Button
+                      disabled={
+                        Object.keys(cardConfig.extraForbiddenDiscs ?? {})
+                          .length === 0
+                      }
+                      icon="reset"
+                      minimal
+                      onClick={clearExtraForbiddenDiscs}
+                      small
+                    >
+                      清除额外禁用
+                    </Button>
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 md:grid-cols-5">
+                    {model.operators.map((operator, operatorIndex) => {
+                      const operatorSlot = operator.slot ?? operatorIndex + 1
+                      const operatorKey = String(operatorSlot)
+                      const selectedExtraDiscNames =
+                        cardConfig.extraForbiddenDiscs?.[operatorKey] ?? []
+                      const configuredDiscNames = new Set(
+                        operator.discs
+                          .map((disc) => disc.abbreviation)
+                          .filter(
+                            (discName) => discName !== '未选择命盘',
+                          ),
+                      )
+                      const fullDiscNames = Array.from(
+                        new Set(
+                          (findOperatorByName(operator.rawName)?.discs ?? [])
+                            .map((disc) => disc.abbreviation.trim())
+                            .filter(Boolean),
+                        ),
+                      )
+                      const availableDiscNames = fullDiscNames.filter(
+                        (discName) =>
+                          !configuredDiscNames.has(discName) &&
+                          !selectedExtraDiscNames.includes(discName),
+                      )
+                      const selectedDiscName =
+                        extraForbiddenDiscSelections[operatorKey] &&
+                        availableDiscNames.includes(
+                          extraForbiddenDiscSelections[operatorKey],
+                        )
+                          ? extraForbiddenDiscSelections[operatorKey]
+                          : (availableDiscNames[0] ?? '')
+
+                      return (
+                        <section
+                          key={`${operator.rawName}-${operatorIndex}-extra-forbidden`}
+                          className="min-w-0 rounded border border-slate-200 bg-slate-50 p-2 dark:border-slate-600 dark:bg-slate-800/60"
+                        >
+                          <h5 className="break-words text-xs font-semibold leading-5 text-slate-700 dark:text-slate-200">
+                            {operatorSlot} 号位 {'·'}
+                            {operator.name}
+                          </h5>
+                          {availableDiscNames.length > 0 ? (
+                            <div className="mt-1.5 flex gap-1">
+                              <select
+                                aria-label={`${operator.name}额外禁用命盘`}
+                                className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-1.5 py-1 text-xs text-slate-700 outline-none focus:border-blue-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
+                                value={selectedDiscName}
+                                onChange={(event) => {
+                                  const nextDiscName = event.currentTarget.value
+                                  setExtraForbiddenDiscSelections((current) => ({
+                                    ...current,
+                                    [operatorKey]: nextDiscName,
+                                  }))
+                                }}
+                              >
+                                {availableDiscNames.map((discName) => (
+                                  <option key={discName} value={discName}>
+                                    {discName}
+                                  </option>
+                                ))}
+                              </select>
+                              <Button
+                                disabled={!selectedDiscName}
+                                icon="plus"
+                                minimal
+                                onClick={() =>
+                                  addExtraForbiddenDisc(
+                                    operatorSlot,
+                                    selectedDiscName,
+                                  )
+                                }
+                                small
+                              >
+                                添加
+                              </Button>
+                            </div>
+                          ) : (
+                            <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">
+                              没有可添加的命盘
+                            </p>
+                          )}
+                          {selectedExtraDiscNames.length > 0 ? (
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              {selectedExtraDiscNames.map((discName) => (
+                                <button
+                                  key={discName}
+                                  type="button"
+                                  className="inline-flex items-center gap-1 rounded border border-red-300 bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-800 transition-colors hover:bg-red-100 dark:border-red-500/60 dark:bg-red-950/30 dark:text-red-200 dark:hover:bg-red-950/50"
+                                  onClick={() =>
+                                    removeExtraForbiddenDisc(
+                                      operatorSlot,
+                                      discName,
+                                    )
+                                  }
+                                  title="点击移除额外禁用"
+                                >
+                                  <span className="line-through">{discName}</span>
+                                  <Icon icon="cross" size={9} />
+                                </button>
+                              ))}
+                            </div>
+                          ) : null}
+                        </section>
+                      )
+                    })}
+                  </div>
+                </div>
+              ) : null}
             </fieldset>
           )}
 
