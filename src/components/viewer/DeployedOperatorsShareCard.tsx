@@ -11,6 +11,7 @@ import {
   createOperationShareCardConfig,
   resolveOperationShareExtraForbiddenDiscs,
 } from './operationShareModel'
+import { getOperationShareTableTheme } from './operationShareTheme'
 import {
   ShareCardFrame,
   ShareOperatorAvatar,
@@ -18,7 +19,6 @@ import {
   shareCardPalette as palette,
 } from './shareCardComponents'
 
-const rowBackground = '#f3e3c9'
 const DISC_SLOTS = [1, 2, 3] as const
 const DISC_FIELDS = [
   { field: 'disc', label: '命盘' },
@@ -58,13 +58,15 @@ export function orderOperationShareDiscs(
 function DiscAbbreviation({
   disc,
   required,
+  textColor,
 }: {
   disc: OperationShareDisc
   required: boolean
+  textColor: string
 }) {
   if (disc.abbreviation === '未选择命盘') return null
 
-  const color = '#5f4a31'
+  const color = textColor
 
   if (disc.forbidden) {
     return (
@@ -131,13 +133,19 @@ function ExtraForbiddenDisc({ name }: { name: string }) {
   )
 }
 
-function DiscUsageLegend() {
-  const requiredColor = '#5f4a31'
+function DiscUsageLegend({
+  mutedTextColor,
+  textColor,
+}: {
+  mutedTextColor: string
+  textColor: string
+}) {
+  const requiredColor = textColor
 
   return (
     <div
       className="mt-3 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px] font-medium"
-      style={{ color: palette.muted }}
+      style={{ color: mutedTextColor }}
     >
       <span className="inline-flex items-center gap-2">
         <span
@@ -165,8 +173,16 @@ function DiscUsageLegend() {
   )
 }
 
-function DiscStoneValue({ value }: { value?: string }) {
-  if (!value) return <span style={{ color: '#9a856d' }}>—</span>
+function DiscStoneValue({
+  mutedTextColor,
+  value,
+}: {
+  mutedTextColor: string
+  value?: string
+}) {
+  if (!value) {
+    return <span style={{ color: mutedTextColor }}>—</span>
+  }
 
   return (
     <span className="break-words text-[24px] font-semibold leading-5">
@@ -175,8 +191,16 @@ function DiscStoneValue({ value }: { value?: string }) {
   )
 }
 
-function AscensionLevel({ value }: { value?: number }) {
-  if (value === undefined) return <span style={{ color: '#9a856d' }}>—</span>
+function AscensionLevel({
+  mutedTextColor,
+  value,
+}: {
+  mutedTextColor: string
+  value?: number
+}) {
+  if (value === undefined) {
+    return <span style={{ color: mutedTextColor }}>—</span>
+  }
 
   return (
     <div
@@ -209,12 +233,14 @@ function OperatorAvatar({ operator }: { operator: OperationShareOperator }) {
 
 function AttributeRow({
   background,
+  borderColor,
   children,
   label,
   minHeight,
   operators,
 }: {
   background: string
+  borderColor: string
   children: (operator: OperationShareOperator) => ReactNode
   label: string
   minHeight: number
@@ -225,7 +251,7 @@ function AttributeRow({
       <th
         className="w-[108px] border px-3 text-[27px] font-bold"
         scope="row"
-        style={{ borderColor: '#78501f' }}
+        style={{ borderColor }}
       >
         {label}
       </th>
@@ -233,7 +259,7 @@ function AttributeRow({
         <td
           key={`${label}-${operator.rawName}-${index}`}
           className="border px-3 py-4 text-center text-[27px] font-semibold align-middle"
-          style={{ borderColor: '#78501f' }}
+          style={{ borderColor }}
         >
           {children(operator)}
         </td>
@@ -243,11 +269,19 @@ function AttributeRow({
 }
 
 function DiscRows({
+  borderColor,
   config,
+  mutedTextColor,
   operators,
+  rowBackgrounds,
+  textColor,
 }: {
+  borderColor: string
   config: OperationShareCardConfig
+  mutedTextColor: string
   operators: OperationShareOperator[]
+  rowBackgrounds: readonly [string, string]
+  textColor: string
 }) {
   const orderedDiscs = operators.map((operator, operatorIndex) => {
     const operatorSlot = operator.slot ?? operatorIndex + 1
@@ -267,12 +301,18 @@ function DiscRows({
 
   return (
     <>
-      {DISC_FIELDS.map(({ field, label }) => (
-        <tr key={field} style={{ background: rowBackground, height: 126 }}>
+      {DISC_FIELDS.map(({ field, label }, rowIndex) => (
+        <tr
+          key={field}
+          style={{
+            background: rowBackgrounds[rowIndex % rowBackgrounds.length],
+            height: 126,
+          }}
+        >
           <th
             className="w-[108px] border px-3 text-[22px] font-bold leading-snug"
             scope="row"
-            style={{ borderColor: '#78501f' }}
+            style={{ borderColor }}
           >
             {label}
           </th>
@@ -309,6 +349,7 @@ function DiscRows({
                                   )
                                 ] === true
                               }
+                              textColor={textColor}
                             />
                           ),
                         },
@@ -322,9 +363,12 @@ function DiscRows({
                 : orderedDiscs[operatorIndex].map((disc, slotIndex) => ({
                     key: DISC_SLOTS[slotIndex].toString(),
                     node: disc ? (
-                      <DiscStoneValue value={disc[field]} />
+                      <DiscStoneValue
+                        mutedTextColor={mutedTextColor}
+                        value={disc[field]}
+                      />
                     ) : (
-                      <span style={{ color: '#9a856d' }}>—</span>
+                      <span style={{ color: mutedTextColor }}>—</span>
                     ),
                   }))
 
@@ -332,7 +376,7 @@ function DiscRows({
               <td
                 key={`${field}-${operator.rawName}-${operatorIndex}`}
                 className="border px-2 py-3 text-center align-middle"
-                style={{ borderColor: '#78501f' }}
+                style={{ borderColor }}
               >
                 <div
                   className={`flex flex-col items-center justify-center ${
@@ -372,8 +416,39 @@ export function DeployedOperatorsShareCard({
   showShortCode?: boolean
   config?: OperationShareCardConfig
 }) {
+  const shareTableTheme = getOperationShareTableTheme(
+    config.operatorTableColor,
+    config.operatorTableThemeOverrides,
+  )
+  const hasCustomTableTheme = Boolean(
+    config.operatorTableColor ||
+      (config.operatorTableThemeOverrides &&
+        Object.keys(config.operatorTableThemeOverrides).length > 0),
+  )
+  const pageBackground = hasCustomTableTheme
+    ? shareTableTheme.pageBackground
+    : palette.paper
+  const headerBackground = hasCustomTableTheme
+    ? shareTableTheme.headerBackground
+    : '#f0dec1'
+  const rowBackgrounds: readonly [string, string] = hasCustomTableTheme
+    ? shareTableTheme.bodyBackgrounds
+    : ['#f3e3c9', '#f3e3c9']
+  const borderColor = hasCustomTableTheme ? shareTableTheme.border : '#78501f'
+  const textColor = hasCustomTableTheme ? shareTableTheme.text : '#624015'
+  const headerTextColor = hasCustomTableTheme
+    ? shareTableTheme.headerText
+    : '#624015'
+  const mutedTextColor = hasCustomTableTheme
+    ? shareTableTheme.mutedText
+    : '#9a856d'
+  const discTextColor = hasCustomTableTheme
+    ? shareTableTheme.text
+    : '#5f4a31'
+
   return (
     <ShareCardFrame
+      backgroundColor={pageBackground}
       cardRef={cardRef}
       eyebrow="MaaYuan · 上阵密探"
       hideQrCode={hideQrCode}
@@ -386,29 +461,29 @@ export function DeployedOperatorsShareCard({
         {model.operators.length > 0 ? (
           <table
             className="mt-5 w-full table-fixed border-collapse border-2"
-            style={{ borderColor: '#78501f', color: '#624015' }}
+            style={{ borderColor, color: textColor }}
           >
-            <thead>
-              <tr aria-label="密探头像" style={{ background: '#f0dec1' }}>
+            <thead style={{ color: headerTextColor }}>
+              <tr aria-label="密探头像" style={{ background: headerBackground }}>
                 <td
                   className="w-[108px] border p-0"
-                  style={{ borderColor: '#78501f' }}
+                  style={{ borderColor }}
                 />
                 {model.operators.map((operator, index) => (
                   <td
                     key={`${operator.rawName}-${index}`}
                     className="border p-0 align-middle"
-                    style={{ borderColor: '#78501f' }}
+                    style={{ borderColor }}
                   >
                     <OperatorAvatar operator={operator} />
                   </td>
                 ))}
               </tr>
-              <tr aria-label="列标题" style={{ background: '#f0dec1' }}>
+              <tr aria-label="列标题" style={{ background: headerBackground }}>
                 <th
                   className="border px-3 py-3 text-[22px] font-bold"
                   scope="col"
-                  style={{ borderColor: '#78501f' }}
+                  style={{ borderColor }}
                 >
                   属性
                 </th>
@@ -417,7 +492,7 @@ export function DeployedOperatorsShareCard({
                     key={`${operator.rawName}-${index}`}
                     className="break-words border px-2 py-3 text-center text-[22px] font-bold leading-tight"
                     scope="col"
-                    style={{ borderColor: '#78501f' }}
+                    style={{ borderColor }}
                   >
                     {operator.name}
                   </th>
@@ -426,7 +501,8 @@ export function DeployedOperatorsShareCard({
             </thead>
             <tbody>
               <AttributeRow
-                background={rowBackground}
+                background={rowBackgrounds[0]}
+                borderColor={borderColor}
                 label="生命"
                 minHeight={72}
                 operators={model.operators}
@@ -434,7 +510,8 @@ export function DeployedOperatorsShareCard({
                 {(operator) => operator.hp ?? '—'}
               </AttributeRow>
               <AttributeRow
-                background={rowBackground}
+                background={rowBackgrounds[1]}
+                borderColor={borderColor}
                 label="攻击"
                 minHeight={72}
                 operators={model.operators}
@@ -442,7 +519,8 @@ export function DeployedOperatorsShareCard({
                 {(operator) => operator.attack ?? '—'}
               </AttributeRow>
               <AttributeRow
-                background={rowBackground}
+                background={rowBackgrounds[0]}
+                borderColor={borderColor}
                 label="等级"
                 minHeight={68}
                 operators={model.operators}
@@ -450,7 +528,8 @@ export function DeployedOperatorsShareCard({
                 {(operator) => operator.level ?? '—'}
               </AttributeRow>
               <AttributeRow
-                background={rowBackground}
+                background={rowBackgrounds[1]}
+                borderColor={borderColor}
                 label="修为"
                 minHeight={68}
                 operators={model.operators}
@@ -458,14 +537,27 @@ export function DeployedOperatorsShareCard({
                 {(operator) => operator.elite ?? '—'}
               </AttributeRow>
               <AttributeRow
-                background={rowBackground}
+                background={rowBackgrounds[0]}
+                borderColor={borderColor}
                 label="化极"
                 minHeight={76}
                 operators={model.operators}
               >
-                {(operator) => <AscensionLevel value={operator.starLevel} />}
+                {(operator) => (
+                  <AscensionLevel
+                    mutedTextColor={mutedTextColor}
+                    value={operator.starLevel}
+                  />
+                )}
               </AttributeRow>
-              <DiscRows config={config} operators={model.operators} />
+              <DiscRows
+                borderColor={borderColor}
+                config={config}
+                mutedTextColor={mutedTextColor}
+                operators={model.operators}
+                rowBackgrounds={[rowBackgrounds[1], rowBackgrounds[0]]}
+                              textColor={discTextColor}
+              />
             </tbody>
           </table>
         ) : (
@@ -476,7 +568,12 @@ export function DeployedOperatorsShareCard({
             此作业未配置上阵密探
           </div>
         )}
-        {model.operators.length > 0 ? <DiscUsageLegend /> : null}
+        {model.operators.length > 0 ? (
+          <DiscUsageLegend
+            mutedTextColor={mutedTextColor}
+            textColor={discTextColor}
+          />
+        ) : null}
       </section>
     </ShareCardFrame>
   )

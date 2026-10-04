@@ -111,6 +111,8 @@ export interface OperationShareCardConfig {
   showCellPattern: boolean
   tableColor?: string
   tableThemeOverrides?: OperationShareTableThemeOverrides
+  operatorTableColor?: string
+  operatorTableThemeOverrides?: OperationShareTableThemeOverrides
   notes: Record<number, string>
   roundNoteOverrides?: Record<number, string>
   hiddenOtherActionKeys?: Record<string, boolean>
@@ -313,6 +315,15 @@ export function normalizeOperationShareCardConfig(
   const tableThemeOverrides = normalizeOperationShareTableThemeOverrides(
     value.tableThemeOverrides,
   )
+  const operatorTableColor = normalizeOperationShareTableColor(
+    typeof value.operatorTableColor === 'string'
+      ? value.operatorTableColor
+      : undefined,
+  )
+  const operatorTableThemeOverrides =
+    normalizeOperationShareTableThemeOverrides(
+      value.operatorTableThemeOverrides,
+    )
 
   const notes: Record<number, string> = {}
   if (isRecord(value.notes)) {
@@ -439,6 +450,8 @@ export function normalizeOperationShareCardConfig(
         : defaults.showCellPattern,
     tableColor,
     tableThemeOverrides,
+    ...(operatorTableColor ? { operatorTableColor } : {}),
+    ...(operatorTableThemeOverrides ? { operatorTableThemeOverrides } : {}),
     notes,
     ...(Object.keys(roundNoteOverrides).length > 0
       ? { roundNoteOverrides }
@@ -464,6 +477,15 @@ export function buildOperationShareCardConfigPayload(
   if (kind === 'operators') {
     return {
       requiredDiscs: normalized.requiredDiscs,
+      ...(normalized.operatorTableColor
+        ? { operatorTableColor: normalized.operatorTableColor }
+        : {}),
+      ...(normalized.operatorTableThemeOverrides
+        ? {
+            operatorTableThemeOverrides:
+              normalized.operatorTableThemeOverrides,
+          }
+        : {}),
       ...(normalized.extraForbiddenDiscs &&
       Object.keys(normalized.extraForbiddenDiscs).length > 0
         ? { extraForbiddenDiscs: normalized.extraForbiddenDiscs }
@@ -547,14 +569,26 @@ export function mergeOperationShareRemoteConfigs(
       ? normalizeOperationShareCardConfig(operators.payload)
       : defaults
 
-  return {
+  const merged: OperationShareCardConfig = {
     ...actionConfig,
     requiredDiscs: operatorConfig.requiredDiscs,
-    ...(operatorConfig.extraForbiddenDiscs &&
-    Object.keys(operatorConfig.extraForbiddenDiscs).length > 0
-      ? { extraForbiddenDiscs: operatorConfig.extraForbiddenDiscs }
-      : {}),
   }
+  delete merged.operatorTableColor
+  delete merged.operatorTableThemeOverrides
+  if (operatorConfig.operatorTableColor) {
+    merged.operatorTableColor = operatorConfig.operatorTableColor
+  }
+  if (operatorConfig.operatorTableThemeOverrides) {
+    merged.operatorTableThemeOverrides =
+      operatorConfig.operatorTableThemeOverrides
+  }
+  if (
+    operatorConfig.extraForbiddenDiscs &&
+    Object.keys(operatorConfig.extraForbiddenDiscs).length > 0
+  ) {
+    merged.extraForbiddenDiscs = operatorConfig.extraForbiddenDiscs
+  }
+  return merged
 }
 
 export function resolveOperationShareCardConfig(
@@ -580,7 +614,9 @@ export function resolveOperationShareCardConfig(
     Object.keys(local.cellColors).length > 0
   const hasLocalOperatorOverrides =
     Object.keys(local.requiredDiscs).length > 0 ||
-    Object.keys(local.extraForbiddenDiscs ?? {}).length > 0
+    Object.keys(local.extraForbiddenDiscs ?? {}).length > 0 ||
+    local.operatorTableColor !== undefined ||
+    local.operatorTableThemeOverrides !== undefined
 
   const resolved: OperationShareCardConfig = {
     ...(hasLocalActionOverrides ? local : authorConfig),
@@ -595,6 +631,21 @@ export function resolveOperationShareCardConfig(
     requiredDiscs: hasLocalOperatorOverrides
       ? local.requiredDiscs
       : authorConfig.requiredDiscs,
+  }
+  delete resolved.operatorTableColor
+  delete resolved.operatorTableThemeOverrides
+  const resolvedOperatorTableColor = hasLocalOperatorOverrides
+    ? local.operatorTableColor
+    : authorConfig.operatorTableColor
+  const resolvedOperatorTableThemeOverrides = hasLocalOperatorOverrides
+    ? local.operatorTableThemeOverrides
+    : authorConfig.operatorTableThemeOverrides
+  if (resolvedOperatorTableColor) {
+    resolved.operatorTableColor = resolvedOperatorTableColor
+  }
+  if (resolvedOperatorTableThemeOverrides) {
+    resolved.operatorTableThemeOverrides =
+      resolvedOperatorTableThemeOverrides
   }
   const resolvedExtraForbiddenDiscs = hasLocalOperatorOverrides
     ? local.extraForbiddenDiscs
@@ -616,7 +667,19 @@ export function replaceOperationShareCardConfigKind(
   replacement: OperationShareCardConfig,
 ) {
   if (kind === 'operators') {
-    const next = { ...current, requiredDiscs: replacement.requiredDiscs }
+    const next = {
+      ...current,
+      requiredDiscs: replacement.requiredDiscs,
+    }
+    delete next.operatorTableColor
+    delete next.operatorTableThemeOverrides
+    if (replacement.operatorTableColor) {
+      next.operatorTableColor = replacement.operatorTableColor
+    }
+    if (replacement.operatorTableThemeOverrides) {
+      next.operatorTableThemeOverrides =
+        replacement.operatorTableThemeOverrides
+    }
     delete next.extraForbiddenDiscs
     if (
       replacement.extraForbiddenDiscs &&
