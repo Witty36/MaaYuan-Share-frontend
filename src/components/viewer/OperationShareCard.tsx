@@ -16,7 +16,6 @@ import {
   type OperationShareCardConfig,
   type OperationShareCellColorKey,
   type OperationShareCellPattern,
-  type OperationShareEnemyFormation,
   type OperationShareModel,
   type OperationShareOperator,
   type OperationShareRound,
@@ -183,6 +182,35 @@ export function getOperationShareActionColorKey(
     : OPERATION_SHARE_TARGET_ACTION_COLOR_KEYS[action.targetIndex]
 }
 
+function getOperationShareEnemyColorKey(
+  action: OperationShareAction,
+  config: OperationShareCardConfig,
+  round: number,
+  cellKey: string,
+) {
+  const actionColor = config.actionColors[
+    buildOperationShareActionKey(round, action.order)
+  ]
+  if (
+    actionColor &&
+    (OPERATION_SHARE_CELL_COLOR_KEYS as readonly string[]).includes(actionColor)
+  ) {
+    return actionColor as OperationShareCellColorKey
+  }
+
+  const cellColor = config.cellColors[cellKey]
+  if (
+    cellColor &&
+    (OPERATION_SHARE_CELL_COLOR_KEYS as readonly string[]).includes(cellColor)
+  ) {
+    return cellColor as OperationShareCellColorKey
+  }
+
+  return action.targetIndex === undefined
+    ? undefined
+    : OPERATION_SHARE_TARGET_ACTION_COLOR_KEYS[action.targetIndex]
+}
+
 export function getOperationShareUsedActionColorKeys(
   model: OperationShareModel,
   config: OperationShareCardConfig,
@@ -205,6 +233,30 @@ export function getOperationShareUsedActionColorKeys(
   return OPERATION_SHARE_ACTION_COLOR_ORDER.filter((colorKey) =>
     usedColors.has(colorKey),
   )
+}
+
+export function getOperationShareUsedEnemyColorKeys(
+  model: OperationShareModel,
+  config: OperationShareCardConfig,
+) {
+  const usedColors = new Set<OperationShareCellColorKey>()
+
+  model.rounds.forEach((round) => {
+    model.actionSlots.forEach((slot) => {
+      const cellKey = buildOperationShareCellKey(round.round, `slot-${slot}`)
+      ;(round.slots[slot] ?? []).forEach((action) => {
+        const colorKey = getOperationShareEnemyColorKey(
+          action,
+          config,
+          round.round,
+          cellKey,
+        )
+        if (colorKey) usedColors.add(colorKey)
+      })
+    })
+  })
+
+  return usedColors
 }
 
 const shareCellPatternStyles: Record<OperationShareCellPattern, CSSProperties> =
@@ -657,16 +709,13 @@ const OPERATION_SHARE_ENEMY_TARGET_INDEXES = [1, 2, 3, 4, 5] as const
  */
 function EnemyFormationBoard({
   colorNotes,
-  formation,
   tableTheme,
+  usedEnemyColorKeys,
 }: {
   colorNotes: Partial<Record<OperationShareCellColorKey, string>>
-  formation?: OperationShareEnemyFormation
   tableTheme: OperationShareTableTheme
+  usedEnemyColorKeys: ReadonlySet<OperationShareCellColorKey>
 }) {
-  const initialTargets =
-    formation?.initialTargets ?? [...OPERATION_SHARE_ENEMY_TARGET_INDEXES]
-
   return (
     <div
       aria-label="敌方站位图"
@@ -684,18 +733,20 @@ function EnemyFormationBoard({
           const label = getRecorderTargetLabel(targetIndex)
           const position = getRecorderTargetGridPosition(targetIndex)
           const colorKey = OPERATION_SHARE_TARGET_ACTION_COLOR_KEYS[targetIndex]
-          const noteColorKey = colorKey ?? (targetIndex === 1 ? 'ice' : undefined)
-          const defaultNote = noteColorKey
-            ? OPERATION_SHARE_ACTION_COLOR_DEFAULT_NOTES[noteColorKey]
+          const defaultNote = colorKey
+            ? OPERATION_SHARE_ACTION_COLOR_DEFAULT_NOTES[colorKey]
             : undefined
-          const colorNote = noteColorKey
-            ? getOperationShareActionColorNote(noteColorKey, colorNotes)
+          const colorNote = colorKey
+            ? getOperationShareActionColorNote(colorKey, colorNotes)
             : undefined
           const customNote =
             colorNote && colorNote !== defaultNote ? colorNote : undefined
           const targetHeading =
             targetIndex === 1 ? '进场Boss' : `${label}号`
-          const present = initialTargets.includes(targetIndex)
+          const present =
+            targetIndex === 1 ||
+            (colorKey !== undefined && usedEnemyColorKeys.has(colorKey))
+          const absentBoxColor = '#9ca3af'
           const verticalOffset =
             targetIndex === 2 || targetIndex === 5
               ? -8
@@ -710,22 +761,33 @@ function EnemyFormationBoard({
               style={{
                 left: `${(position.column - 0.5) * 20}%`,
                 top: `calc(${(position.row - 0.5) * 50}% + ${verticalOffset}px)`,
-                opacity: present ? 1 : 0.35,
               }}
             >
               <span
-                className="inline-flex h-5 w-7 rounded-[3px] border"
-                style={{
-                  backgroundColor: colorKey
-                    ? OPERATION_SHARE_ACTION_FILL_COLORS[colorKey]
-                    : tableTheme.headerBackground,
-                  borderColor: colorKey
-                    ? OPERATION_SHARE_ACTION_BORDER_COLORS[colorKey]
-                    : tableTheme.border,
-                  borderWidth: colorKey ? 1 : 1.5,
-                }}
-              />
-              {customNote ? (
+                className="inline-flex h-5 w-7 items-center justify-center rounded-[3px] border text-[10px] font-medium leading-none"
+                style={
+                  present
+                    ? {
+                        backgroundColor: colorKey
+                          ? OPERATION_SHARE_ACTION_FILL_COLORS[colorKey]
+                          : tableTheme.headerBackground,
+                        borderColor: colorKey
+                          ? OPERATION_SHARE_ACTION_BORDER_COLORS[colorKey]
+                          : tableTheme.border,
+                        borderWidth: colorKey ? 1 : 1.5,
+                      }
+                    : {
+                        backgroundColor: 'transparent',
+                        borderColor: absentBoxColor,
+                        borderStyle: 'dashed',
+                        borderWidth: 1,
+                        color: absentBoxColor,
+                      }
+                }
+              >
+                {present ? null : '无'}
+              </span>
+              {present && customNote ? (
                 <span className="flex w-[68px] flex-col items-center text-[10px] font-medium leading-[12px]">
                   <span style={{ color: tableTheme.mutedText }}>
                     {targetHeading}
@@ -737,14 +799,15 @@ function EnemyFormationBoard({
                     {customNote}
                   </span>
                 </span>
-              ) : (
+              ) : null}
+              {present && !customNote ? (
                 <span
                   className="whitespace-nowrap text-[11px] font-medium leading-none"
                   style={{ color: tableTheme.text }}
                 >
                   {targetIndex === 1 ? '进场Boss' : `${label}号敌人`}
                 </span>
-              )}
+              ) : null}
             </div>
           )
         })}
@@ -778,10 +841,11 @@ export function OperationShareCard({
   const notesColumnWidthClassName = showOtherActionsColumn
     ? 'w-[212px]'
     : 'w-[302px]'
-  const actionColorLegendItems = getOperationShareUsedActionColorKeys(
+  const usedActionColorKeys = getOperationShareUsedActionColorKeys(
     model,
     config,
   )
+  const actionColorLegendItems = usedActionColorKeys
     .map((colorKey) => ({
       colorKey,
       note: getOperationShareActionColorNote(colorKey, config.actionColorNotes),
@@ -790,20 +854,19 @@ export function OperationShareCard({
       (item): item is { colorKey: OperationShareCellColorKey; note: string } =>
         Boolean(item.note),
     )
+  const usedEnemyColorKeySet = getOperationShareUsedEnemyColorKeys(
+    model,
+    config,
+  )
   const formationColorKeys = new Set(
-    [
-      ...Object.values(OPERATION_SHARE_TARGET_ACTION_COLOR_KEYS),
-      model.enemyFormation ? 'ice' : undefined,
-    ].filter(
+    Object.values(OPERATION_SHARE_TARGET_ACTION_COLOR_KEYS).filter(
       (colorKey): colorKey is OperationShareCellColorKey =>
         colorKey !== undefined,
     ),
   )
-  const standaloneActionColorLegendItems = model.enemyFormation
-    ? actionColorLegendItems.filter(
-        (item) => !formationColorKeys.has(item.colorKey),
-      )
-    : actionColorLegendItems
+  const standaloneActionColorLegendItems = actionColorLegendItems.filter(
+    (item) => !formationColorKeys.has(item.colorKey),
+  )
   const operationGuide =
     model.rounds.length > 0 || standaloneActionColorLegendItems.length > 0 ? (
       <div
@@ -871,8 +934,8 @@ export function OperationShareCard({
           <div className="shrink-0">
             <EnemyFormationBoard
               colorNotes={config.actionColorNotes}
-              formation={model.enemyFormation}
               tableTheme={tableTheme}
+              usedEnemyColorKeys={usedEnemyColorKeySet}
             />
           </div>
         ) : null}
