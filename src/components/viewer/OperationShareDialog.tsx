@@ -1629,16 +1629,15 @@ export default function OperationShareDialog({
                           />
                         ) : null}
                       </div>
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        {effectiveEditMode === 'note'
-                          ? '当前编辑备注，动作仅供查看。'
-                          : colorMode === 'action'
-                            ? t.components.viewer.OperationViewer
-                                .share_cell_color_section_hint_action
-                            : t.components.viewer.OperationViewer
-                                .share_cell_color_section_hint_cell}
-                      </p>
                     </div>
+                    {effectiveEditMode === 'color' ? (
+                      <p className="w-full text-[11px] leading-4 text-slate-400 dark:text-slate-500">
+                        <span className="font-medium text-slate-500 dark:text-slate-300">
+                          标注模式：
+                        </span>
+                        对动作进行颜色标注，以区分所对应的敌人。使用悬浮窗编辑可在此快捷查看动作目标色。
+                      </p>
+                    ) : null}
                     {effectiveEditMode === 'color' ? (
                       <div className="mt-3 border-y border-slate-200/70 py-2 dark:border-slate-600">
                         <div className="flex items-center justify-between gap-2">
@@ -1863,6 +1862,22 @@ export default function OperationShareDialog({
                         </Button>
                       </div>
                     ) : null}
+                    <div className="w-full text-[11px] leading-4 text-slate-400 dark:text-slate-500">
+                      {effectiveEditMode === 'note' ? (
+                        <>
+                          <span className="font-medium text-slate-500 dark:text-slate-300">
+                            备注模式：
+                          </span>
+                          当前编辑回合备注，动作仅供查看。
+                        </>
+                      ) : (
+                        colorMode === 'action'
+                          ? t.components.viewer.OperationViewer
+                              .share_cell_color_section_hint_action
+                          : t.components.viewer.OperationViewer
+                              .share_cell_color_section_hint_cell
+                      )}
+                    </div>
                   </div>
                   <div
                     className="mt-3 max-h-80 w-full min-w-0 max-w-full overflow-x-auto overflow-y-auto overscroll-x-contain rounded border border-slate-200 bg-white dark:border-slate-600 dark:bg-[#2f343c]"
