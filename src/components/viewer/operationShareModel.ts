@@ -48,6 +48,37 @@ export interface OperationShareDisc {
   assistStar?: string
 }
 
+export function resolveOperationShareExtraForbiddenDiscs(
+  operator: Pick<OperationShareOperator, 'rawName' | 'discs'>,
+  discNames: readonly string[],
+) {
+  const fullDiscNames = new Set(
+    (
+      OPERATORS.find((candidate) => candidate.name === operator.rawName)?.discs ??
+      []
+    )
+      .map((disc) => disc.abbreviation.trim())
+      .filter(Boolean),
+  )
+  const configuredDiscNames = new Set(
+    operator.discs
+      .map((disc) => disc.abbreviation.trim())
+      .filter((discName) => discName && discName !== '未选择命盘'),
+  )
+
+  return Array.from(
+    new Set(
+      discNames
+        .map((discName) => discName.trim())
+        .filter(
+          (discName) =>
+            fullDiscNames.has(discName) &&
+            !configuredDiscNames.has(discName),
+        ),
+    ),
+  )
+}
+
 export interface OperationShareGroup {
   name: string
   operators: OperationShareOperator[]

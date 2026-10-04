@@ -9,6 +9,7 @@ import type {
 import {
   buildOperationShareDiscKey,
   createOperationShareCardConfig,
+  resolveOperationShareExtraForbiddenDiscs,
 } from './operationShareModel'
 import {
   ShareCardFrame,
@@ -245,7 +246,10 @@ function DiscRows({
             const operatorSlot = operator.slot ?? operatorIndex + 1
             const extraForbiddenDiscs =
               field === 'disc'
-                ? (config.extraForbiddenDiscs?.[String(operatorSlot)] ?? [])
+                ? resolveOperationShareExtraForbiddenDiscs(
+                    operator,
+                    config.extraForbiddenDiscs?.[String(operatorSlot)] ?? [],
+                  )
                 : []
             const displayDiscs: Array<{
               key: string

@@ -75,6 +75,7 @@ import {
   readOperationShareShortCode,
   replaceOperationShareCardConfigKind,
   resolveOperationShareCardConfig,
+  resolveOperationShareExtraForbiddenDiscs,
   resolveOperationShareShortCode,
   saveOperationShareCardConfig,
   saveOperationShareShortCode,
@@ -2794,12 +2795,15 @@ export default function OperationShareDialog({
                       清除额外禁用
                     </Button>
                   </div>
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2 md:grid-cols-5">
+                  <div className="mt-4 grid gap-2 sm:grid-cols-2 md:grid-cols-5">
                     {model.operators.map((operator, operatorIndex) => {
                       const operatorSlot = operator.slot ?? operatorIndex + 1
                       const operatorKey = String(operatorSlot)
                       const selectedExtraDiscNames =
-                        cardConfig.extraForbiddenDiscs?.[operatorKey] ?? []
+                        resolveOperationShareExtraForbiddenDiscs(
+                          operator,
+                          cardConfig.extraForbiddenDiscs?.[operatorKey] ?? [],
+                        )
                       const configuredDiscNames = new Set(
                         operator.discs
                           .map((disc) => disc.abbreviation)
@@ -2832,71 +2836,78 @@ export default function OperationShareDialog({
                           key={`${operator.rawName}-${operatorIndex}-extra-forbidden`}
                           className="min-w-0 rounded border border-slate-200 bg-slate-50 p-2 dark:border-slate-600 dark:bg-slate-800/60"
                         >
-                          <h5 className="break-words text-xs font-semibold leading-5 text-slate-700 dark:text-slate-200">
+                          <h4 className="break-words text-xs font-semibold leading-5 text-slate-700 dark:text-slate-200">
                             {operatorSlot} 号位 {'·'}
                             {operator.name}
-                          </h5>
+                          </h4>
                           {availableDiscNames.length > 0 ? (
-                            <div className="mt-1.5 flex gap-1">
-                              <select
-                                aria-label={`${operator.name}额外禁用命盘`}
-                                className="min-w-0 flex-1 rounded border border-slate-300 bg-white px-1.5 py-1 text-xs text-slate-700 outline-none focus:border-blue-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200"
-                                value={selectedDiscName}
-                                onChange={(event) => {
-                                  const nextDiscName = event.currentTarget.value
-                                  setExtraForbiddenDiscSelections((current) => ({
-                                    ...current,
-                                    [operatorKey]: nextDiscName,
-                                  }))
-                                }}
-                              >
-                                {availableDiscNames.map((discName) => (
-                                  <option key={discName} value={discName}>
-                                    {discName}
-                                  </option>
-                                ))}
-                              </select>
-                              <Button
-                                disabled={!selectedDiscName}
-                                icon="plus"
-                                minimal
-                                onClick={() =>
-                                  addExtraForbiddenDisc(
-                                    operatorSlot,
-                                    selectedDiscName,
-                                  )
-                                }
-                                small
-                              >
-                                添加
-                              </Button>
+                            <div className="mt-1.5 grid gap-1">
+                              <div className="flex items-center gap-1">
+                                <select
+                                  aria-label={`${operator.name}额外禁用命盘`}
+                                  className="h-7 min-w-0 flex-1 rounded border border-slate-300 bg-white px-2 text-xs text-slate-700 outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-500/15 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:focus:ring-sky-400/20"
+                                  value={selectedDiscName}
+                                  onChange={(event) => {
+                                    const nextDiscName =
+                                      event.currentTarget.value
+                                    setExtraForbiddenDiscSelections(
+                                      (current) => ({
+                                        ...current,
+                                        [operatorKey]: nextDiscName,
+                                      }),
+                                    )
+                                  }}
+                                >
+                                  {availableDiscNames.map((discName) => (
+                                    <option key={discName} value={discName}>
+                                      {discName}
+                                    </option>
+                                  ))}
+                                </select>
+                                <Button
+                                  aria-label={`添加${operator.name}额外禁用命盘`}
+                                  className="!h-7 !w-7 !min-h-7 !min-w-7 shrink-0 !p-0"
+                                  disabled={!selectedDiscName}
+                                  icon="plus"
+                                  onClick={() =>
+                                    addExtraForbiddenDisc(
+                                      operatorSlot,
+                                      selectedDiscName,
+                                    )
+                                  }
+                                  small
+                                  title="添加命盘"
+                                />
+                              </div>
+                              {selectedExtraDiscNames.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {selectedExtraDiscNames.map((discName) => (
+                                    <button
+                                      key={discName}
+                                      type="button"
+                                      className="inline-flex items-center gap-1 rounded bg-red-50 px-1.5 py-1 text-[11px] font-medium text-red-700 transition-colors hover:bg-red-100 dark:bg-red-950/30 dark:text-red-200 dark:hover:bg-red-950/50"
+                                      onClick={() =>
+                                        removeExtraForbiddenDisc(
+                                          operatorSlot,
+                                          discName,
+                                        )
+                                      }
+                                      title="点击移除额外禁用"
+                                    >
+                                      <span className="line-through decoration-red-300 dark:decoration-red-700">
+                                        {discName}
+                                      </span>
+                                      <Icon icon="cross" size={9} />
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
                             </div>
                           ) : (
                             <p className="mt-1.5 text-xs text-slate-400 dark:text-slate-500">
                               没有可添加的命盘
                             </p>
                           )}
-                          {selectedExtraDiscNames.length > 0 ? (
-                            <div className="mt-1.5 flex flex-wrap gap-1">
-                              {selectedExtraDiscNames.map((discName) => (
-                                <button
-                                  key={discName}
-                                  type="button"
-                                  className="inline-flex items-center gap-1 rounded border border-red-300 bg-red-50 px-1.5 py-0.5 text-xs font-semibold text-red-800 transition-colors hover:bg-red-100 dark:border-red-500/60 dark:bg-red-950/30 dark:text-red-200 dark:hover:bg-red-950/50"
-                                  onClick={() =>
-                                    removeExtraForbiddenDisc(
-                                      operatorSlot,
-                                      discName,
-                                    )
-                                  }
-                                  title="点击移除额外禁用"
-                                >
-                                  <span className="line-through">{discName}</span>
-                                  <Icon icon="cross" size={9} />
-                                </button>
-                              ))}
-                            </div>
-                          ) : null}
                         </section>
                       )
                     })}
