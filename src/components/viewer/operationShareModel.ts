@@ -15,6 +15,7 @@ import {
   formatTokenSummary,
   groupTokensForTable,
 } from './ActionSequenceViewer'
+import { parseRecorderMeta } from '../editor2/action/recorderMeta'
 import {
   type OperationShareTableThemeOverrides,
   normalizeOperationShareTableColor,
@@ -57,6 +58,16 @@ export interface OperationShareAction {
   order: number
   label: string
   targetIndex?: number
+}
+
+/**
+ * 悬浮窗站位图数据。目标位沿用悬浮窗的内部索引 1-5，其中 1 是进场主位
+ * （显示为 0 号位），其余依次显示为 1-4 号位。分享图用它画出站位图，
+ * 让读者知道动作标色对应的是场上哪个敌人。
+ */
+export interface OperationShareEnemyFormation {
+  initialTargets: number[]
+  mainTarget: number
 }
 
 export type OperationShareCellColumn = `slot-${number}`
@@ -209,6 +220,8 @@ export interface OperationShareModel {
   groups: OperationShareGroup[]
   actionSlots: number[]
   rounds: OperationShareRound[]
+  /** 旧作业没有 recorderMeta 时缺省，分享图按默认五人站位渲染。 */
+  enemyFormation?: OperationShareEnemyFormation
 }
 
 export type OperationShareCardKind = 'actions' | 'operators'
@@ -912,6 +925,7 @@ export function buildOperationShareModel(
   maayuanUrl = '?op=' + operation.id,
 ): OperationShareModel {
   const content = operation.parsedContent
+  const recorderMeta = parseRecorderMeta(content.recorderMeta)
   const operators = (content.opers ?? []).map((operator, index) =>
     mapOperator(operator, language, index + 1),
   )
@@ -1005,6 +1019,10 @@ export function buildOperationShareModel(
     groups,
     actionSlots: actionSlots.length > 0 ? actionSlots : [1, 2, 3, 4, 5],
     rounds,
+    enemyFormation: {
+      initialTargets: [...recorderMeta.initialEnemies],
+      mainTarget: recorderMeta.initialMain,
+    },
   }
 }
 

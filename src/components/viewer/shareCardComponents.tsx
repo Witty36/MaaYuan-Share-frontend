@@ -106,6 +106,7 @@ export function ShareCardFrame({
   cardRef,
   children,
   eyebrow,
+  headerRight,
   hideQrCode,
   model,
   qrDataUrl,
@@ -115,6 +116,7 @@ export function ShareCardFrame({
   cardRef?: Ref<HTMLDivElement>
   children: ReactNode
   eyebrow: string
+  headerRight?: ReactNode
   hideQrCode: boolean
   model: OperationShareModel
   qrDataUrl: string
@@ -125,12 +127,120 @@ export function ShareCardFrame({
       ? { label: '搬运', background: '#f2dfb9', color: '#795410' }
       : { label: '原创', background: '#d8e9e4', color: '#155d57' }
 
+  const hasQrCode = !hideQrCode
+  const stackSourceInfo = Boolean(headerRight && hasQrCode)
+
+  const sourceInfo = (
+    <div
+      className={clsx(
+        'min-w-0 flex-1 py-1',
+        headerRight && !stackSourceInfo && 'flex items-stretch gap-5',
+        stackSourceInfo && 'flex flex-col',
+        headerRight ? 'text-left' : 'border-l-4 pl-4 text-right',
+      )}
+      style={headerRight ? undefined : { borderColor: shareCardPalette.accent }}
+    >
+      <div
+        className={
+          headerRight && !stackSourceInfo ? 'min-w-0 shrink-0' : 'min-w-0'
+        }
+      >
+        <div
+          className={clsx(
+            'text-sm font-semibold',
+            headerRight ? undefined : 'mt-4',
+          )}
+          style={{ color: shareCardPalette.muted }}
+        >
+          攻略作者
+        </div>
+        <div className="mt-1 break-words text-[22px] font-bold leading-tight">
+          {model.source.strategyAuthor}
+        </div>
+      </div>
+      {headerRight &&
+      (model.source.platform || model.source.sharer) ? (
+        <div
+          className={clsx(
+            'min-w-0 text-sm',
+            stackSourceInfo
+              ? 'mt-2 flex flex-col items-start gap-1.5'
+              : 'flex flex-1 flex-col justify-center gap-2 border-l pl-5',
+          )}
+          style={stackSourceInfo ? undefined : { borderColor: '#c7d0cc' }}
+        >
+          {model.source.platform ? (
+            <div
+              className="inline-flex w-fit whitespace-nowrap rounded-sm border px-2 py-1 text-xs font-semibold"
+              style={{
+                borderColor: '#9aaba5',
+                color: shareCardPalette.muted,
+              }}
+            >
+              来源平台 · {model.source.platform}
+            </div>
+          ) : null}
+          {model.source.sharer ? (
+            <div
+              className="break-words text-sm"
+              style={{ color: shareCardPalette.muted }}
+            >
+              本站分享 · {model.source.sharer}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {!headerRight && model.source.platform ? (
+        <div
+          className="mt-2 inline-flex whitespace-nowrap rounded-sm border px-2 py-1 text-xs font-semibold"
+          style={{
+            borderColor: '#9aaba5',
+            color: shareCardPalette.muted,
+          }}
+        >
+          来源平台 · {model.source.platform}
+        </div>
+      ) : null}
+      {!headerRight && model.source.sharer ? (
+        <div
+          className="mt-2 text-sm"
+          style={{ color: shareCardPalette.muted }}
+        >
+          本站分享 · {model.source.sharer}
+        </div>
+      ) : null}
+    </div>
+  )
+
+  const qrCode = !hasQrCode ? null : (
+    <div className="w-[104px] shrink-0 text-center">
+      <img
+        alt={model.qrLabel}
+        className="h-[104px] w-[104px] bg-white object-contain"
+        height={104}
+        src={qrDataUrl}
+        width={104}
+      />
+      <div
+        className="mt-2 text-xs font-semibold leading-4"
+        style={{ color: shareCardPalette.muted }}
+      >
+        {model.qrLabel}
+      </div>
+    </div>
+  )
+
   return (
     <div
       ref={cardRef}
       style={{ ...shareCardStyle, background: backgroundColor }}
     >
-      <header className="flex items-start justify-between gap-8">
+      <header
+        className={clsx(
+          'flex justify-between gap-8',
+          headerRight ? 'items-stretch' : 'items-start',
+        )}
+      >
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3">
             <div
@@ -155,59 +265,31 @@ export function ShareCardFrame({
           >
             {model.title}
           </h1>
+          {headerRight ? (
+            <div
+              className={clsx(
+                'mt-4 flex gap-5',
+                hasQrCode ? 'items-center' : 'items-start',
+              )}
+            >
+              {sourceInfo}
+              {qrCode}
+            </div>
+          ) : null}
         </div>
-        <div className="mt-1 flex w-[440px] shrink-0 items-start justify-end gap-4">
+        {headerRight ? (
           <div
-            className="min-w-0 flex-1 border-l-4 py-1 pl-4 text-right"
+            className="flex w-[440px] shrink-0 border-l-4 pl-6"
             style={{ borderColor: shareCardPalette.accent }}
           >
-            <div
-              className="mt-4 text-sm font-semibold"
-              style={{ color: shareCardPalette.muted }}
-            >
-              攻略作者
-            </div>
-            <div className="mt-1 break-words text-[22px] font-bold leading-tight">
-              {model.source.strategyAuthor}
-            </div>
-            {model.source.platform ? (
-              <div
-                className="mt-2 inline-flex whitespace-nowrap rounded-sm border px-2 py-1 text-xs font-semibold"
-                style={{
-                  borderColor: '#9aaba5',
-                  color: shareCardPalette.muted,
-                }}
-              >
-                来源平台 · {model.source.platform}
-              </div>
-            ) : null}
-            {model.source.sharer ? (
-              <div
-                className="mt-2 text-sm"
-                style={{ color: shareCardPalette.muted }}
-              >
-                本站分享 · {model.source.sharer}
-              </div>
-            ) : null}
+            {headerRight}
           </div>
-          {hideQrCode ? null : (
-            <div className="w-[104px] shrink-0 text-center">
-              <img
-                alt={model.qrLabel}
-                className="h-[104px] w-[104px] bg-white object-contain"
-                height={104}
-                src={qrDataUrl}
-                width={104}
-              />
-              <div
-                className="mt-2 text-xs font-semibold leading-4"
-                style={{ color: shareCardPalette.muted }}
-              >
-                {model.qrLabel}
-              </div>
-            </div>
-          )}
-        </div>
+        ) : (
+          <div className="mt-1 flex w-[440px] shrink-0 items-start justify-end gap-4">
+            {sourceInfo}
+            {qrCode}
+          </div>
+        )}
       </header>
 
       {children}

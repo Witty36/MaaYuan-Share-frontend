@@ -4,6 +4,11 @@ import { type CSSProperties, Fragment, type Ref } from 'react'
 
 import { getRecorderMetaTargetColor } from '../editor2/action/recorderMeta'
 import {
+  getRecorderTargetGridPosition,
+  getRecorderTargetLabel,
+} from '../editor2/action/recordingUtils'
+import {
+  OPERATION_SHARE_ACTION_COLOR_DEFAULT_NOTES,
   OPERATION_SHARE_ACTION_COLOR_ORDER,
   OPERATION_SHARE_CELL_COLOR_KEYS,
   OPERATION_SHARE_CELL_PALETTE,
@@ -11,6 +16,7 @@ import {
   type OperationShareCardConfig,
   type OperationShareCellColorKey,
   type OperationShareCellPattern,
+  type OperationShareEnemyFormation,
   type OperationShareModel,
   type OperationShareOperator,
   type OperationShareRound,
@@ -40,6 +46,14 @@ import {
 
 const defaultCardConfig = createOperationShareCardConfig()
 const accessibleDarkTextColor = '#231f20'
+
+// 动作符号是作业里的固定写法，分享图补一行说明，避免不熟悉缩写的读者看不懂。
+const operationShareActionSymbolLegend = [
+  { symbol: '↑', meaning: '放大' },
+  { symbol: 'A', meaning: '普攻' },
+  { symbol: '↓', meaning: '下拉' },
+  { symbol: '圈', meaning: 'SP（吕布史子眇）' },
+] as const
 
 export const OPERATION_SHARE_ACTION_TEXT_COLORS: Record<
   OperationShareCellColorKey,
@@ -635,6 +649,110 @@ function ActionList({
   )
 }
 
+const OPERATION_SHARE_ENEMY_TARGET_INDEXES = [1, 2, 3, 4, 5] as const
+
+/**
+ * 敌方站位图。布局与悬浮窗一致（中间是进场主位，显示为 0 号位），
+ * 颜色沿用动作标色，读者据此判断某个颜色的动作打的是场上哪个敌人。
+ */
+function EnemyFormationBoard({
+  colorNotes,
+  formation,
+  tableTheme,
+}: {
+  colorNotes: Partial<Record<OperationShareCellColorKey, string>>
+  formation?: OperationShareEnemyFormation
+  tableTheme: OperationShareTableTheme
+}) {
+  const initialTargets =
+    formation?.initialTargets ?? [...OPERATION_SHARE_ENEMY_TARGET_INDEXES]
+
+  return (
+    <div
+      aria-label="敌方站位图"
+      className="relative shrink-0"
+      style={{ height: 110, width: 190 }}
+    >
+      <span
+        className="absolute left-0 top-0 text-base font-semibold leading-none"
+        style={{ color: palette.muted }}
+      >
+        敌方站位图
+      </span>
+      <div className="absolute inset-x-0 bottom-0 top-[20px]">
+        {OPERATION_SHARE_ENEMY_TARGET_INDEXES.map((targetIndex) => {
+          const label = getRecorderTargetLabel(targetIndex)
+          const position = getRecorderTargetGridPosition(targetIndex)
+          const colorKey = OPERATION_SHARE_TARGET_ACTION_COLOR_KEYS[targetIndex]
+          const noteColorKey = colorKey ?? (targetIndex === 1 ? 'ice' : undefined)
+          const defaultNote = noteColorKey
+            ? OPERATION_SHARE_ACTION_COLOR_DEFAULT_NOTES[noteColorKey]
+            : undefined
+          const colorNote = noteColorKey
+            ? getOperationShareActionColorNote(noteColorKey, colorNotes)
+            : undefined
+          const customNote =
+            colorNote && colorNote !== defaultNote ? colorNote : undefined
+          const targetHeading =
+            targetIndex === 1 ? '进场Boss' : `${label}号`
+          const present = initialTargets.includes(targetIndex)
+          const verticalOffset =
+            targetIndex === 2 || targetIndex === 5
+              ? -8
+              : targetIndex === 3 || targetIndex === 4
+                ? -3
+                : 0
+
+          return (
+            <div
+              key={targetIndex}
+              className="absolute flex w-12 -translate-x-1/2 -translate-y-2.5 flex-col items-center gap-0.5"
+              style={{
+                left: `${(position.column - 0.5) * 20}%`,
+                top: `calc(${(position.row - 0.5) * 50}% + ${verticalOffset}px)`,
+                opacity: present ? 1 : 0.35,
+              }}
+            >
+              <span
+                className="inline-flex h-5 w-7 rounded-[3px] border"
+                style={{
+                  backgroundColor: colorKey
+                    ? OPERATION_SHARE_ACTION_FILL_COLORS[colorKey]
+                    : tableTheme.headerBackground,
+                  borderColor: colorKey
+                    ? OPERATION_SHARE_ACTION_BORDER_COLORS[colorKey]
+                    : tableTheme.border,
+                  borderWidth: colorKey ? 1 : 1.5,
+                }}
+              />
+              {customNote ? (
+                <span className="flex w-[68px] flex-col items-center text-[10px] font-medium leading-[12px]">
+                  <span style={{ color: tableTheme.mutedText }}>
+                    {targetHeading}
+                  </span>
+                  <span
+                    className="break-words text-center"
+                    style={{ color: tableTheme.text }}
+                  >
+                    {customNote}
+                  </span>
+                </span>
+              ) : (
+                <span
+                  className="whitespace-nowrap text-[11px] font-medium leading-none"
+                  style={{ color: tableTheme.text }}
+                >
+                  {targetIndex === 1 ? '进场Boss' : `${label}号敌人`}
+                </span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 export function OperationShareCard({
   model,
   cardRef,
@@ -672,12 +790,101 @@ export function OperationShareCard({
       (item): item is { colorKey: OperationShareCellColorKey; note: string } =>
         Boolean(item.note),
     )
+  const formationColorKeys = new Set(
+    [
+      ...Object.values(OPERATION_SHARE_TARGET_ACTION_COLOR_KEYS),
+      model.enemyFormation ? 'ice' : undefined,
+    ].filter(
+      (colorKey): colorKey is OperationShareCellColorKey =>
+        colorKey !== undefined,
+    ),
+  )
+  const standaloneActionColorLegendItems = model.enemyFormation
+    ? actionColorLegendItems.filter(
+        (item) => !formationColorKeys.has(item.colorKey),
+      )
+    : actionColorLegendItems
+  const operationGuide =
+    model.rounds.length > 0 || standaloneActionColorLegendItems.length > 0 ? (
+      <div
+        className="flex w-full items-center justify-between gap-5"
+      >
+        <div className="ml-[15px] min-w-0 flex-1">
+          <div
+            className="text-base font-semibold"
+            style={{ color: palette.muted }}
+          >
+            基础动作
+          </div>
+          {model.rounds.length > 0 ? (
+            <div
+              className="mt-2 flex flex-col items-start gap-y-1 text-[13px] leading-[18px]"
+              style={{ color: palette.muted }}
+            >
+              {operationShareActionSymbolLegend.map(({ symbol, meaning }) => (
+                <span
+                  key={symbol}
+                  className="inline-flex items-center gap-1 whitespace-nowrap"
+                >
+                  <span
+                    className="font-bold"
+                    style={{ color: tableTheme.text }}
+                  >
+                    {symbol}
+                  </span>
+                  {meaning}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {standaloneActionColorLegendItems.length > 0 ? (
+            <div
+              className={`flex flex-col items-start gap-y-1 text-[12px] leading-[18px] ${
+                model.rounds.length > 0 ? 'mt-2 border-t pt-2' : ''
+              }`}
+              style={{
+                borderColor: '#b9c4c0',
+                color: palette.muted,
+              }}
+            >
+              {standaloneActionColorLegendItems.map(({ colorKey, note }) => (
+                <span
+                  key={colorKey}
+                  className="inline-flex min-w-0 items-center gap-1.5"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-3.5 w-3.5 shrink-0 rounded-[3px]"
+                    style={{
+                      backgroundColor:
+                        getOperationShareActionFillColor(colorKey),
+                      border: `0.5px solid ${getOperationShareActionBorderColor(colorKey)}`,
+                    }}
+                  />
+                  <span className="min-w-0">{note}</span>
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+        {model.rounds.length > 0 ? (
+          <div className="shrink-0">
+            <EnemyFormationBoard
+              colorNotes={config.actionColorNotes}
+              formation={model.enemyFormation}
+              tableTheme={tableTheme}
+            />
+          </div>
+        ) : null}
+      </div>
+    ) : undefined
 
   return (
     <ShareCardFrame
       backgroundColor={tableTheme.pageBackground}
       cardRef={cardRef}
       eyebrow="MaaYuan · 作业分享"
+      headerRight={operationGuide}
       hideQrCode={hideQrCode}
       model={model}
       qrDataUrl={qrDataUrl}
@@ -901,29 +1108,6 @@ export function OperationShareCard({
             )}
           </tbody>
         </table>
-        {actionColorLegendItems.length > 0 ? (
-          <div
-            className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-[12px] leading-4"
-            style={{ color: palette.muted }}
-          >
-            {actionColorLegendItems.map(({ colorKey, note }) => (
-              <span
-                key={colorKey}
-                className="inline-flex items-center gap-1.5 whitespace-nowrap"
-              >
-                <span
-                  aria-hidden="true"
-                  className="inline-block h-4 w-4 shrink-0 rounded-[3px]"
-                  style={{
-                    backgroundColor: getOperationShareActionFillColor(colorKey),
-                    border: `0.5px solid ${getOperationShareActionBorderColor(colorKey)}`,
-                  }}
-                />
-                <span>{note}</span>
-              </span>
-            ))}
-          </div>
-        ) : null}
       </section>
 
       {model.groups.length > 0 ? (

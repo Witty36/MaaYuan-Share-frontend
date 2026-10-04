@@ -65,7 +65,6 @@ import {
   buildOperationShareModel,
   buildOperationShareUrl,
   createOperationShareCardConfig,
-  getOperationShareActionColorNote,
   getOperationShareCellSelectionState,
   getOperationShareOtherActions,
   getOperationShareRemoteConfigByKind,
@@ -551,6 +550,15 @@ export default function OperationShareDialog({
     ...actionColorNames,
     ice: t.components.viewer.OperationViewer
       .share_action_color_note_none_label,
+  }
+  const actionColorNoteTargetIndexes: Record<
+    Exclude<OperationShareCellColorKey, 'ice'>,
+    number
+  > = {
+    pink: 1,
+    blue: 2,
+    yellow: 3,
+    green: 4,
   }
   const actionColorNoteKeys = OPERATION_SHARE_ACTION_COLOR_ORDER
 
@@ -1690,16 +1698,17 @@ export default function OperationShareDialog({
                                 }
                                 placeholder={
                                   colorKey === 'ice'
-                                    ? '默认不显示'
-                                    : t.components.viewer.OperationViewer
-                                        .share_action_color_note_placeholder
+                                    ? '进场Boss'
+                                    : t.components.viewer.OperationViewer.share_action_color_note_placeholder(
+                                        {
+                                          position:
+                                            actionColorNoteTargetIndexes[colorKey],
+                                        },
+                                      )
                                 }
                                 type="text"
                                 value={
-                                  getOperationShareActionColorNote(
-                                    colorKey,
-                                    cardConfig.actionColorNotes,
-                                  ) ?? ''
+                                  cardConfig.actionColorNotes[colorKey] ?? ''
                                 }
                               />
                             </label>
