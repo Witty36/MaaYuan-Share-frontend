@@ -1,5 +1,3 @@
-import { Icon } from '@blueprintjs/core'
-
 import clsx from 'clsx'
 import type { CSSProperties, ReactNode, Ref } from 'react'
 
@@ -34,6 +32,17 @@ const shareCardStyle: CSSProperties = {
 }
 
 const STAR_LEVELS = [1, 2, 3, 4, 5] as const
+
+const RarityDiamond = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    fill="currentColor"
+    aria-hidden="true"
+  >
+    <path d="M12 0 Q14.8 9.2 24 12 Q14.8 14.8 12 24 Q9.2 14.8 0 12 Q9.2 9.2 12 0Z" />
+  </svg>
+)
 
 function operatorAvatar(operator: OperationShareOperator) {
   return operator.avatarId
@@ -76,16 +85,13 @@ export function ShareOperatorStarLevel({ value }: { value: number }) {
       className="mt-1 flex items-center justify-center gap-1 select-none"
     >
       {STAR_LEVELS.map((level) => (
-        <Icon
+        <RarityDiamond
           key={level}
-          aria-hidden
           className={`h-4 w-4 ${
             level <= value
               ? 'text-yellow-500 opacity-100'
               : 'text-gray-500 opacity-40'
           }`}
-          icon="star"
-          iconSize={16}
         />
       ))}
     </div>

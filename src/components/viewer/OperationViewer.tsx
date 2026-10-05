@@ -94,6 +94,17 @@ import {
   buildOperationDiscDisplay,
 } from './operationDiscDisplay'
 
+const RarityDiamond = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    fill="currentColor"
+    aria-hidden="true"
+  >
+    <path d="M12 0 Q14.8 9.2 24 12 Q14.8 14.8 12 24 Q9.2 14.8 0 12 Q9.2 9.2 12 0Z" />
+  </svg>
+)
+
 const OperationShareDialog = lazy(() => import('./OperationShareDialog'))
 
 const ManageMenu: FC<{
@@ -606,9 +617,8 @@ const OperatorCard: FC<{
               {stats.hasStar && (
                 <div className="flex items-center gap-1">
                   {Array.from({ length: 5 }, (_, i) => i + 1).map((n) => (
-                    <Icon
+                    <RarityDiamond
                       key={n}
-                      icon="star"
                       className={clsx(
                         'w-4 h-4',
                         n <= current

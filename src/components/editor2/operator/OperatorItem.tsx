@@ -47,6 +47,17 @@ import {
   getMaxEliteForLevel,
 } from './operatorRequirementModel'
 
+const RarityDiamond = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    fill="currentColor"
+    aria-hidden="true"
+  >
+    <path d="M12 0 Q14.8 9.2 24 12 Q14.8 14.8 12 24 Q9.2 14.8 0 12 Q9.2 9.2 12 0Z" />
+  </svg>
+)
+
 const EMPTY_DISC_OPTION = {
   abbreviation: '未选择',
   color: undefined,
@@ -278,7 +289,7 @@ export const OperatorItem: FC<OperatorItemProps> = memo(
                     })
                   }
                 >
-                  <Icon icon="star" />
+                  <RarityDiamond className="h-6 w-6" />
                 </button>
               )
             })}

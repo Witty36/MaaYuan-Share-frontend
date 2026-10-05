@@ -24,6 +24,17 @@ import { UserName } from './UserName'
 import { EDifficulty } from './entity/EDifficulty'
 import { EDifficultyLevel, NeoELevel } from './entity/ELevel'
 
+const RarityDiamond = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    fill="currentColor"
+    aria-hidden="true"
+  >
+    <path d="M12 0 Q14.8 9.2 24 12 Q14.8 14.8 12 24 Q9.2 14.8 0 12 Q9.2 9.2 12 0Z" />
+  </svg>
+)
+
 const ReadOperationTag = ({ operationId }: { operationId: number }) => {
   const t = useTranslation()
   const readEnabled = useAtomValue(readEnabledAtom)
@@ -504,11 +515,10 @@ const OperatorTags = ({ operation }: { operation: Operation }) => {
             {showStar && (
               <div className="flex items-center justify-center gap-0.5 mb-1.5">
                 {Array.from({ length: 5 }, (_, i) => i + 1).map((n) => (
-                  <Icon
+                  <RarityDiamond
                     key={n}
-                    icon="star"
-                    iconSize={12}
                     className={clsx(
+                      'h-3 w-3',
                       n <= starLevel
                         ? 'text-yellow-500 opacity-100'
                         : 'text-gray-500 opacity-40 dark:opacity-30',

@@ -1,5 +1,3 @@
-import { Icon } from '@blueprintjs/core'
-
 import { type CSSProperties, Fragment, type Ref } from 'react'
 
 import { getRecorderMetaTargetColor } from '../editor2/action/recorderMeta'
@@ -512,6 +510,17 @@ export function getOperationShareOperatorStarLabel(
     : `${operator.starLevel} 星`
 }
 
+const RarityDiamond = ({ className }: { className?: string }) => (
+  <svg
+    viewBox="0 0 24 24"
+    className={className}
+    fill="currentColor"
+    aria-hidden="true"
+  >
+    <path d="M12 0 Q14.8 9.2 24 12 Q14.8 14.8 12 24 Q9.2 14.8 0 12 Q9.2 9.2 12 0Z" />
+  </svg>
+)
+
 function OperatorAvatar({
   operator,
   slot,
@@ -548,7 +557,7 @@ function OperatorAvatar({
           className="absolute right-2 top-2 flex h-8 min-w-10 items-center justify-center gap-1 rounded-sm border-2 border-white px-1.5 text-sm font-bold text-white"
           style={{ background: '#e96913' }}
         >
-          <Icon aria-hidden icon="star" iconSize={14} />
+          <RarityDiamond className="h-3.5 w-3.5" />
           <span>{operator.starLevel}</span>
         </span>
       ) : null}
