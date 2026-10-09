@@ -2479,7 +2479,11 @@ export function FloatingActionRecorder({
                         )}
                       >
                         <th
-                          rowSpan={groups.extras.length > 0 ? 2 : undefined}
+                          rowSpan={
+                            showTargetSwitches && groups.extras.length > 0
+                              ? 2
+                              : undefined
+                          }
                           className="w-7 border border-[color-mix(in_srgb,var(--maayuan-accent,#8b5cf6)_45%,var(--maayuan-surface,#faf5ff))] px-0.5 py-2 text-center align-middle text-[var(--maayuan-text-strong,#5b21b6)] dark:border-slate-600 dark:text-slate-100"
                         >
                           <Popover2
@@ -2608,7 +2612,7 @@ export function FloatingActionRecorder({
                           </td>
                         ))}
                       </tr>
-                      {groups.extras.length > 0 ? (
+                      {showTargetSwitches && groups.extras.length > 0 ? (
                         <tr className="bg-transparent">
                           <td
                             colSpan={RECORDER_SLOT_KEYS.length}

@@ -827,16 +827,16 @@ export function groupRecorderRoundActions(
 
   ;(input[String(round)] ?? []).forEach((entry, index) => {
     const token = entry[0] ?? ''
+    const display = describeRecorderToken(token)
     if (
       options.showTargetSwitches === false &&
-      isRecorderTargetSwitchToken(token)
+      display.area === 'extra'
     ) {
       return
     }
 
     visibleOrder += 1
     const metadata = entry.slice(1)
-    const display = describeRecorderToken(token)
     const item: RecorderRoundItem = {
       index,
       order: visibleOrder,
